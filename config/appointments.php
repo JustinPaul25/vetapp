@@ -1,0 +1,38 @@
+<?php
+
+return [
+    /*
+    |--------------------------------------------------------------------------
+    | Appointment Timeslot Restrictions
+    |--------------------------------------------------------------------------
+    |
+    | These settings control the timeslot restrictions for appointments,
+    | similar to Calendly's scheduling system.
+    |
+    */
+
+    // Working hours (24-hour format)
+    'working_hours_start' => env('APPOINTMENT_WORKING_HOURS_START', '09:00'),
+    'working_hours_end' => env('APPOINTMENT_WORKING_HOURS_END', '16:00'),
+
+    // Lunch break (24-hour format)
+    'lunch_break_start' => env('APPOINTMENT_LUNCH_BREAK_START', '12:00'),
+    'lunch_break_end' => env('APPOINTMENT_LUNCH_BREAK_END', '13:00'),
+
+    // Time slot duration in minutes
+    'slot_duration_minutes' => env('APPOINTMENT_SLOT_DURATION', 30),
+
+    // Buffer time between appointments in minutes
+    // This prevents back-to-back appointments
+    'buffer_time_minutes' => env('APPOINTMENT_BUFFER_TIME', 15),
+
+    // Maximum number of appointments per day
+    'max_appointments_per_day' => env('APPOINTMENT_MAX_PER_DAY', 10),
+
+    // Minimum notice time in hours
+    // Clients must book at least this many hours in advance
+    'minimum_notice_hours' => env('APPOINTMENT_MINIMUM_NOTICE', 24),
+];
+
+
+

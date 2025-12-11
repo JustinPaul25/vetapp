@@ -1,0 +1,269 @@
+<?php
+
+namespace App\Http\Controllers\Admin;
+
+use App\Http\Controllers\Controller;
+use App\Models\Patient;
+use App\Models\PetType;
+use App\Models\User;
+use Illuminate\Http\Request;
+use Inertia\Inertia;
+use Illuminate\Support\Facades\DB;
+
+class PatientController extends Controller
+{
+    /**
+     * Display a listing of the resource.
+     */
+    public function index(Request $request)
+    {
+        $query = Patient::with(['petType', 'user']);
+
+        // Search functionality
+        if ($request->has('search') && !empty($request->search)) {
+            $keyword = $request->search;
+            $query->where(function ($q) use ($keyword) {
+                $q->where('pet_name', 'LIKE', "%{$keyword}%")
+                    ->orWhere('pet_breed', 'LIKE', "%{$keyword}%")
+                    ->orWhereHas('petType', function ($q) use ($keyword) {
+                        $q->where('name', 'LIKE', "%{$keyword}%");
+                    })
+                    ->orWhereHas('user', function ($q) use ($keyword) {
+                        $q->where(DB::raw("CONCAT(first_name, ' ', last_name)"), 'LIKE', "%{$keyword}%")
+                            ->orWhere('email', 'LIKE', "%{$keyword}%")
+                            ->orWhere('name', 'LIKE', "%{$keyword}%");
+                    });
+            });
+        }
+
+        // Sort functionality
+        $sortBy = $request->get('sort_by', 'created_at');
+        $sortDirection = $request->get('sort_direction', 'desc');
+        
+        // Validate sort_by to prevent SQL injection
+        $allowedSortColumns = ['pet_name', 'pet_breed', 'pet_gender', 'created_at'];
+        if (!in_array($sortBy, $allowedSortColumns)) {
+            $sortBy = 'created_at';
+        }
+        
+        // Validate sort_direction
+        $sortDirection = strtolower($sortDirection) === 'asc' ? 'asc' : 'desc';
+        
+        $query->orderBy($sortBy, $sortDirection);
+
+        $patients = $query->paginate(15);
+
+        // Transform the data for Inertia
+        $patients->getCollection()->transform(function ($patient) {
+            return [
+                'id' => $patient->id,
+                'pet_name' => $patient->pet_name,
+                'pet_breed' => $patient->pet_breed,
+                'pet_gender' => $patient->pet_gender,
+                'pet_birth_date' => $patient->pet_birth_date ? $patient->pet_birth_date->toDateString() : null,
+                'microchip_number' => $patient->microchip_number,
+                'pet_allergies' => $patient->pet_allergies,
+                'pet_type' => [
+                    'id' => $patient->petType->id ?? null,
+                    'name' => $patient->petType->name ?? null,
+                ],
+                'owner' => $patient->user ? [
+                    'id' => $patient->user->id,
+                    'name' => trim(($patient->user->first_name ?? '') . ' ' . ($patient->user->last_name ?? '')) ?: $patient->user->name,
+                    'email' => $patient->user->email,
+                    'mobile_number' => $patient->user->mobile_number ?? null,
+                ] : null,
+                'created_at' => $patient->created_at->toISOString(),
+            ];
+        });
+
+        return Inertia::render('Admin/Patients/Index', [
+            'patients' => $patients,
+            'filters' => $request->only(['search', 'sort_by', 'sort_direction']),
+        ]);
+    }
+
+    /**
+     * Show the form for creating a new resource.
+     */
+    public function create()
+    {
+        $pet_types = PetType::all()->map(function ($pet_type) {
+            return [
+                'id' => $pet_type->id,
+                'name' => $pet_type->name,
+            ];
+        });
+
+        $users = User::all()->map(function ($user) {
+            return [
+                'id' => $user->id,
+                'name' => trim(($user->first_name ?? '') . ' ' . ($user->last_name ?? '')) ?: $user->name,
+                'email' => $user->email,
+            ];
+        });
+
+        return Inertia::render('Admin/Patients/Create', [
+            'pet_types' => $pet_types,
+            'users' => $users,
+        ]);
+    }
+
+    /**
+     * Store a newly created resource in storage.
+     */
+    public function store(Request $request)
+    {
+        $validated = $request->validate([
+            'pet_type_id' => 'required|exists:pet_types,id',
+            'pet_name' => 'nullable|string|max:100',
+            'pet_breed' => 'required|string|max:100',
+            'pet_gender' => 'nullable|in:Male,Female',
+            'pet_birth_date' => 'nullable|date',
+            'microchip_number' => 'nullable|string|max:100',
+            'pet_allergies' => 'nullable|string',
+            'user_id' => 'nullable|exists:users,id',
+        ]);
+
+        $patient = Patient::create([
+            'pet_type_id' => $validated['pet_type_id'],
+            'pet_name' => $validated['pet_name'] ?? null,
+            'pet_breed' => $validated['pet_breed'],
+            'pet_gender' => $validated['pet_gender'] ?? null,
+            'pet_birth_date' => $validated['pet_birth_date'] ?? null,
+            'microchip_number' => $validated['microchip_number'] ?? null,
+            'pet_allergies' => $validated['pet_allergies'] ?? null,
+            'user_id' => $validated['user_id'] ?? null,
+        ]);
+
+        return redirect()->route('admin.patients.show', $patient->id)
+            ->with('success', 'New patient has been created successfully.');
+    }
+
+    /**
+     * Display the specified resource.
+     */
+    public function show(Patient $patient)
+    {
+        $patient->load(['petType', 'user', 'appointments.appointment_type', 'prescriptions']);
+
+        return Inertia::render('Admin/Patients/Show', [
+            'patient' => [
+                'id' => $patient->id,
+                'pet_name' => $patient->pet_name,
+                'pet_breed' => $patient->pet_breed,
+                'pet_gender' => $patient->pet_gender,
+                'pet_birth_date' => $patient->pet_birth_date ? $patient->pet_birth_date->toDateString() : null,
+                'microchip_number' => $patient->microchip_number,
+                'pet_allergies' => $patient->pet_allergies,
+                'pet_type' => [
+                    'id' => $patient->petType->id ?? null,
+                    'name' => $patient->petType->name ?? null,
+                ],
+                'owner' => $patient->user ? [
+                    'id' => $patient->user->id,
+                    'name' => trim(($patient->user->first_name ?? '') . ' ' . ($patient->user->last_name ?? '')) ?: $patient->user->name,
+                    'email' => $patient->user->email,
+                    'mobile_number' => $patient->user->mobile_number ?? null,
+                    'address' => $patient->user->address ?? null,
+                ] : null,
+                'appointments' => $patient->appointments->map(function ($appointment) {
+                    return [
+                        'id' => $appointment->id,
+                        'appointment_type' => $appointment->appointment_type->name ?? null,
+                        'appointment_date' => $appointment->appointment_date ? $appointment->appointment_date->toDateString() : null,
+                        'appointment_time' => $appointment->appointment_time,
+                        'created_at' => $appointment->created_at->toISOString(),
+                    ];
+                }),
+                'prescriptions' => $patient->prescriptions->map(function ($prescription) {
+                    return [
+                        'id' => $prescription->id,
+                        'created_at' => $prescription->created_at->toISOString(),
+                    ];
+                }),
+                'created_at' => $patient->created_at->toISOString(),
+                'updated_at' => $patient->updated_at->toISOString(),
+            ],
+        ]);
+    }
+
+    /**
+     * Show the form for editing the specified resource.
+     */
+    public function edit(Patient $patient)
+    {
+        $pet_types = PetType::all()->map(function ($pet_type) {
+            return [
+                'id' => $pet_type->id,
+                'name' => $pet_type->name,
+            ];
+        });
+
+        $users = User::all()->map(function ($user) {
+            return [
+                'id' => $user->id,
+                'name' => trim(($user->first_name ?? '') . ' ' . ($user->last_name ?? '')) ?: $user->name,
+                'email' => $user->email,
+            ];
+        });
+
+        return Inertia::render('Admin/Patients/Edit', [
+            'patient' => [
+                'id' => $patient->id,
+                'pet_type_id' => $patient->pet_type_id,
+                'pet_name' => $patient->pet_name,
+                'pet_breed' => $patient->pet_breed,
+                'pet_gender' => $patient->pet_gender,
+                'pet_birth_date' => $patient->pet_birth_date ? $patient->pet_birth_date->toDateString() : null,
+                'microchip_number' => $patient->microchip_number,
+                'pet_allergies' => $patient->pet_allergies,
+                'user_id' => $patient->user_id,
+            ],
+            'pet_types' => $pet_types,
+            'users' => $users,
+        ]);
+    }
+
+    /**
+     * Update the specified resource in storage.
+     */
+    public function update(Request $request, Patient $patient)
+    {
+        $validated = $request->validate([
+            'pet_type_id' => 'required|exists:pet_types,id',
+            'pet_name' => 'nullable|string|max:100',
+            'pet_breed' => 'required|string|max:100',
+            'pet_gender' => 'nullable|in:Male,Female',
+            'pet_birth_date' => 'nullable|date',
+            'microchip_number' => 'nullable|string|max:100',
+            'pet_allergies' => 'nullable|string',
+            'user_id' => 'nullable|exists:users,id',
+        ]);
+
+        $patient->update([
+            'pet_type_id' => $validated['pet_type_id'],
+            'pet_name' => $validated['pet_name'] ?? null,
+            'pet_breed' => $validated['pet_breed'],
+            'pet_gender' => $validated['pet_gender'] ?? null,
+            'pet_birth_date' => $validated['pet_birth_date'] ?? null,
+            'microchip_number' => $validated['microchip_number'] ?? null,
+            'pet_allergies' => $validated['pet_allergies'] ?? null,
+            'user_id' => $validated['user_id'] ?? null,
+        ]);
+
+        return redirect()->route('admin.patients.show', $patient->id)
+            ->with('success', 'Patient has been updated successfully.');
+    }
+
+    /**
+     * Remove the specified resource from storage.
+     */
+    public function destroy(Patient $patient)
+    {
+        $patient->delete();
+
+        return redirect()->route('admin.patients.index')
+            ->with('success', 'Patient deleted successfully.');
+    }
+}
