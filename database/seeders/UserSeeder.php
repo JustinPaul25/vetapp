@@ -21,6 +21,7 @@ class UserSeeder extends Seeder
                 'name' => 'Admin User',
                 'email' => 'admin@example.com',
                 'password' => Hash::make('password'),
+                'email_verified_at' => now(),
             ]
         );
         $admin->assignRole('admin');
@@ -32,6 +33,7 @@ class UserSeeder extends Seeder
                 'name' => 'Staff User',
                 'email' => 'staff@example.com',
                 'password' => Hash::make('password'),
+                'email_verified_at' => now(),
             ]
         );
         $staff->assignRole('staff');
@@ -43,6 +45,7 @@ class UserSeeder extends Seeder
                 'name' => 'Client User',
                 'email' => 'client@example.com',
                 'password' => Hash::make('password'),
+                'email_verified_at' => now(),
             ]
         );
         $client->assignRole('client');
@@ -72,6 +75,7 @@ class UserSeeder extends Seeder
         foreach ($testUsers as $userData) {
             $role = $userData['role'];
             unset($userData['role']);
+            $userData['email_verified_at'] = now();
 
             $user = User::firstOrCreate(
                 ['email' => $userData['email']],

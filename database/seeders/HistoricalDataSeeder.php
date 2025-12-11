@@ -118,6 +118,7 @@ class HistoricalDataSeeder extends Seeder
                     'address' => $this->generateAddress(),
                     'password' => Hash::make('password'),
                     'active' => 1,
+                    'email_verified_at' => $createdAt,
                     'created_at' => $createdAt,
                     'updated_at' => $createdAt,
                 ]
@@ -145,6 +146,7 @@ class HistoricalDataSeeder extends Seeder
                     'address' => $this->generateAddress(),
                     'password' => Hash::make('password'),
                     'active' => 1,
+                    'email_verified_at' => $createdAt,
                     'created_at' => $createdAt,
                     'updated_at' => $createdAt,
                 ]
