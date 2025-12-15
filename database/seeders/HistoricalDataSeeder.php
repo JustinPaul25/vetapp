@@ -281,7 +281,22 @@ class HistoricalDataSeeder extends Seeder
             
             for ($i = 0; $i < $appointmentsPerWeek; $i++) {
                 $patient = $patients->random();
-                $appointmentType = $appointmentTypes->random();
+                
+                // 25% chance to have multiple appointment types, otherwise single type
+                $hasMultipleTypes = rand(0, 100) < 25 && $appointmentTypes->count() > 1;
+                
+                if ($hasMultipleTypes) {
+                    // Select 2-3 random appointment types
+                    $numTypes = min(rand(2, 3), $appointmentTypes->count());
+                    $selectedTypes = $appointmentTypes->random($numTypes);
+                    $primaryType = $selectedTypes->first();
+                    $appointmentTypeIds = $selectedTypes->pluck('id')->toArray();
+                } else {
+                    // Single appointment type
+                    $primaryType = $appointmentTypes->random();
+                    $appointmentTypeIds = [$primaryType->id];
+                }
+                
                 $user = $users->where('id', $patient->user_id)->first() ?? $users->random();
 
                 $appointmentDate = $currentDate->copy()->addDays(rand(0, 6));
@@ -292,7 +307,7 @@ class HistoricalDataSeeder extends Seeder
                 $isCompleted = $appointmentDate->isPast() && $isApproved ? (rand(0, 10) > 2) : false;
 
                 $appointment = Appointment::create([
-                    'appointment_type_id' => $appointmentType->id,
+                    'appointment_type_id' => $primaryType->id, // Keep for backward compatibility
                     'patient_id' => $patient->id,
                     'user_id' => $user->id,
                     'appointment_date' => $appointmentDate,
@@ -304,6 +319,12 @@ class HistoricalDataSeeder extends Seeder
                     'created_at' => $appointmentDate->copy()->subDays(rand(1, 7)),
                     'updated_at' => $isCompleted ? $appointmentDate->copy()->addHours(rand(1, 3)) : $appointmentDate->copy()->subDays(rand(1, 7)),
                 ]);
+
+                // Sync many-to-many relationship for appointment types
+                $appointment->appointment_types()->sync($appointmentTypeIds);
+                
+                // Sync many-to-many relationship for patients
+                $appointment->patients()->sync([$patient->id]);
 
                 $appointments->push($appointment);
                 $appointmentCount++;

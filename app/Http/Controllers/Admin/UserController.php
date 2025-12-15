@@ -95,8 +95,11 @@ class UserController extends Controller
             $user->syncRoles($validated['roles']);
         }
 
+        // Send email verification notification
+        $user->sendEmailVerificationNotification();
+
         return redirect()->route('admin.users.index')
-            ->with('success', 'User created successfully.');
+            ->with('success', 'User created successfully. Verification email has been sent.');
     }
 
     /**

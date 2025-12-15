@@ -6,15 +6,20 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import InputError from '@/components/InputError.vue';
+import PasswordRequirements from '@/components/PasswordRequirements.vue';
+import LocationMapPicker from '@/components/LocationMapPicker.vue';
 import { UserCheck, ArrowLeft } from 'lucide-vue-next';
 import { Link } from '@inertiajs/vue3';
 import { dashboard } from '@/routes';
+import { ref } from 'vue';
 
 const breadcrumbs = [
     { title: 'Dashboard', href: dashboard().url },
     { title: 'Pet Owners', href: '/admin/pet_owners' },
     { title: 'Create Pet Owner', href: '#' },
 ];
+
+const location = ref<{ lat: number | null; lng: number | null } | null>(null);
 
 const form = router.form({
     first_name: '',
@@ -23,9 +28,17 @@ const form = router.form({
     email: '',
     mobile_number: '',
     address: '',
+    lat: null as number | null,
+    lng: null as number | null,
     password: '',
     password_confirmation: '',
 });
+
+const updateLocation = (value: { lat: number | null; lng: number | null }) => {
+    location.value = value;
+    form.lat = value.lat;
+    form.lng = value.lng;
+};
 
 const submit = () => {
     form.post('/admin/pet_owners');
@@ -107,25 +120,40 @@ const submit = () => {
                         </div>
 
                         <div class="space-y-2">
-                            <Label for="mobile_number">Mobile Number</Label>
+                            <Label for="mobile_number">Mobile Number <span class="text-muted-foreground text-xs">(Philippine number)</span></Label>
                             <Input
                                 id="mobile_number"
                                 v-model="form.mobile_number"
                                 type="tel"
                                 autocomplete="tel"
+                                placeholder="09123456789 or +639123456789"
                             />
+                            <p class="text-xs text-muted-foreground">Format: 09XX XXX XXXX or +639XX XXX XXXX</p>
                             <InputError :message="form.errors.mobile_number" />
                         </div>
 
                         <div class="space-y-2">
-                            <Label for="address">Address</Label>
+                            <Label for="address">Complete Address</Label>
                             <Input
                                 id="address"
                                 v-model="form.address"
                                 type="text"
                                 autocomplete="street-address"
+                                placeholder="Street, Barangay, City, Province"
                             />
                             <InputError :message="form.errors.address" />
+                        </div>
+
+                        <div class="space-y-2">
+                            <Label>Location Pin</Label>
+                            <p class="text-xs text-muted-foreground mb-2">Click on the map to set a location pin, or drag the pin to adjust its position.</p>
+                            <LocationMapPicker
+                                :model-value="location"
+                                @update:model-value="updateLocation"
+                                height="400px"
+                            />
+                            <InputError :message="form.errors.lat" />
+                            <InputError :message="form.errors.lng" />
                         </div>
 
                         <div class="space-y-2">
@@ -137,6 +165,7 @@ const submit = () => {
                                 required
                                 autocomplete="new-password"
                             />
+                            <PasswordRequirements :password="form.password" />
                             <InputError :message="form.errors.password" />
                         </div>
 

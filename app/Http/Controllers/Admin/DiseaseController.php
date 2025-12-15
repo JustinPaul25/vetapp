@@ -281,6 +281,54 @@ class DiseaseController extends Controller
     }
 
     /**
+     * Get disease statistics for dashboard.
+     */
+    public function statistics(Request $request)
+    {
+        $month = $request->get('month', now()->month);
+        $year = $request->get('year', now()->year);
+
+        // Get top diseases by month
+        $topDiseases = PrescriptionDiagnosis::join('diseases', 'prescription_diagnoses.disease_id', '=', 'diseases.id')
+            ->join('appointments', 'prescription_diagnoses.appointment_id', '=', 'appointments.id')
+            ->whereYear('appointments.appointment_date', $year)
+            ->whereMonth('appointments.appointment_date', $month)
+            ->select('diseases.id', 'diseases.name', DB::raw('COUNT(*) as count'))
+            ->groupBy('diseases.id', 'diseases.name')
+            ->orderByDesc('count')
+            ->limit(10)
+            ->get()
+            ->map(function ($item) {
+                return [
+                    'id' => $item->id,
+                    'name' => $item->name,
+                    'count' => $item->count,
+                ];
+            });
+
+        // Get total number of diseases for the month
+        $totalDiseases = PrescriptionDiagnosis::join('appointments', 'prescription_diagnoses.appointment_id', '=', 'appointments.id')
+            ->whereYear('appointments.appointment_date', $year)
+            ->whereMonth('appointments.appointment_date', $month)
+            ->distinct()
+            ->count('prescription_diagnoses.disease_id');
+
+        // Get total disease cases for the month
+        $totalCases = PrescriptionDiagnosis::join('appointments', 'prescription_diagnoses.appointment_id', '=', 'appointments.id')
+            ->whereYear('appointments.appointment_date', $year)
+            ->whereMonth('appointments.appointment_date', $month)
+            ->count();
+
+        return response()->json([
+            'top_diseases' => $topDiseases,
+            'total_diseases' => $totalDiseases,
+            'total_cases' => $totalCases,
+            'month' => $month,
+            'year' => $year,
+        ]);
+    }
+
+    /**
      * Generate a consistent color from text using MD5 hash.
      */
     private function generateColor($text)

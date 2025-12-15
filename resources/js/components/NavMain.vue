@@ -27,9 +27,15 @@ const page = usePage();
                     :is-active="urlIsActive(item.href, page.url)"
                     :tooltip="item.title"
                 >
-                    <Link :href="item.href">
+                    <Link :href="item.href" class="relative">
                         <component :is="item.icon" />
                         <span>{{ item.title }}</span>
+                        <span 
+                            v-if="item.badge !== undefined && item.badge !== null && item.badge !== 0"
+                            class="absolute right-1 top-1.5 flex h-5 min-w-5 items-center justify-center rounded-full bg-yellow-500 px-1 text-xs font-semibold text-yellow-900"
+                        >
+                            {{ item.badge }}
+                        </span>
                     </Link>
                 </SidebarMenuButton>
             </SidebarMenuItem>

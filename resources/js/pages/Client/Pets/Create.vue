@@ -10,7 +10,7 @@ import InputError from '@/components/InputError.vue';
 import { Heart, ArrowLeft } from 'lucide-vue-next';
 import { Link } from '@inertiajs/vue3';
 import { dashboard } from '@/routes';
-import { computed } from 'vue';
+import { computed, watch } from 'vue';
 
 interface PetType {
     id: number;
@@ -19,6 +19,7 @@ interface PetType {
 
 interface Props {
     pet_types: PetType[];
+    pet_breeds: Record<string, string[]>;
 }
 
 const props = defineProps<Props>();
@@ -49,6 +50,29 @@ const petTypeOptions = computed(() => {
         value: pt.id.toString(),
         label: pt.name,
     }));
+});
+
+// Get the selected pet type name
+const selectedPetTypeName = computed(() => {
+    if (!form.pet_type_id) return null;
+    const petType = props.pet_types.find(pt => pt.id.toString() === form.pet_type_id);
+    return petType?.name || null;
+});
+
+// Get breed options based on selected pet type
+const breedOptions = computed(() => {
+    if (!selectedPetTypeName.value || !props.pet_breeds[selectedPetTypeName.value]) {
+        return [];
+    }
+    return props.pet_breeds[selectedPetTypeName.value].map(breed => ({
+        value: breed,
+        label: breed,
+    }));
+});
+
+// Clear breed selection when pet type changes
+watch(() => form.pet_type_id, () => {
+    form.pet_breed = '';
 });
 </script>
 
@@ -106,13 +130,14 @@ const petTypeOptions = computed(() => {
 
                             <div class="space-y-2">
                                 <Label for="pet_breed">Pet Breed <span class="text-destructive">*</span></Label>
-                                <Input
+                                <SearchableSelect
                                     id="pet_breed"
                                     v-model="form.pet_breed"
-                                    type="text"
-                                    required
-                                    placeholder="e.g., Golden Retriever, Persian"
-                                    autocomplete="off"
+                                    :options="breedOptions"
+                                    placeholder="Select Pet Breed"
+                                    search-placeholder="Search breeds..."
+                                    :required="true"
+                                    :disabled="!selectedPetTypeName"
                                 />
                                 <InputError :message="form.errors.pet_breed" />
                             </div>
@@ -181,6 +206,9 @@ const petTypeOptions = computed(() => {
         </div>
     </AppLayout>
 </template>
+
+
+
 
 
 

@@ -13,7 +13,7 @@ import {
 import { dashboard } from '@/routes';
 import { type NavItem } from '@/types';
 import { Link, usePage } from '@inertiajs/vue3';
-import { LayoutGrid, Users, Shield, Dog, Pill, FileText, Heart, UserCheck, MapPin, Calendar } from 'lucide-vue-next';
+import { LayoutGrid, Users, Shield, Dog, Pill, FileText, Heart, UserCheck, MapPin, Calendar, UserPlus } from 'lucide-vue-next';
 import { computed } from 'vue';
 import AppLogo from './AppLogo.vue';
 
@@ -22,6 +22,7 @@ const auth = computed(() => page.props.auth);
 const isAdmin = computed(() => auth.value?.user?.roles?.includes('admin') ?? false);
 const isStaff = computed(() => auth.value?.user?.roles?.includes('staff') ?? false);
 const isClient = computed(() => !isAdmin.value && !isStaff.value);
+const pendingAppointmentsCount = computed(() => (page.props as any).pendingAppointmentsCount ?? 0);
 
 const mainNavItems = computed<NavItem[]>(() => {
     const items: NavItem[] = [
@@ -39,6 +40,7 @@ const mainNavItems = computed<NavItem[]>(() => {
                 title: 'Appointments',
                 href: '/admin/appointments',
                 icon: Calendar,
+                badge: pendingAppointmentsCount.value > 0 ? pendingAppointmentsCount.value : undefined,
             },
             {
                 title: 'Patients',
@@ -49,6 +51,11 @@ const mainNavItems = computed<NavItem[]>(() => {
                 title: 'Pet Owners',
                 href: '/admin/pet_owners',
                 icon: UserCheck,
+            },
+            {
+                title: 'Walk-In Clients',
+                href: '/admin/walk_in_clients',
+                icon: UserPlus,
             },
             // Clinical Operations
             {
@@ -92,6 +99,7 @@ const mainNavItems = computed<NavItem[]>(() => {
                 title: 'Appointments',
                 href: '/admin/appointments',
                 icon: Calendar,
+                badge: pendingAppointmentsCount.value > 0 ? pendingAppointmentsCount.value : undefined,
             },
             // Patient Care
             {

@@ -8,6 +8,8 @@ use App\Models\Patient;
 use App\Models\PetType;
 use App\Models\User;
 use App\Services\AblyService;
+use App\Services\AppointmentLimitService;
+use App\Constants\Components\PetBreeds;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -42,28 +44,50 @@ class ClientController extends Controller
 
             $appointments = Appointment::select(
                 'appointments.*',
-                'appointment_types.name as appointment_type',
-                'patients.pet_name',
-                'pt.name as pet_type',
                 DB::raw("IF(appointments.is_canceled = 1, 'Canceled', IF(appointments.is_approved = 0, 'Pending', IF(appointments.is_completed = 1, 'Completed', 'Approved'))) as status")
             )
-                ->join('appointment_types', 'appointments.appointment_type_id', 'appointment_types.id')
-                ->leftJoin('patients', 'patients.id', 'appointments.patient_id')
-                ->leftJoin('pet_types as pt', 'pt.id', 'patients.pet_type_id')
                 ->leftJoin('prescriptions', 'prescriptions.appointment_id', 'appointments.id')
                 ->leftJoin('prescription_diagnoses', 'prescription_diagnoses.prescription_id', 'prescriptions.id')
                 ->leftJoin('diseases', 'diseases.id', 'prescription_diagnoses.disease_id')
-                ->where(function ($query) {
-                    $query->where('patients.user_id', auth()->id())
-                        ->orWhere('appointments.user_id', auth()->id());
-                });
+                ->with(['appointment_types', 'patients.petType']) // Load many-to-many relationships
+                ->where('appointments.user_id', auth()->id());
+
+            // Status filtering
+            if ($request->has('status') && !empty($request->status) && $request->status !== 'all') {
+                $status = strtolower($request->status);
+                switch ($status) {
+                    case 'pending':
+                        $appointments->where('appointments.is_approved', false)
+                              ->where('appointments.is_completed', false)
+                              ->where(function ($q) {
+                                  $q->whereNull('appointments.is_canceled')->orWhere('appointments.is_canceled', false);
+                              });
+                        break;
+                    case 'approved':
+                        $appointments->where('appointments.is_approved', true)
+                              ->where('appointments.is_completed', false)
+                              ->where(function ($q) {
+                                  $q->whereNull('appointments.is_canceled')->orWhere('appointments.is_canceled', false);
+                              });
+                        break;
+                    case 'completed':
+                        $appointments->where('appointments.is_completed', true);
+                        break;
+                    case 'canceled':
+                        $appointments->where('appointments.is_canceled', true);
+                        break;
+                }
+            }
 
             if (!empty($keyword)) {
                 $appointments->where(function ($q) use ($keyword) {
-                    $q->where('pt.name', 'LIKE', "%{$keyword}%")
-                        ->orWhere(DB::raw("CONCAT(COALESCE(patients.owner_first_name, ''), ' ', COALESCE(patients.owner_last_name, ''))"), 'LIKE', "%{$keyword}%")
-                        ->orWhere('diseases.name', 'LIKE', "%{$keyword}%")
-                        ->orWhere('patients.pet_name', 'LIKE', "%{$keyword}%");
+                    $q->where('diseases.name', 'LIKE', "%{$keyword}%")
+                        ->orWhereHas('patients', function ($patientQuery) use ($keyword) {
+                            $patientQuery->where('patients.pet_name', 'LIKE', "%{$keyword}%")
+                                ->orWhereHas('petType', function ($typeQuery) use ($keyword) {
+                                    $typeQuery->where('pet_types.name', 'LIKE', "%{$keyword}%");
+                                });
+                        });
                 });
             }
 
@@ -73,11 +97,22 @@ class ClientController extends Controller
 
             return response()->json([
                 'data' => $appointments->map(function ($appointment) {
+                    // Get all appointment types as comma-separated string
+                    $appointmentTypes = $appointment->appointment_types->pluck('name')->join(', ') 
+                                      ?: ($appointment->appointment_type->name ?? 'N/A');
+                    
+                    // Get all pets for this appointment
+                    $pets = $appointment->patients;
+                    $petNames = $pets->pluck('pet_name')->join(', ');
+                    $petTypes = $pets->map(function ($pet) {
+                        return $pet->petType->name ?? 'N/A';
+                    })->unique()->join(', ');
+                    
                     return [
                         'id' => $appointment->id,
-                        'appointment_type' => $appointment->appointment_type,
-                        'pet_type' => $appointment->pet_type,
-                        'pet_name' => $appointment->pet_name,
+                        'appointment_type' => $appointmentTypes,
+                        'pet_type' => $petTypes ?: 'N/A',
+                        'pet_name' => $petNames ?: 'N/A',
                         'appointment_date' => $appointment->appointment_date ? $appointment->appointment_date->format('Y-m-d') : null,
                         'appointment_time' => $appointment->appointment_time,
                         'status' => $appointment->status,
@@ -109,37 +144,99 @@ class ClientController extends Controller
     public function bookAppointment(Request $request)
     {
         $request->validate([
-            'pet_id' => 'required|exists:patients,id',
-            'appointment_type_id' => 'required|exists:appointment_types,id',
+            'pet_ids' => 'required|array|min:1',
+            'pet_ids.*' => 'required|exists:patients,id',
+            'appointment_type_ids' => 'required|array|min:1',
+            'appointment_type_ids.*' => 'required|exists:appointment_types,id',
             'appointment_date' => 'required|date|after:today',
-            'appointment_time' => 'required|string',
+            'appointment_times' => 'required|array|min:1',
+            'appointment_times.*' => 'required|string',
             'symptoms' => 'nullable|string|max:1825',
         ]);
 
-        // Verify the pet belongs to the authenticated user
-        $pet = Patient::where('id', $request->pet_id)
+        // Verify all pets belong to the authenticated user
+        $petIds = $request->pet_ids;
+        $pets = Patient::whereIn('id', $petIds)
             ->where('user_id', auth()->id())
-            ->firstOrFail();
+            ->get();
+        
+        if ($pets->count() !== count($petIds)) {
+            return back()->withErrors(['pet_ids' => 'One or more pets do not belong to you.']);
+        }
 
-        // Convert time from 12-hour format (h:i A) to 24-hour format (H:i)
-        $time = Carbon::createFromFormat('h:i A', $request->appointment_time);
+        // Validate that number of time slots matches number of pets
+        $appointmentTimes = $request->appointment_times;
+        if (count($appointmentTimes) !== count($petIds)) {
+            return back()->withErrors(['appointment_times' => 'The number of time slots must match the number of pets selected.']);
+        }
 
-        // Validate timeslot restrictions
-        $this->validateTimeslotRestrictions($request->appointment_date, $time->format('H:i'));
+        // Get appointment type IDs array
+        $appointmentTypeIds = $request->appointment_type_ids;
+        
+        // Use first appointment type ID for backward compatibility (appointment_type_id column)
+        $firstAppointmentTypeId = is_array($appointmentTypeIds) ? $appointmentTypeIds[0] : $appointmentTypeIds;
 
-        // Create appointment (initially not approved)
-        $appointment = Appointment::with('appointment_type')->create([
-            'patient_id' => $request->pet_id,
-            'appointment_type_id' => $request->appointment_type_id,
-            'appointment_date' => $request->appointment_date,
-            'symptoms' => $request->symptoms ?? '',
-            'is_approved' => false, // Client appointments start as pending
-            'appointment_time' => $time->format('H:i'), // Store in 24-hour format
-            'user_id' => Auth::id(),
-        ]);
+        // Validate daily appointment limits
+        $limitService = app(AppointmentLimitService::class);
+        $numberOfAppointments = count($petIds);
+        
+        // Check if we have enough slots for all appointments being created
+        foreach ($appointmentTypeIds as $typeId) {
+            $limitCheck = $limitService->checkDailyLimit($typeId, $request->appointment_date);
+            
+            if (!$limitCheck['available'] || $limitCheck['remaining'] < $numberOfAppointments) {
+                $appointmentType = AppointmentType::find($typeId);
+                $typeName = $appointmentType ? $appointmentType->name : 'Unknown';
+                $remaining = $limitCheck['remaining'];
+                
+                return back()->withErrors([
+                    'appointment_date' => sprintf(
+                        'Daily limit reached for %s appointments. Only %d slot(s) remaining, but %d appointment(s) requested.',
+                        $typeName,
+                        $remaining,
+                        $numberOfAppointments
+                    ),
+                ]);
+            }
+        }
+
+        // Create one appointment per pet-time combination
+        $createdAppointments = [];
+        
+        foreach ($petIds as $index => $petId) {
+            $timeString = $appointmentTimes[$index];
+            
+            // Convert time from 12-hour format (h:i A) to 24-hour format (H:i)
+            $time = Carbon::createFromFormat('h:i A', $timeString);
+
+            // Validate timeslot restrictions
+            $this->validateTimeslotRestrictions($request->appointment_date, $time->format('H:i'));
+
+            // Create appointment (initially not approved)
+            $appointment = Appointment::create([
+                'patient_id' => $petId, // Keep for backward compatibility
+                'appointment_type_id' => $firstAppointmentTypeId, // Keep for backward compatibility
+                'appointment_date' => $request->appointment_date,
+                'symptoms' => $request->symptoms ?? '',
+                'is_approved' => false, // Client appointments start as pending
+                'appointment_time' => $time->format('H:i'), // Store in 24-hour format
+                'user_id' => Auth::id(),
+            ]);
+
+            // Sync many-to-many relationship for multiple appointment types
+            $appointment->appointment_types()->sync($appointmentTypeIds);
+            
+            // Sync many-to-many relationship for single patient (this appointment is for one pet)
+            $appointment->patients()->sync([$petId]);
+            
+            $createdAppointments[] = $appointment;
+        }
+        
+        // Use first appointment for notifications and relationships loading
+        $appointment = $createdAppointments[0];
 
         // Reload appointment with relationships
-        $appointment->load('appointment_type', 'patient.petType', 'patient.user');
+        $appointment->load('appointment_type', 'appointment_types', 'patient.petType', 'patient.user', 'patients.petType', 'patients.user');
 
         // Notify Super Admins
         $adminUsers = User::select('users.*')
@@ -157,75 +254,111 @@ class ClientController extends Controller
             ->distinct()
             ->get();
 
-        $patient_owner_full_name = trim(($pet->user->first_name ?? '') . ' ' . ($pet->user->last_name ?? '')) ?: $pet->user->name;
-        $appointmentTypeName = $appointment->appointment_type->name ?? 'N/A';
+        // Get first pet for owner info (all pets should belong to same user)
+        $firstPet = $pets->first();
+        $patient_owner_full_name = trim(($firstPet->user->first_name ?? '') . ' ' . ($firstPet->user->last_name ?? '')) ?: $firstPet->user->name;
+        
+        // Get all appointment type names
+        $appointmentTypeNames = $appointment->appointment_types->pluck('name')->join(', ') ?: 
+                               ($appointment->appointment_type->name ?? 'N/A');
+        
+        // Get all pet names
+        $petNames = $pets->pluck('pet_name')->join(', ');
 
-        $link = config('app.url') . '/admin/appointments/' . $appointment->id;
-        $subject = sprintf("%s has submitted new appointment.", $patient_owner_full_name ?? '');
-        $message = "Hi, new appointment has been submitted<br><br>" .
-            "Appointment Details.<br><br>" .
-            "Full Name: " . $patient_owner_full_name . "<br>" .
-            "Mobile Number: " . ($pet->user->mobile_number ?? 'N/A') . "<br>" .
-            "Email Address: " . ($pet->user->email ?? 'N/A') . "<br>" .
-            "Pet Type: " . ($pet->petType->name ?? 'N/A') . "<br>" .
-            "Breed: " . ($pet->pet_breed ?? 'N/A') . "<br>" .
-            "Appointment Type: " . $appointmentTypeName . "<br>" .
-            "Appointment Date: " . $request->appointment_date . "<br>" .
-            "Appointment Time: " . $request->appointment_time . "<br>" .
-            "<p style='text-align:center'><a href='" . $link . "' style='background-color: #4CAF50; border: none; color: white; padding: 15px 32px; text-align: center; text-decoration: none; font-size: 12px; border-radius: 15px;'>View Appointment</a></p>";
+        // Build appointment times string for notification
+        $appointmentTimesString = collect($appointmentTimes)->map(function($time) {
+            return $time;
+        })->join(', ');
 
         $ablyService = app(AblyService::class);
-        $appointmentMessage = $appointmentTypeName . ' appointment scheduled for ' . $request->appointment_date . ' at ' . $request->appointment_time;
-
-        // Send notifications via database, email, and Ably to admins
-        foreach ($adminUsers as $user) {
-            $user->notify(new \App\Notifications\DefaultNotification($subject, $message, $link));
+        
+        // Send notifications for each appointment
+        foreach ($createdAppointments as $appointment) {
+            $appointment->load('appointment_type', 'appointment_types', 'patient.petType', 'patient.user');
             
-            // Send real-time notification via Ably
-            $ablyService->publishToUser($user->id, 'appointment.created', [
+            $petName = $appointment->patient->pet_name;
+            $appointmentTime = Carbon::createFromFormat('H:i', $appointment->appointment_time)->format('h:i A');
+            
+            $link = config('app.url') . '/admin/appointments/' . $appointment->id;
+            $subject = sprintf("%s has submitted new appointment.", $patient_owner_full_name ?? '');
+            $message = "Hi, new appointment has been submitted<br><br>" .
+                "Appointment Details.<br><br>" .
+                "Full Name: " . $patient_owner_full_name . "<br>" .
+                "Mobile Number: " . ($firstPet->user->mobile_number ?? 'N/A') . "<br>" .
+                "Email Address: " . ($firstPet->user->email ?? 'N/A') . "<br>" .
+                "Pet: " . $petName . "<br>" .
+                "Appointment Type: " . $appointmentTypeNames . "<br>" .
+                "Appointment Date: " . $request->appointment_date . "<br>" .
+                "Appointment Time: " . $appointmentTime . "<br>" .
+                "<p style='text-align:center'><a href='" . $link . "' style='background-color: #4CAF50; border: none; color: white; padding: 15px 32px; text-align: center; text-decoration: none; font-size: 12px; border-radius: 15px;'>View Appointment</a></p>";
+
+            $appointmentMessage = $appointmentTypeNames . ' appointment scheduled for ' . $request->appointment_date . ' at ' . $appointmentTime . ' for ' . $petName;
+
+            // Send notifications via database, email, and Ably to admins
+            foreach ($adminUsers as $user) {
+                $user->notify(new \App\Notifications\DefaultNotification($subject, $message, $link));
+                
+                // Send real-time notification via Ably
+                $ablyService->publishToUser($user->id, 'appointment.created', [
+                    'appointment_id' => $appointment->id,
+                    'subject' => $subject,
+                    'message' => $appointmentMessage,
+                    'link' => $link,
+                    'patient_name' => $petName,
+                    'owner_name' => $patient_owner_full_name,
+                ]);
+            }
+
+            // Send real-time notifications via Ably to staff
+            foreach ($staffUsers as $user) {
+                $ablyService->publishToUser($user->id, 'appointment.created', [
+                    'appointment_id' => $appointment->id,
+                    'subject' => $subject,
+                    'message' => $appointmentMessage,
+                    'link' => $link,
+                    'patient_name' => $petName,
+                    'owner_name' => $patient_owner_full_name,
+                ]);
+            }
+        }
+
+        // Also publish to admin and staff channels for each appointment
+        foreach ($createdAppointments as $appointment) {
+            $appointment->load('patient');
+            $petName = $appointment->patient->pet_name;
+            $appointmentTime = Carbon::createFromFormat('H:i', $appointment->appointment_time)->format('h:i A');
+            $appointmentMessage = $appointmentTypeNames . ' appointment scheduled for ' . $request->appointment_date . ' at ' . $appointmentTime . ' for ' . $petName;
+            $link = config('app.url') . '/admin/appointments/' . $appointment->id;
+            $subject = sprintf("%s has submitted new appointment.", $patient_owner_full_name ?? '');
+
+            // Publish to admin channel
+            $ablyService->publishToAdmins('appointment.created', [
                 'appointment_id' => $appointment->id,
                 'subject' => $subject,
                 'message' => $appointmentMessage,
                 'link' => $link,
-                'patient_name' => $pet->pet_name,
+                'patient_name' => $petName,
                 'owner_name' => $patient_owner_full_name,
             ]);
-        }
 
-        // Send real-time notifications via Ably to staff
-        foreach ($staffUsers as $user) {
-            $ablyService->publishToUser($user->id, 'appointment.created', [
+            // Publish to staff channel
+            $ablyService->publishToStaff('appointment.created', [
                 'appointment_id' => $appointment->id,
                 'subject' => $subject,
                 'message' => $appointmentMessage,
                 'link' => $link,
-                'patient_name' => $pet->pet_name,
+                'patient_name' => $petName,
                 'owner_name' => $patient_owner_full_name,
             ]);
         }
 
-        // Also publish to admin channel for all admins
-        $ablyService->publishToAdmins('appointment.created', [
-            'appointment_id' => $appointment->id,
-            'subject' => $subject,
-            'message' => $appointmentMessage,
-            'link' => $link,
-            'patient_name' => $pet->pet_name,
-            'owner_name' => $patient_owner_full_name,
-        ]);
-
-        // Also publish to staff channel for all staff
-        $ablyService->publishToStaff('appointment.created', [
-            'appointment_id' => $appointment->id,
-            'subject' => $subject,
-            'message' => $appointmentMessage,
-            'link' => $link,
-            'patient_name' => $pet->pet_name,
-            'owner_name' => $patient_owner_full_name,
-        ]);
+        $appointmentCount = count($createdAppointments);
+        $message = $appointmentCount > 1 
+            ? "{$appointmentCount} appointments created successfully."
+            : 'Appointment created successfully.';
 
         return redirect()->route('client.appointments.index')
-            ->with('message', 'Appointment created successfully.');
+            ->with('message', $message);
     }
 
     /**
@@ -247,6 +380,9 @@ class ClientController extends Controller
         if (!$appointment->relationLoaded('appointment_type')) {
             $appointment->load('appointment_type');
         }
+        if (!$appointment->relationLoaded('appointment_types')) {
+            $appointment->load('appointment_types');
+        }
         if (!$appointment->relationLoaded('patient')) {
             $appointment->load('patient.petType');
         }
@@ -259,13 +395,20 @@ class ClientController extends Controller
             $status = $appointment->is_completed ? 'Completed' : 'Approved';
         }
 
-        // Load prescription if exists
-        $appointment->load(['prescription.diagnoses.disease', 'prescription.medicines.medicine']);
+        // Load prescription if exists and patients
+        $appointment->load(['prescription.diagnoses.disease', 'prescription.medicines.medicine', 'patients.petType', 'patients.user']);
 
+        // Get all appointment types as comma-separated string
+        $appointmentTypes = $appointment->appointment_types->pluck('name')->join(', ') 
+                          ?: ($appointment->appointment_type ? $appointment->appointment_type->name : 'N/A');
+        
+        // Get all patients for this appointment
+        $patients = $appointment->patients;
+        
         return Inertia::render('Client/Appointments/Show', [
             'appointment' => [
                 'id' => $appointment->id,
-                'appointment_type' => $appointment->appointment_type ? $appointment->appointment_type->name : 'N/A',
+                'appointment_type' => $appointmentTypes,
                 'appointment_date' => $appointment->appointment_date ? $appointment->appointment_date->format('Y-m-d') : null,
                 'appointment_time' => $appointment->appointment_time,
                 'symptoms' => $appointment->symptoms,
@@ -276,6 +419,19 @@ class ClientController extends Controller
                 'created_at' => $appointment->created_at->toISOString(),
                 'updated_at' => $appointment->updated_at->toISOString(),
             ],
+            'patients' => $patients->map(function ($patient) {
+                return [
+                    'id' => $patient->id,
+                    'pet_name' => $patient->pet_name,
+                    'pet_breed' => $patient->pet_breed,
+                    'pet_gender' => $patient->pet_gender,
+                    'pet_birth_date' => $patient->pet_birth_date ? $patient->pet_birth_date->format('Y-m-d') : null,
+                    'microchip_number' => $patient->microchip_number,
+                    'pet_allergies' => $patient->pet_allergies,
+                    'pet_type' => $patient->petType ? $patient->petType->name : 'N/A',
+                ];
+            }),
+            // Keep backward compatibility with single patient
             'patient' => $appointment->patient ? [
                 'id' => $appointment->patient->id,
                 'pet_name' => $appointment->patient->pet_name,
@@ -656,8 +812,15 @@ class ClientController extends Controller
             ];
         });
 
+        // Create a mapping of pet type names to their breeds
+        $pet_breeds = [];
+        foreach ($pet_types as $pet_type) {
+            $pet_breeds[$pet_type['name']] = PetBreeds::getBreedsForPetType($pet_type['name']);
+        }
+
         return Inertia::render('Client/Pets/Create', [
             'pet_types' => $pet_types,
+            'pet_breeds' => $pet_breeds,
         ]);
     }
 

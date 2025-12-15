@@ -28,5 +28,8 @@ export default defineConfig({
         hmr: {
             overlay: false,
         },
+        watch: {
+            ignored: ['**/resources/views/**', '**/*.blade.php'],
+        },
     },
 });

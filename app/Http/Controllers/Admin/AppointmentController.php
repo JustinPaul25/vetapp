@@ -8,13 +8,16 @@ use App\Models\AppointmentType;
 use App\Models\Disease;
 use App\Models\Medicine;
 use App\Models\Patient;
+use App\Models\PatientWeightHistory;
 use App\Models\Prescription;
 use App\Models\PrescriptionDiagnosis;
 use App\Models\PrescriptionMedicine;
 use App\Models\Symptom;
 use App\Models\User;
 use App\Notifications\ClientEmailNotification;
+use App\Notifications\PrescriptionEmailNotification;
 use App\Services\AblyService;
+use App\Services\AppointmentLimitService;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -32,17 +35,46 @@ class AppointmentController extends Controller
             'appointment_type',
             'patient.petType',
             'patient.user',
+            'patients.petType',
+            'patients.user',
             'prescription.diagnoses.disease'
         ]);
+
+        // Status filtering
+        if ($request->has('status') && !empty($request->status) && $request->status !== 'all') {
+            $status = strtolower($request->status);
+            switch ($status) {
+                case 'pending':
+                    $query->where('is_approved', false)
+                          ->where('is_completed', false)
+                          ->where(function ($q) {
+                              $q->whereNull('is_canceled')->orWhere('is_canceled', false);
+                          });
+                    break;
+                case 'approved':
+                    $query->where('is_approved', true)
+                          ->where('is_completed', false)
+                          ->where(function ($q) {
+                              $q->whereNull('is_canceled')->orWhere('is_canceled', false);
+                          });
+                    break;
+                case 'completed':
+                    $query->where('is_completed', true);
+                    break;
+                case 'canceled':
+                    $query->where('is_canceled', true);
+                    break;
+            }
+        }
 
         // Search functionality
         if ($request->has('search') && !empty($request->search)) {
             $keyword = $request->search;
             $query->where(function ($q) use ($keyword) {
-                $q->whereHas('patient.petType', function ($q) use ($keyword) {
+                $q->whereHas('patients.petType', function ($q) use ($keyword) {
                     $q->where('name', 'LIKE', "%{$keyword}%");
                 })
-                ->orWhereHas('patient.user', function ($q) use ($keyword) {
+                ->orWhereHas('patients.user', function ($q) use ($keyword) {
                     $q->where(DB::raw("CONCAT(COALESCE(first_name, ''), ' ', COALESCE(last_name, ''))"), 'LIKE', "%{$keyword}%")
                         ->orWhere('name', 'LIKE', "%{$keyword}%");
                 })
@@ -77,18 +109,31 @@ class AppointmentController extends Controller
                 $status = 'Approved';
             }
 
+            // Get all patients for this appointment
+            $patients = $appointment->patients;
+            $petTypes = $patients->map(function ($patient) {
+                return $patient->petType->name ?? 'N/A';
+            })->unique()->join(', ');
+            $petBreeds = $patients->pluck('pet_breed')->filter()->unique()->join(', ');
+            
+            // Get owner info from first patient (all should belong to same user)
+            $firstPatient = $patients->first() ?? $appointment->patient;
+            $ownerName = $firstPatient && $firstPatient->user ? 
+                trim(($firstPatient->user->first_name ?? '') . ' ' . ($firstPatient->user->last_name ?? '')) ?: $firstPatient->user->name : 'N/A';
+            $ownerEmail = $firstPatient && $firstPatient->user ? $firstPatient->user->email ?? 'N/A' : 'N/A';
+            $ownerMobile = $firstPatient && $firstPatient->user ? $firstPatient->user->mobile_number ?? 'N/A' : 'N/A';
+            
             return [
                 'id' => $appointment->id,
                 'appointment_type' => $appointment->appointment_type->name ?? 'N/A',
                 'appointment_date' => $appointment->appointment_date ? $appointment->appointment_date->format('Y-m-d') : null,
                 'appointment_time' => $appointment->appointment_time,
                 'status' => $status,
-                'pet_type' => $appointment->patient->petType->name ?? 'N/A',
-                'pet_breed' => $appointment->patient->pet_breed ?? 'N/A',
-                'owner_name' => $appointment->patient->user ? 
-                    trim(($appointment->patient->user->first_name ?? '') . ' ' . ($appointment->patient->user->last_name ?? '')) ?: $appointment->patient->user->name : 'N/A',
-                'owner_email' => $appointment->patient->user->email ?? 'N/A',
-                'owner_mobile' => $appointment->patient->user->mobile_number ?? 'N/A',
+                'pet_type' => $petTypes ?: ($appointment->patient->petType->name ?? 'N/A'),
+                'pet_breed' => $petBreeds ?: ($appointment->patient->pet_breed ?? 'N/A'),
+                'owner_name' => $ownerName,
+                'owner_email' => $ownerEmail,
+                'owner_mobile' => $ownerMobile,
                 'disease' => $appointment->prescription && $appointment->prescription->diagnoses->isNotEmpty() 
                     ? $appointment->prescription->diagnoses->first()->disease->name ?? 'N/A'
                     : 'N/A',
@@ -101,6 +146,7 @@ class AppointmentController extends Controller
             'appointments' => $appointments,
             'filters' => [
                 'search' => $request->search,
+                'status' => $request->status ?? 'all',
                 'sort_by' => $sortBy,
                 'sort_direction' => $sortDirection,
             ],
@@ -148,6 +194,21 @@ class AppointmentController extends Controller
             'appointment_time' => 'required|string',
         ]);
 
+        // Validate daily appointment limits
+        $limitService = app(AppointmentLimitService::class);
+        $limitCheck = $limitService->checkDailyLimit($request->appointment_type, $request->appointment_date);
+        
+        if (!$limitCheck['available']) {
+            return back()->withErrors([
+                'appointment_date' => sprintf(
+                    'Daily limit reached for %s appointments. Current: %d/%d',
+                    $limitCheck['appointment_type'],
+                    $limitCheck['current_count'],
+                    $limitCheck['limit']
+                ),
+            ]);
+        }
+
         // Get the patient to find the owner's user_id
         $patient = Patient::findOrFail($request->patient_id);
         
@@ -161,8 +222,14 @@ class AppointmentController extends Controller
             'user_id' => $patient->user_id, // Set the user_id from the patient's owner
         ]);
 
+        // Sync many-to-many relationship for patients
+        $appointment->patients()->sync([$request->patient_id]);
+        
+        // Sync many-to-many relationship for appointment types (for consistency)
+        $appointment->appointment_types()->sync([$request->appointment_type]);
+        
         // Reload appointment with relationships
-        $appointment->load('appointment_type', 'patient.petType', 'patient.user');
+        $appointment->load('appointment_type', 'appointment_types', 'patient.petType', 'patient.user', 'patients.petType', 'patients.user');
 
         // Notify Staff users via Ably
         $staffUsers = User::select('users.*')
@@ -215,6 +282,8 @@ class AppointmentController extends Controller
         $appointment = Appointment::with([
             'patient.petType',
             'patient.user',
+            'patients.petType',
+            'patients.user',
             'appointment_type',
             'prescription.diagnoses.disease',
             'prescription.medicines.medicine'
@@ -242,7 +311,26 @@ class AppointmentController extends Controller
                 'created_at' => $appointment->created_at->toISOString(),
                 'updated_at' => $appointment->updated_at->toISOString(),
             ],
-            'patient' => [
+            'patients' => $appointment->patients->map(function ($patient) {
+                return [
+                    'id' => $patient->id,
+                    'pet_name' => $patient->pet_name,
+                    'pet_breed' => $patient->pet_breed,
+                    'pet_gender' => $patient->pet_gender,
+                    'pet_birth_date' => $patient->pet_birth_date ? $patient->pet_birth_date->format('Y-m-d') : null,
+                    'microchip_number' => $patient->microchip_number,
+                    'pet_allergies' => $patient->pet_allergies,
+                    'pet_type' => $patient->petType->name ?? 'N/A',
+                    'owner' => $patient->user ? [
+                        'id' => $patient->user->id,
+                        'name' => trim(($patient->user->first_name ?? '') . ' ' . ($patient->user->last_name ?? '')) ?: $patient->user->name,
+                        'email' => $patient->user->email,
+                        'mobile_number' => $patient->user->mobile_number ?? null,
+                    ] : null,
+                ];
+            }),
+            // Keep backward compatibility with single patient
+            'patient' => $appointment->patient ? [
                 'id' => $appointment->patient->id,
                 'pet_name' => $appointment->patient->pet_name,
                 'pet_breed' => $appointment->patient->pet_breed,
@@ -257,7 +345,7 @@ class AppointmentController extends Controller
                     'email' => $appointment->patient->user->email,
                     'mobile_number' => $appointment->patient->user->mobile_number ?? null,
                 ] : null,
-            ],
+            ] : null,
             'prescription' => $appointment->prescription ? [
                 'id' => $appointment->prescription->id,
                 'symptoms' => $appointment->prescription->symptoms,
@@ -297,6 +385,37 @@ class AppointmentController extends Controller
         ]);
 
         $appointment = Appointment::with('patient.user')->findOrFail($id);
+        
+        // If date is changing, validate daily limits for the new date (excluding current appointment)
+        if ($appointment->appointment_date->format('Y-m-d') !== $request->appointment_date) {
+            $limitService = app(AppointmentLimitService::class);
+            
+            // Get all appointment types for this appointment
+            $appointmentTypeIds = $appointment->appointment_types->pluck('id')->toArray();
+            if (empty($appointmentTypeIds)) {
+                // Fallback to single appointment_type_id if many-to-many is empty
+                $appointmentTypeIds = [$appointment->appointment_type_id];
+            }
+            
+            foreach ($appointmentTypeIds as $typeId) {
+                $limitCheck = $limitService->checkDailyLimit($typeId, $request->appointment_date, $appointment->id);
+                
+                if (!$limitCheck['available']) {
+                    $appointmentType = AppointmentType::find($typeId);
+                    $typeName = $appointmentType ? $appointmentType->name : 'Unknown';
+                    
+                    return back()->withErrors([
+                        'appointment_date' => sprintf(
+                            'Daily limit reached for %s appointments on the selected date. Current: %d/%d',
+                            $typeName,
+                            $limitCheck['current_count'],
+                            $limitCheck['limit']
+                        ),
+                    ]);
+                }
+            }
+        }
+        
         $appointment->appointment_date = $request->appointment_date;
         $appointment->appointment_time = $request->appointment_time;
         $appointment->is_approved = true;
@@ -427,7 +546,8 @@ class AppointmentController extends Controller
             'notes' => 'nullable|string',
         ]);
 
-        $appointment = Appointment::where('is_approved', 1)
+        $appointment = Appointment::with('patient.user')
+            ->where('is_approved', 1)
             ->doesntHave('prescription')
             ->where('id', $id)
             ->firstOrFail();
@@ -439,6 +559,15 @@ class AppointmentController extends Controller
                 'symptoms' => $request->symptoms ? implode(', ', array_map('ucwords', $request->symptoms)) : '',
                 'notes' => $request->notes ?? '',
                 'pet_weight' => $request->pet_current_weight,
+            ]);
+
+            // Save weight history
+            PatientWeightHistory::create([
+                'patient_id' => $appointment->patient_id,
+                'weight' => $request->pet_current_weight,
+                'recorded_at' => now(),
+                'prescription_id' => $prescription->id,
+                'notes' => 'Recorded during appointment',
             ]);
 
             // Create prescription diagnoses
@@ -499,6 +628,12 @@ class AppointmentController extends Controller
 
             $appointment->is_completed = true;
             $appointment->save();
+
+            // Send prescription email notification to the owner (queued)
+            $patient = $appointment->patient;
+            if ($patient && $patient->user && $patient->user->email) {
+                $patient->user->notify(new PrescriptionEmailNotification($prescription));
+            }
 
             return response()->json(['success' => true, 'message' => 'Prescription created successfully.']);
         });

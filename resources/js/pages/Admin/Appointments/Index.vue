@@ -34,6 +34,7 @@ interface Props {
     };
     filters?: {
         search?: string;
+        status?: string;
         sort_by?: string;
         sort_direction?: string;
     };
@@ -47,6 +48,7 @@ const breadcrumbs = [
 ];
 
 const searchQuery = ref(props.filters?.search || '');
+const statusFilter = ref(props.filters?.status || 'all');
 const sortBy = ref(props.filters?.sort_by || 'created_at');
 const sortDirection = ref(props.filters?.sort_direction || 'desc');
 
@@ -60,6 +62,7 @@ const adminAppointmentsRoute = (path: string) => {
 const buildQueryString = (page?: number) => {
     const params = new URLSearchParams();
     if (searchQuery.value) params.set('search', searchQuery.value);
+    if (statusFilter.value && statusFilter.value !== 'all') params.set('status', statusFilter.value);
     if (sortBy.value) params.set('sort_by', sortBy.value);
     if (sortDirection.value) params.set('sort_direction', sortDirection.value);
     if (page) params.set('page', page.toString());
@@ -69,6 +72,20 @@ const buildQueryString = (page?: number) => {
 const handleSearch = () => {
     router.get('/admin/appointments', {
         search: searchQuery.value,
+        status: statusFilter.value !== 'all' ? statusFilter.value : undefined,
+        sort_by: sortBy.value,
+        sort_direction: sortDirection.value,
+    }, {
+        preserveState: true,
+        replace: true,
+    });
+};
+
+const handleStatusChange = (status: string) => {
+    statusFilter.value = status;
+    router.get('/admin/appointments', {
+        search: searchQuery.value,
+        status: status !== 'all' ? status : undefined,
         sort_by: sortBy.value,
         sort_direction: sortDirection.value,
     }, {
@@ -80,6 +97,7 @@ const handleSearch = () => {
 const clearSearch = () => {
     searchQuery.value = '';
     router.get('/admin/appointments', {
+        status: statusFilter.value !== 'all' ? statusFilter.value : undefined,
         sort_by: sortBy.value,
         sort_direction: sortDirection.value,
     }, {
@@ -98,6 +116,7 @@ const handleSort = (column: string) => {
     
     router.get('/admin/appointments', {
         search: searchQuery.value,
+        status: statusFilter.value !== 'all' ? statusFilter.value : undefined,
         sort_by: sortBy.value,
         sort_direction: sortDirection.value,
     }, {
@@ -166,6 +185,31 @@ const getStatusBadgeClass = (status: string) => {
                     </div>
                 </CardHeader>
                 <CardContent>
+                    <!-- Status Tabs -->
+                    <div class="mb-4">
+                        <div class="inline-flex gap-1 rounded-lg bg-neutral-100 p-1 dark:bg-neutral-800">
+                            <button
+                                v-for="status in [
+                                    { value: 'all', label: 'All' },
+                                    { value: 'pending', label: 'Pending' },
+                                    { value: 'approved', label: 'Approved' },
+                                    { value: 'completed', label: 'Completed' },
+                                    { value: 'canceled', label: 'Canceled' }
+                                ]"
+                                :key="status.value"
+                                @click="handleStatusChange(status.value)"
+                                :class="[
+                                    'flex items-center rounded-md px-3.5 py-1.5 transition-colors text-sm font-medium',
+                                    statusFilter === status.value
+                                        ? 'bg-white shadow-xs dark:bg-neutral-700 dark:text-neutral-100'
+                                        : 'text-neutral-500 hover:bg-neutral-200/60 hover:text-black dark:text-neutral-400 dark:hover:bg-neutral-700/60'
+                                ]"
+                            >
+                                {{ status.label }}
+                            </button>
+                        </div>
+                    </div>
+
                     <!-- Search -->
                     <div class="mb-4 flex gap-2">
                         <div class="relative flex-1 max-w-sm">
@@ -297,6 +341,9 @@ const getStatusBadgeClass = (status: string) => {
         </div>
     </AppLayout>
 </template>
+
+
+
 
 
 

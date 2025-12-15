@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import InputError from '@/components/InputError.vue';
+import PasswordRequirements from '@/components/PasswordRequirements.vue';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -15,6 +16,7 @@ const props = defineProps<{
 }>();
 
 const inputEmail = ref(props.email);
+const password = ref('');
 </script>
 
 <template>
@@ -29,6 +31,7 @@ const inputEmail = ref(props.email);
             :transform="(data) => ({ ...data, token, email })"
             :reset-on-success="['password', 'password_confirmation']"
             v-slot="{ errors, processing }"
+            @success="password = ''"
         >
             <div class="grid gap-6">
                 <div class="grid gap-2">
@@ -49,6 +52,8 @@ const inputEmail = ref(props.email);
                     <Label for="password">Password</Label>
                     <Input
                         id="password"
+                        :model-value="password"
+                        @update:model-value="password = $event"
                         type="password"
                         name="password"
                         autocomplete="new-password"
@@ -56,6 +61,7 @@ const inputEmail = ref(props.email);
                         autofocus
                         placeholder="Password"
                     />
+                    <PasswordRequirements :password="password" />
                     <InputError :message="errors.password" />
                 </div>
 

@@ -11,8 +11,16 @@ class AppointmentType extends Model
 
     protected $guarded = [];
 
+    // Keep for backward compatibility - hasMany for single appointment_type_id
     public function appointments()
     {
         return $this->hasMany(Appointment::class);
+    }
+
+    // Many-to-many relationship
+    public function appointmentsMany()
+    {
+        return $this->belongsToMany(Appointment::class, 'appointment_appointment_type')
+            ->withTimestamps();
     }
 }

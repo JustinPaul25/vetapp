@@ -15,6 +15,7 @@ export interface NavItem {
     href: NonNullable<InertiaLinkProps['href']>;
     icon?: LucideIcon;
     isActive?: boolean;
+    badge?: number | string;
 }
 
 export type AppPageProps<
@@ -24,6 +25,7 @@ export type AppPageProps<
     quote: { message: string; author: string };
     auth: Auth;
     sidebarOpen: boolean;
+    pendingAppointmentsCount?: number;
 };
 
 export interface User {

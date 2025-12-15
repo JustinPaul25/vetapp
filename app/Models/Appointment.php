@@ -15,14 +15,30 @@ class Appointment extends Model
         'appointment_date' => 'date',
     ];
 
+    // Keep for backward compatibility - returns first appointment type
     public function appointment_type()
     {
         return $this->belongsTo(AppointmentType::class);
     }
 
+    // Many-to-many relationship for multiple appointment types
+    public function appointment_types()
+    {
+        return $this->belongsToMany(AppointmentType::class, 'appointment_appointment_type')
+            ->withTimestamps();
+    }
+
+    // Keep for backward compatibility - returns first patient
     public function patient()
     {
         return $this->belongsTo(Patient::class);
+    }
+
+    // Many-to-many relationship for multiple patients
+    public function patients()
+    {
+        return $this->belongsToMany(Patient::class, 'appointment_patient')
+            ->withTimestamps();
     }
 
     public function prescription()

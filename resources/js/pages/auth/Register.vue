@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import InputError from '@/components/InputError.vue';
+import PasswordRequirements from '@/components/PasswordRequirements.vue';
 import TextLink from '@/components/TextLink.vue';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -9,6 +10,9 @@ import AuthBase from '@/layouts/AuthLayout.vue';
 import { login } from '@/routes';
 import { store } from '@/routes/register';
 import { Form, Head } from '@inertiajs/vue3';
+import { ref } from 'vue';
+
+const password = ref('');
 </script>
 
 <template>
@@ -23,6 +27,7 @@ import { Form, Head } from '@inertiajs/vue3';
             :reset-on-success="['password', 'password_confirmation']"
             v-slot="{ errors, processing }"
             class="flex flex-col gap-6"
+            @success="password = ''"
         >
             <div class="grid gap-6">
                 <div class="grid gap-2">
@@ -58,6 +63,8 @@ import { Form, Head } from '@inertiajs/vue3';
                     <Label for="password">Password</Label>
                     <Input
                         id="password"
+                        :model-value="password"
+                        @update:model-value="password = $event"
                         type="password"
                         required
                         :tabindex="3"
@@ -65,6 +72,7 @@ import { Form, Head } from '@inertiajs/vue3';
                         name="password"
                         placeholder="Password"
                     />
+                    <PasswordRequirements :password="password" />
                     <InputError :message="errors.password" />
                 </div>
 

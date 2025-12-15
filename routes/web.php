@@ -48,6 +48,7 @@ Route::middleware(['auth', 'verified', \App\Http\Middleware\EnsureUserIsAdmin::c
         Route::resource('roles', \App\Http\Controllers\Admin\RoleController::class);
         Route::resource('pet_types', \App\Http\Controllers\Admin\PetTypeController::class);
         Route::resource('pet_owners', \App\Http\Controllers\Admin\PetOwnerController::class);
+        Route::resource('walk_in_clients', \App\Http\Controllers\Admin\WalkInClientController::class);
     });
 
 // Ably token endpoint for client-side authentication
@@ -89,6 +90,8 @@ Route::middleware(['auth', 'verified', \App\Http\Middleware\EnsureUserIsAdminOrS
     ->name('admin.')
     ->group(function () {
         Route::resource('patients', \App\Http\Controllers\Admin\PatientController::class);
+        Route::get('patients/{patient}/weight-history', [\App\Http\Controllers\Admin\PatientController::class, 'getWeightHistory'])->name('patients.weight-history');
+        Route::post('patients/{patient}/weight-history', [\App\Http\Controllers\Admin\PatientController::class, 'storeWeightHistory'])->name('patients.weight-history.store');
         Route::resource('medicines', \App\Http\Controllers\Admin\MedicineController::class);
         
         // Prescription routes
@@ -112,6 +115,7 @@ Route::middleware(['auth', 'verified', \App\Http\Middleware\EnsureUserIsAdminOrS
         Route::prefix('diseases')->name('diseases.')->group(function () {
             Route::get('/search', [\App\Http\Controllers\Admin\DiseaseController::class, 'search'])->name('search');
             Route::get('/search-by-symptoms', [\App\Http\Controllers\Admin\DiseaseController::class, 'searchBySymptoms'])->name('search-by-symptoms');
+            Route::get('/statistics', [\App\Http\Controllers\Admin\DiseaseController::class, 'statistics'])->name('statistics');
             Route::get('/{id}/medicines', [\App\Http\Controllers\Admin\DiseaseController::class, 'getMedicines'])->name('medicines');
             Route::get('/map', [\App\Http\Controllers\Admin\DiseaseController::class, 'map'])->name('map');
             Route::get('/training-data/medicines', [\App\Http\Controllers\Admin\DiseaseController::class, 'getMedicineTrainingData'])->name('training-data.medicines');

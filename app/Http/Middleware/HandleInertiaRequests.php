@@ -2,6 +2,7 @@
 
 namespace App\Http\Middleware;
 
+use App\Models\Appointment;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
@@ -38,20 +39,34 @@ class HandleInertiaRequests extends Middleware
     {
         [$message, $author] = str(Inspiring::quotes()->random())->explode('-');
 
+        $user = $request->user();
+        $pendingAppointmentsCount = 0;
+
+        // Get pending appointments count for admin and staff users
+        if ($user) {
+            $roles = $user->getRoleNames();
+            if ($roles->contains('admin') || $roles->contains('staff')) {
+                $pendingAppointmentsCount = Appointment::where('is_approved', false)
+                    ->where('is_canceled', false)
+                    ->count();
+            }
+        }
+
         return [
             ...parent::share($request),
             'name' => config('app.name'),
             'quote' => ['message' => trim($message), 'author' => trim($author)],
             'auth' => [
-                'user' => $request->user() ? [
-                    'id' => $request->user()->id,
-                    'name' => $request->user()->name,
-                    'email' => $request->user()->email,
-                    'roles' => $request->user()->getRoleNames(),
-                    'permissions' => $request->user()->getAllPermissions()->pluck('name'),
+                'user' => $user ? [
+                    'id' => $user->id,
+                    'name' => $user->name,
+                    'email' => $user->email,
+                    'roles' => $user->getRoleNames(),
+                    'permissions' => $user->getAllPermissions()->pluck('name'),
                 ] : null,
             ],
             'sidebarOpen' => ! $request->hasCookie('sidebar_state') || $request->cookie('sidebar_state') === 'true',
+            'pendingAppointmentsCount' => $pendingAppointmentsCount,
         ];
     }
 }

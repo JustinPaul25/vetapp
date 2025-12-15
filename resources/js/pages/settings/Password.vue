@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import PasswordController from '@/actions/App/Http/Controllers/Settings/PasswordController';
 import InputError from '@/components/InputError.vue';
+import PasswordRequirements from '@/components/PasswordRequirements.vue';
 import AppLayout from '@/layouts/AppLayout.vue';
 import SettingsLayout from '@/layouts/settings/Layout.vue';
 import { edit } from '@/routes/user-password';
@@ -11,6 +12,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { type BreadcrumbItem } from '@/types';
+import { ref } from 'vue';
 
 const breadcrumbItems: BreadcrumbItem[] = [
     {
@@ -18,6 +20,8 @@ const breadcrumbItems: BreadcrumbItem[] = [
         href: edit().url,
     },
 ];
+
+const password = ref('');
 </script>
 
 <template>
@@ -44,6 +48,7 @@ const breadcrumbItems: BreadcrumbItem[] = [
                     ]"
                     class="space-y-6"
                     v-slot="{ errors, processing, recentlySuccessful }"
+                    @success="password = ''"
                 >
                     <div class="grid gap-2">
                         <Label for="current_password">Current password</Label>
@@ -62,12 +67,15 @@ const breadcrumbItems: BreadcrumbItem[] = [
                         <Label for="password">New password</Label>
                         <Input
                             id="password"
+                            :model-value="password"
+                            @update:model-value="password = $event"
                             name="password"
                             type="password"
                             class="mt-1 block w-full"
                             autocomplete="new-password"
                             placeholder="New password"
                         />
+                        <PasswordRequirements :password="password" />
                         <InputError :message="errors.password" />
                     </div>
 

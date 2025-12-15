@@ -5,8 +5,10 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
+import LocationMapPicker from '@/components/LocationMapPicker.vue';
 import { UserCheck, ArrowLeft, Edit, Heart } from 'lucide-vue-next';
 import { dashboard } from '@/routes';
+import { computed } from 'vue';
 
 interface PetType {
     id: number;
@@ -32,6 +34,8 @@ interface PetOwner {
     email: string;
     mobile_number: string | null;
     address: string | null;
+    lat: number | null;
+    lng: number | null;
     patients_count: number;
     patients: Patient[];
     appointments_count: number;
@@ -85,6 +89,13 @@ const calculateAge = (birthDate: string | null) => {
     }
     return `${months} month${months > 1 ? 's' : ''}`;
 };
+
+const location = computed(() => {
+    if (props.petOwner.lat && props.petOwner.lng) {
+        return { lat: props.petOwner.lat, lng: props.petOwner.lng };
+    }
+    return null;
+});
 </script>
 
 <template>
@@ -144,6 +155,15 @@ const calculateAge = (birthDate: string | null) => {
                                     <Label class="text-sm font-medium text-muted-foreground">Address</Label>
                                     <div class="text-lg font-semibold">{{ petOwner.address || '—' }}</div>
                                 </div>
+                            </div>
+                            
+                            <!-- Location Map -->
+                            <div v-if="location" class="mt-6">
+                                <Label class="text-sm font-medium text-muted-foreground mb-2 block">Location</Label>
+                                <LocationMapPicker
+                                    :model-value="location"
+                                    height="300px"
+                                />
                             </div>
                         </div>
 

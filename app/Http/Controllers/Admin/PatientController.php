@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\Patient;
+use App\Models\PatientWeightHistory;
 use App\Models\PetType;
 use App\Models\User;
 use Illuminate\Http\Request;
@@ -145,7 +146,7 @@ class PatientController extends Controller
      */
     public function show(Patient $patient)
     {
-        $patient->load(['petType', 'user', 'appointments.appointment_type', 'prescriptions']);
+        $patient->load(['petType', 'user', 'appointments.appointment_type', 'prescriptions', 'weightHistory']);
 
         return Inertia::render('Admin/Patients/Show', [
             'patient' => [
@@ -180,6 +181,15 @@ class PatientController extends Controller
                     return [
                         'id' => $prescription->id,
                         'created_at' => $prescription->created_at->toISOString(),
+                    ];
+                }),
+                'weight_history' => $patient->weightHistory->map(function ($entry) {
+                    return [
+                        'id' => $entry->id,
+                        'weight' => (float) $entry->weight,
+                        'recorded_at' => $entry->recorded_at->toISOString(),
+                        'notes' => $entry->notes,
+                        'prescription_id' => $entry->prescription_id,
                     ];
                 }),
                 'created_at' => $patient->created_at->toISOString(),
@@ -265,5 +275,53 @@ class PatientController extends Controller
 
         return redirect()->route('admin.patients.index')
             ->with('success', 'Patient deleted successfully.');
+    }
+
+    /**
+     * Get weight history for a patient.
+     */
+    public function getWeightHistory(Patient $patient)
+    {
+        $weightHistory = $patient->weightHistory()->get()->map(function ($entry) {
+            return [
+                'id' => $entry->id,
+                'weight' => (float) $entry->weight,
+                'recorded_at' => $entry->recorded_at->toISOString(),
+                'notes' => $entry->notes,
+                'prescription_id' => $entry->prescription_id,
+            ];
+        });
+
+        return response()->json($weightHistory);
+    }
+
+    /**
+     * Store a new weight entry for a patient.
+     */
+    public function storeWeightHistory(Request $request, Patient $patient)
+    {
+        $validated = $request->validate([
+            'weight' => 'required|numeric|min:0',
+            'recorded_at' => 'nullable|date',
+            'notes' => 'nullable|string|max:500',
+        ]);
+
+        $weightHistory = PatientWeightHistory::create([
+            'patient_id' => $patient->id,
+            'weight' => $validated['weight'],
+            'recorded_at' => $validated['recorded_at'] ?? now(),
+            'notes' => $validated['notes'] ?? null,
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Weight entry added successfully.',
+            'data' => [
+                'id' => $weightHistory->id,
+                'weight' => (float) $weightHistory->weight,
+                'recorded_at' => $weightHistory->recorded_at->toISOString(),
+                'notes' => $weightHistory->notes,
+            ],
+        ]);
     }
 }

@@ -7,6 +7,7 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
 import InputError from '@/components/InputError.vue';
+import PasswordRequirements from '@/components/PasswordRequirements.vue';
 import { Users, ArrowLeft } from 'lucide-vue-next';
 import { Link } from '@inertiajs/vue3';
 import { dashboard } from '@/routes';
@@ -109,6 +110,7 @@ const toggleRole = (roleName: string) => {
                                 required
                                 autocomplete="new-password"
                             />
+                            <PasswordRequirements :password="form.password" />
                             <InputError :message="form.errors.password" />
                         </div>
 

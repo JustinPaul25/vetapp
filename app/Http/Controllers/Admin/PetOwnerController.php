@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\User;
+use App\Rules\PhilippineMobileNumber;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Illuminate\Support\Facades\DB;
@@ -94,8 +95,10 @@ class PetOwnerController extends Controller
             'last_name' => 'nullable|string|max:255',
             'name' => 'nullable|string|max:255',
             'email' => 'required|string|email|max:255|unique:users',
-            'mobile_number' => 'nullable|string|max:255',
+            'mobile_number' => ['nullable', new PhilippineMobileNumber()],
             'address' => 'nullable|string|max:500',
+            'lat' => 'nullable|numeric|between:-90,90',
+            'lng' => 'nullable|numeric|between:-180,180',
             'password' => 'required|string|min:8|confirmed',
         ]);
 
@@ -106,14 +109,19 @@ class PetOwnerController extends Controller
             'email' => $validated['email'],
             'mobile_number' => $validated['mobile_number'] ?? null,
             'address' => $validated['address'] ?? null,
+            'lat' => $validated['lat'] ?? null,
+            'long' => $validated['lng'] ?? null,
             'password' => bcrypt($validated['password']),
         ]);
 
         // Assign client role to the pet owner
         $user->assignRole('client');
 
+        // Send email verification notification
+        $user->sendEmailVerificationNotification();
+
         return redirect()->route('admin.pet_owners.index')
-            ->with('success', 'Pet owner created successfully.');
+            ->with('success', 'Pet owner created successfully. Verification email has been sent.');
     }
 
     /**
@@ -132,6 +140,8 @@ class PetOwnerController extends Controller
                 'email' => $petOwner->email,
                 'mobile_number' => $petOwner->mobile_number ?? null,
                 'address' => $petOwner->address ?? null,
+                'lat' => $petOwner->lat ? (float) $petOwner->lat : null,
+                'lng' => $petOwner->long ? (float) $petOwner->long : null,
                 'patients_count' => $petOwner->patients->count(),
                 'patients' => $petOwner->patients->map(function ($patient) {
                     return [
@@ -169,6 +179,8 @@ class PetOwnerController extends Controller
                 'email' => $petOwner->email,
                 'mobile_number' => $petOwner->mobile_number ?? null,
                 'address' => $petOwner->address ?? null,
+                'lat' => $petOwner->lat ? (float) $petOwner->lat : null,
+                'lng' => $petOwner->long ? (float) $petOwner->long : null,
             ],
         ]);
     }
@@ -183,8 +195,10 @@ class PetOwnerController extends Controller
             'last_name' => 'nullable|string|max:255',
             'name' => 'nullable|string|max:255',
             'email' => 'required|string|email|max:255|unique:users,email,' . $petOwner->id,
-            'mobile_number' => 'nullable|string|max:255',
+            'mobile_number' => ['nullable', new PhilippineMobileNumber()],
             'address' => 'nullable|string|max:500',
+            'lat' => 'nullable|numeric|between:-90,90',
+            'lng' => 'nullable|numeric|between:-180,180',
             'password' => 'nullable|string|min:8|confirmed',
         ]);
 
@@ -195,6 +209,8 @@ class PetOwnerController extends Controller
             'email' => $validated['email'],
             'mobile_number' => $validated['mobile_number'] ?? null,
             'address' => $validated['address'] ?? null,
+            'lat' => $validated['lat'] ?? null,
+            'long' => $validated['lng'] ?? null,
         ];
 
         if (!empty($validated['password'])) {

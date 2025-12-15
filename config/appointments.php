@@ -32,7 +32,28 @@ return [
     // Minimum notice time in hours
     // Clients must book at least this many hours in advance
     'minimum_notice_hours' => env('APPOINTMENT_MINIMUM_NOTICE', 24),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Daily Appointment Limits Per Type
+    |--------------------------------------------------------------------------
+    |
+    | Maximum number of patients (booked + walk-in) that can be catered
+    | per day for each appointment type.
+    |
+    */
+    'daily_limits' => [
+        'Vaccination' => env('APPOINTMENT_LIMIT_VACCINATION', 40),
+        'Deworming' => env('APPOINTMENT_LIMIT_DEWORMING', 40),
+        'Check-up' => env('APPOINTMENT_LIMIT_CHECKUP', 40),
+        'Consultation' => env('APPOINTMENT_LIMIT_CONSULTATION', 40),
+        // Default limit for other types
+        'default' => env('APPOINTMENT_LIMIT_DEFAULT', 40),
+    ],
 ];
+
+
+
 
 
 
