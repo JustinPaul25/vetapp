@@ -176,12 +176,6 @@ const getStatusBadgeClass = (status: string) => {
                                 Manage all appointments in the system
                             </CardDescription>
                         </div>
-                        <Link href="/admin/appointments/create">
-                            <Button>
-                                <Plus class="h-4 w-4 mr-2" />
-                                Create Appointment
-                            </Button>
-                        </Link>
                     </div>
                 </CardHeader>
                 <CardContent>
@@ -234,23 +228,9 @@ const getStatusBadgeClass = (status: string) => {
                         <table class="w-full border-collapse">
                             <thead>
                                 <tr class="border-b">
-                                    <th class="text-left p-3 font-semibold">Appointment Type</th>
-                                    <th class="text-left p-3 font-semibold">Pet Type</th>
-                                    <th class="text-left p-3 font-semibold">Breed</th>
                                     <th class="text-left p-3 font-semibold">Owner</th>
                                     <th class="text-left p-3 font-semibold">Email</th>
                                     <th class="text-left p-3 font-semibold">Phone</th>
-                                    <th class="text-left p-3 font-semibold">
-                                        <button
-                                            @click="handleSort('appointment_date')"
-                                            class="flex items-center gap-1 hover:text-primary transition-colors"
-                                        >
-                                            Date
-                                            <component :is="getSortIcon('appointment_date')" class="h-4 w-4" />
-                                        </button>
-                                    </th>
-                                    <th class="text-left p-3 font-semibold">Time</th>
-                                    <th class="text-left p-3 font-semibold">Disease</th>
                                     <th class="text-left p-3 font-semibold">Status</th>
                                     <th class="text-right p-3 font-semibold">Actions</th>
                                 </tr>
@@ -261,15 +241,6 @@ const getStatusBadgeClass = (status: string) => {
                                     :key="appointment.id"
                                     class="border-b hover:bg-muted/50"
                                 >
-                                    <td class="p-3 text-sm font-medium">
-                                        {{ appointment.appointment_type }}
-                                    </td>
-                                    <td class="p-3 text-sm">
-                                        {{ appointment.pet_type }}
-                                    </td>
-                                    <td class="p-3 text-sm">
-                                        {{ appointment.pet_breed }}
-                                    </td>
                                     <td class="p-3 text-sm">
                                         {{ appointment.owner_name }}
                                     </td>
@@ -278,15 +249,6 @@ const getStatusBadgeClass = (status: string) => {
                                     </td>
                                     <td class="p-3 text-sm">
                                         {{ appointment.owner_mobile }}
-                                    </td>
-                                    <td class="p-3 text-sm">
-                                        {{ formatDate(appointment.appointment_date) }}
-                                    </td>
-                                    <td class="p-3 text-sm">
-                                        {{ formatTime(appointment.appointment_time) }}
-                                    </td>
-                                    <td class="p-3 text-sm">
-                                        {{ appointment.disease }}
                                     </td>
                                     <td class="p-3">
                                         <span
@@ -306,7 +268,7 @@ const getStatusBadgeClass = (status: string) => {
                                     </td>
                                 </tr>
                                 <tr v-if="appointments.data.length === 0">
-                                    <td colspan="10" class="p-8 text-center text-muted-foreground">
+                                    <td colspan="5" class="p-8 text-center text-muted-foreground">
                                         No appointments found
                                     </td>
                                 </tr>
@@ -341,6 +303,11 @@ const getStatusBadgeClass = (status: string) => {
         </div>
     </AppLayout>
 </template>
+
+
+
+
+
 
 
 

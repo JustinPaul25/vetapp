@@ -155,9 +155,12 @@ class AppointmentController extends Controller
 
     /**
      * Show the form for creating a new appointment.
+     * 
+     * @deprecated Only clients can create appointments. This method is kept for backward compatibility but returns 403.
      */
     public function create()
     {
+        abort(403, 'Only clients can create appointments.');
         $patients = Patient::with('petType', 'user')->get()->map(function ($patient) {
             return [
                 'id' => $patient->id,
@@ -184,9 +187,12 @@ class AppointmentController extends Controller
 
     /**
      * Store a newly created appointment.
+     * 
+     * @deprecated Only clients can create appointments. This method is kept for backward compatibility but returns 403.
      */
     public function store(Request $request)
     {
+        abort(403, 'Only clients can create appointments.');
         $request->validate([
             'patient_id' => 'required|exists:patients,id',
             'appointment_type' => 'required|exists:appointment_types,id',

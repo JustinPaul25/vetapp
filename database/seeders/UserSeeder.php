@@ -27,6 +27,8 @@ class UserSeeder extends Seeder
                 'address' => '123 Admin Street, Panabo City',
                 'active' => true,
                 'email_verified_at' => now(),
+                'lat' => 7.3083,    // Panabo City Center
+                'long' => 125.6844,
             ]
         );
         if (!$admin->hasRole('admin')) {
@@ -46,6 +48,8 @@ class UserSeeder extends Seeder
                 'address' => '456 Staff Avenue, Panabo City',
                 'active' => true,
                 'email_verified_at' => now(),
+                'lat' => 7.3102,    // Near Panabo Public Market
+                'long' => 125.6821,
             ]
         );
         if (!$staff->hasRole('staff')) {
@@ -65,6 +69,8 @@ class UserSeeder extends Seeder
                 'address' => '789 Client Road, Panabo City',
                 'active' => true,
                 'email_verified_at' => now(),
+                'lat' => 7.3045,    // Barangay Gredu area
+                'long' => 125.6912,
             ]
         );
         if (!$client->hasRole('client')) {
@@ -84,6 +90,8 @@ class UserSeeder extends Seeder
                 'active' => true,
                 'role' => 'client',
                 'email_verified_at' => now(),
+                'lat' => 7.2956,    // Barangay San Francisco area
+                'long' => 125.6798,
             ],
             [
                 'name' => 'Jane Smith',
@@ -96,6 +104,8 @@ class UserSeeder extends Seeder
                 'active' => true,
                 'role' => 'staff',
                 'email_verified_at' => now(),
+                'lat' => 7.3125,    // Barangay J.P. Laurel area
+                'long' => 125.6756,
             ],
         ];
 
@@ -125,6 +135,8 @@ class UserSeeder extends Seeder
                 'active' => true,
                 'role' => 'client',
                 'email_verified_at' => null, // Unverified
+                'lat' => 7.3198,    // Barangay New Pandan area
+                'long' => 125.6889,
             ],
             [
                 'name' => 'Alice Williams',
@@ -137,6 +149,8 @@ class UserSeeder extends Seeder
                 'active' => true,
                 'role' => 'client',
                 'email_verified_at' => null, // Unverified
+                'lat' => 7.2889,    // Barangay Cagangohan area
+                'long' => 125.6934,
             ],
         ];
 

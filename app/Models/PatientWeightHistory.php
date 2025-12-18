@@ -9,6 +9,8 @@ class PatientWeightHistory extends Model
 {
     use HasFactory;
 
+    protected $table = 'patient_weight_history';
+
     protected $guarded = [];
 
     protected $casts = [

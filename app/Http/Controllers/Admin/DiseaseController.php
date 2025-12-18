@@ -118,7 +118,7 @@ class DiseaseController extends Controller
     }
 
     /**
-     * Display the disease outbreak map.
+     * Display the disease map.
      */
     public function map()
     {

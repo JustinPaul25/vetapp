@@ -10,7 +10,7 @@ import InputError from '@/components/InputError.vue';
 import { Heart, ArrowLeft } from 'lucide-vue-next';
 import { Link } from '@inertiajs/vue3';
 import { dashboard } from '@/routes';
-import { computed } from 'vue';
+import { computed, watch, ref } from 'vue';
 
 interface PetType {
     id: number;
@@ -25,6 +25,7 @@ interface User {
 
 interface Props {
     pet_types: PetType[];
+    pet_breeds: Record<string, string[]>;
     users: User[];
 }
 
@@ -38,14 +39,34 @@ const breadcrumbs = [
 
 const form = router.form({
     pet_type_id: '',
+    custom_pet_type_name: '', // For new custom pet types
     pet_name: '',
     pet_breed: '',
+    custom_pet_breed_name: '', // For new custom breeds
     pet_gender: '',
     pet_birth_date: '',
     microchip_number: '',
     pet_allergies: '',
     user_id: '',
 });
+
+// Custom pet type display value (shown when creating new)
+const customPetTypeDisplay = ref<string | null>(null);
+
+// Custom pet breed display value (shown when creating new)
+const customBreedDisplay = ref<string | null>(null);
+
+// Handle creating a new pet type
+const handleCreatePetType = (name: string) => {
+    form.custom_pet_type_name = name;
+    customPetTypeDisplay.value = name;
+};
+
+// Handle creating a new breed
+const handleCreateBreed = (name: string) => {
+    form.custom_pet_breed_name = name;
+    customBreedDisplay.value = name;
+};
 
 const submit = () => {
     form.post('/admin/patients');
@@ -57,6 +78,44 @@ const petTypeOptions = computed(() => {
         value: pt.id.toString(),
         label: pt.name,
     }));
+});
+
+// Get the selected pet type name
+const selectedPetTypeName = computed(() => {
+    if (!form.pet_type_id) return null;
+    const petType = props.pet_types.find(pt => pt.id.toString() === form.pet_type_id);
+    return petType?.name || null;
+});
+
+// Get breed options based on selected pet type
+const breedOptions = computed(() => {
+    if (!selectedPetTypeName.value || !props.pet_breeds[selectedPetTypeName.value]) {
+        return [];
+    }
+    return props.pet_breeds[selectedPetTypeName.value].map(breed => ({
+        value: breed,
+        label: breed,
+    }));
+});
+
+// Clear breed selection when pet type changes
+watch(() => form.pet_type_id, (newValue) => {
+    form.pet_breed = '';
+    form.custom_pet_breed_name = '';
+    customBreedDisplay.value = null;
+    // Clear custom pet type when selecting an existing type
+    if (newValue !== '__new__') {
+        form.custom_pet_type_name = '';
+        customPetTypeDisplay.value = null;
+    }
+});
+
+// Clear custom breed when selecting an existing breed
+watch(() => form.pet_breed, (newValue) => {
+    if (newValue !== '__new__') {
+        form.custom_pet_breed_name = '';
+        customBreedDisplay.value = null;
+    }
 });
 </script>
 
@@ -96,8 +155,17 @@ const petTypeOptions = computed(() => {
                                     placeholder="Select Pet Type"
                                     search-placeholder="Search pet types..."
                                     :required="true"
+                                    :allow-create="true"
+                                    create-prefix="Add new type"
+                                    :custom-value="customPetTypeDisplay"
+                                    @update:custom-value="(val) => customPetTypeDisplay = val"
+                                    @create="handleCreatePetType"
                                 />
+                                <p v-if="customPetTypeDisplay" class="text-xs text-blue-600">
+                                    New pet type "{{ customPetTypeDisplay }}" will be created when you submit the form.
+                                </p>
                                 <InputError :message="form.errors.pet_type_id" />
+                                <InputError :message="form.errors.custom_pet_type_name" />
                             </div>
 
                             <div class="space-y-2">
@@ -114,15 +182,25 @@ const petTypeOptions = computed(() => {
 
                             <div class="space-y-2">
                                 <Label for="pet_breed">Pet Breed <span class="text-destructive">*</span></Label>
-                                <Input
+                                <SearchableSelect
                                     id="pet_breed"
                                     v-model="form.pet_breed"
-                                    type="text"
-                                    required
-                                    placeholder="e.g., Golden Retriever, Persian"
-                                    autocomplete="off"
+                                    :options="breedOptions"
+                                    placeholder="Select Pet Breed"
+                                    search-placeholder="Search breeds..."
+                                    :required="true"
+                                    :disabled="!selectedPetTypeName && !customPetTypeDisplay"
+                                    :allow-create="!!selectedPetTypeName || !!customPetTypeDisplay"
+                                    create-prefix="Add new breed"
+                                    :custom-value="customBreedDisplay"
+                                    @update:custom-value="(val) => customBreedDisplay = val"
+                                    @create="handleCreateBreed"
                                 />
+                                <p v-if="customBreedDisplay" class="text-xs text-blue-600">
+                                    New breed "{{ customBreedDisplay }}" will be created when you submit the form.
+                                </p>
                                 <InputError :message="form.errors.pet_breed" />
+                                <InputError :message="form.errors.custom_pet_breed_name" />
                             </div>
 
                             <div class="space-y-2">

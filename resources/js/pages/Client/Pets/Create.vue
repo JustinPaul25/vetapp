@@ -10,7 +10,7 @@ import InputError from '@/components/InputError.vue';
 import { Heart, ArrowLeft } from 'lucide-vue-next';
 import { Link } from '@inertiajs/vue3';
 import { dashboard } from '@/routes';
-import { computed, watch } from 'vue';
+import { computed, watch, ref } from 'vue';
 
 interface PetType {
     id: number;
@@ -32,13 +32,33 @@ const breadcrumbs = [
 
 const form = router.form({
     pet_type_id: '',
+    custom_pet_type_name: '', // For new custom pet types
     pet_name: '',
     pet_breed: '',
+    custom_pet_breed_name: '', // For new custom breeds
     pet_gender: '',
     pet_birth_date: '',
     microchip_number: '',
     pet_allergies: '',
 });
+
+// Custom pet type display value (shown when creating new)
+const customPetTypeDisplay = ref<string | null>(null);
+
+// Custom pet breed display value (shown when creating new)
+const customBreedDisplay = ref<string | null>(null);
+
+// Handle creating a new pet type
+const handleCreatePetType = (name: string) => {
+    form.custom_pet_type_name = name;
+    customPetTypeDisplay.value = name;
+};
+
+// Handle creating a new breed
+const handleCreateBreed = (name: string) => {
+    form.custom_pet_breed_name = name;
+    customBreedDisplay.value = name;
+};
 
 const submit = () => {
     form.post('/pets');
@@ -71,8 +91,23 @@ const breedOptions = computed(() => {
 });
 
 // Clear breed selection when pet type changes
-watch(() => form.pet_type_id, () => {
+watch(() => form.pet_type_id, (newValue) => {
     form.pet_breed = '';
+    form.custom_pet_breed_name = '';
+    customBreedDisplay.value = null;
+    // Clear custom pet type when selecting an existing type
+    if (newValue !== '__new__') {
+        form.custom_pet_type_name = '';
+        customPetTypeDisplay.value = null;
+    }
+});
+
+// Clear custom breed when selecting an existing breed
+watch(() => form.pet_breed, (newValue) => {
+    if (newValue !== '__new__') {
+        form.custom_pet_breed_name = '';
+        customBreedDisplay.value = null;
+    }
 });
 </script>
 
@@ -112,8 +147,17 @@ watch(() => form.pet_type_id, () => {
                                     placeholder="Select Pet Type"
                                     search-placeholder="Search pet types..."
                                     :required="true"
+                                    :allow-create="true"
+                                    create-prefix="Add new type"
+                                    :custom-value="customPetTypeDisplay"
+                                    @update:custom-value="(val) => customPetTypeDisplay = val"
+                                    @create="handleCreatePetType"
                                 />
+                                <p v-if="customPetTypeDisplay" class="text-xs text-blue-600">
+                                    New pet type "{{ customPetTypeDisplay }}" will be created when you submit the form.
+                                </p>
                                 <InputError :message="form.errors.pet_type_id" />
+                                <InputError :message="form.errors.custom_pet_type_name" />
                             </div>
 
                             <div class="space-y-2">
@@ -137,9 +181,18 @@ watch(() => form.pet_type_id, () => {
                                     placeholder="Select Pet Breed"
                                     search-placeholder="Search breeds..."
                                     :required="true"
-                                    :disabled="!selectedPetTypeName"
+                                    :disabled="!selectedPetTypeName && !customPetTypeDisplay"
+                                    :allow-create="!!selectedPetTypeName || !!customPetTypeDisplay"
+                                    create-prefix="Add new breed"
+                                    :custom-value="customBreedDisplay"
+                                    @update:custom-value="(val) => customBreedDisplay = val"
+                                    @create="handleCreateBreed"
                                 />
+                                <p v-if="customBreedDisplay" class="text-xs text-blue-600">
+                                    New breed "{{ customBreedDisplay }}" will be created when you submit the form.
+                                </p>
                                 <InputError :message="form.errors.pet_breed" />
+                                <InputError :message="form.errors.custom_pet_breed_name" />
                             </div>
 
                             <div class="space-y-2">
@@ -206,6 +259,11 @@ watch(() => form.pet_type_id, () => {
         </div>
     </AppLayout>
 </template>
+
+
+
+
+
 
 
 

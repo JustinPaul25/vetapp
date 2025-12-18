@@ -13,9 +13,9 @@ Route::get('/', function () {
 // Public disease search route for landing page
 Route::get('/search-diseases', [\App\Http\Controllers\DiseaseSearchController::class, 'search'])->name('diseases.search');
 
-Route::get('dashboard', function () {
-    return Inertia::render('Dashboard');
-})->middleware(['auth', 'verified'])->name('dashboard');
+Route::get('dashboard', [\App\Http\Controllers\DashboardController::class, 'index'])
+    ->middleware(['auth', 'verified'])
+    ->name('dashboard');
 
 // Client routes (authenticated users)
 Route::middleware(['auth', 'verified'])->group(function () {
@@ -47,7 +47,10 @@ Route::middleware(['auth', 'verified', \App\Http\Middleware\EnsureUserIsAdmin::c
         Route::resource('users', \App\Http\Controllers\Admin\UserController::class);
         Route::resource('roles', \App\Http\Controllers\Admin\RoleController::class);
         Route::resource('pet_types', \App\Http\Controllers\Admin\PetTypeController::class);
+        Route::resource('pet_breeds', \App\Http\Controllers\Admin\PetBreedController::class);
         Route::resource('pet_owners', \App\Http\Controllers\Admin\PetOwnerController::class);
+        Route::post('walk_in_clients/search-pets', [\App\Http\Controllers\Admin\WalkInClientController::class, 'searchPets'])->name('walk_in_clients.search-pets');
+        Route::post('walk_in_clients/lookup-by-email', [\App\Http\Controllers\Admin\WalkInClientController::class, 'lookupByEmail'])->name('walk_in_clients.lookup-by-email');
         Route::resource('walk_in_clients', \App\Http\Controllers\Admin\WalkInClientController::class);
     });
 
@@ -102,8 +105,7 @@ Route::middleware(['auth', 'verified', \App\Http\Middleware\EnsureUserIsAdminOrS
         // Appointment routes
         Route::prefix('appointments')->name('appointments.')->group(function () {
             Route::get('/', [\App\Http\Controllers\Admin\AppointmentController::class, 'index'])->name('index');
-            Route::get('/create', [\App\Http\Controllers\Admin\AppointmentController::class, 'create'])->name('create');
-            Route::post('/', [\App\Http\Controllers\Admin\AppointmentController::class, 'store'])->name('store');
+            // Removed create and store routes - only clients can create appointments
             Route::get('/{id}', [\App\Http\Controllers\Admin\AppointmentController::class, 'show'])->name('show');
             Route::patch('/{id}/approve', [\App\Http\Controllers\Admin\AppointmentController::class, 'approve'])->name('approve');
             Route::get('/{id}/prescription/create', [\App\Http\Controllers\Admin\AppointmentController::class, 'createPrescription'])->name('prescription.create');

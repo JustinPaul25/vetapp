@@ -266,11 +266,6 @@ const getWeightChange = () => {
                         <div>
                             <div class="flex items-center justify-between mb-4">
                                 <h3 class="text-lg font-semibold">Appointment History</h3>
-                                <Link :href="`/admin/appointments/create?patient_id=${patient.id}`">
-                                    <Button size="sm">
-                                        New Appointment
-                                    </Button>
-                                </Link>
                             </div>
                             <div v-if="patient.appointments.length > 0" class="overflow-x-auto">
                                 <table class="w-full border-collapse">

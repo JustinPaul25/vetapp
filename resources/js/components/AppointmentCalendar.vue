@@ -19,10 +19,12 @@ interface Appointment {
 
 interface Props {
     appointments?: Appointment[];
+    routePrefix?: string;
 }
 
 const props = withDefaults(defineProps<Props>(), {
     appointments: () => [],
+    routePrefix: '/admin/appointments',
 });
 
 const calendarRef = ref<InstanceType<typeof FullCalendar>>();
@@ -163,7 +165,7 @@ const upcomingCount = computed(() => {
 const handleEventClick = (clickInfo: EventClickArg) => {
     const appointmentId = clickInfo.event.extendedProps.appointmentId;
     if (appointmentId) {
-        router.visit(`/appointments/${appointmentId}`);
+        router.visit(`${props.routePrefix}/${appointmentId}`);
     }
 };
 

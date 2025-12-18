@@ -40,7 +40,7 @@ const props = defineProps<Props>();
 
 const breadcrumbs = [
     { title: 'Dashboard', href: dashboard().url },
-    { title: 'Disease Outbreak Map', href: '#' },
+    { title: 'Disease Map', href: '#' },
 ];
 
 const mapContainer = ref<HTMLElement | null>(null);
@@ -66,9 +66,9 @@ onMounted(() => {
         maxZoom: 19,
     }).addTo(map.value);
 
-    // Add outbreak zones (circles)
+    // Add hotspot zones (circles)
     props.outbreakZones.forEach((zone) => {
-        // Add circle for outbreak zone
+        // Add circle for hotspot zone
         L.circle([zone.lat, zone.lng], {
             color: '#dc2626',
             fillColor: '#dc2626',
@@ -78,7 +78,7 @@ onMounted(() => {
         })
             .addTo(map.value!)
             .bindPopup(
-                `<strong>Outbreak Zone</strong><br/>${zone.address}<br/>Cases: ${zone.count}`
+                `<strong>Hotspot</strong><br/>${zone.address}<br/>Cases: ${zone.count}`
             );
 
         // Add marker for zone center
@@ -94,7 +94,7 @@ onMounted(() => {
         })
             .addTo(map.value!)
             .bindPopup(
-                `<strong>Outbreak Zone</strong><br/>${zone.address}<br/>Cases: ${zone.count}`
+                `<strong>Hotspot</strong><br/>${zone.address}<br/>Cases: ${zone.count}`
             );
     });
 
@@ -126,7 +126,7 @@ onMounted(() => {
 </script>
 
 <template>
-    <Head title="Disease Outbreak Map" />
+    <Head title="Disease Map" />
 
     <AppLayout :breadcrumbs="breadcrumbs">
         <div class="container mx-auto p-6">
@@ -135,9 +135,9 @@ onMounted(() => {
                     <div class="flex items-center gap-2">
                         <MapPin class="h-5 w-5" />
                         <div>
-                            <CardTitle>Disease Outbreak Map</CardTitle>
+                            <CardTitle>Disease Map</CardTitle>
                             <CardDescription>
-                                Geographic visualization of disease outbreaks and cases
+                                Geographic visualization of disease cases
                             </CardDescription>
                         </div>
                     </div>
@@ -186,10 +186,10 @@ onMounted(() => {
                                 </CardContent>
                             </Card>
 
-                            <!-- Outbreak Zones -->
+                            <!-- Hotspots -->
                             <Card>
                                 <CardHeader class="pb-3">
-                                    <CardTitle class="text-sm">Outbreak Zones</CardTitle>
+                                    <CardTitle class="text-sm">Hotspots</CardTitle>
                                 </CardHeader>
                                 <CardContent class="space-y-2">
                                     <div
@@ -203,7 +203,7 @@ onMounted(() => {
                                         </div>
                                     </div>
                                     <div v-if="outbreakZones.length === 0" class="text-sm text-muted-foreground">
-                                        No outbreak zones detected
+                                        No hotspots detected
                                     </div>
                                 </CardContent>
                             </Card>
@@ -219,7 +219,7 @@ onMounted(() => {
                                         <span class="font-semibold">{{ cases.length }}</span>
                                     </div>
                                     <div class="flex justify-between">
-                                        <span class="text-muted-foreground">Outbreak Zones:</span>
+                                        <span class="text-muted-foreground">Hotspots:</span>
                                         <span class="font-semibold">{{ outbreakZones.length }}</span>
                                     </div>
                                     <div class="flex justify-between">
@@ -242,6 +242,11 @@ onMounted(() => {
     border: none !important;
 }
 </style>
+
+
+
+
+
 
 
 

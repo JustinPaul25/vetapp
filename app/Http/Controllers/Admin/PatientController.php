@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Patient;
 use App\Models\PatientWeightHistory;
 use App\Models\PetType;
+use App\Models\PetBreed;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -96,7 +97,20 @@ class PatientController extends Controller
             ];
         });
 
-        $users = User::all()->map(function ($user) {
+        // Build pet breeds mapping from database
+        $pet_breeds = [];
+        foreach ($pet_types as $pet_type) {
+            $breeds = PetBreed::where('pet_type_id', $pet_type['id'])
+                ->orderBy('name')
+                ->pluck('name')
+                ->toArray();
+            $pet_breeds[$pet_type['name']] = $breeds;
+        }
+
+        // Exclude admin and staff users from owner selection
+        $users = User::whereDoesntHave('roles', function ($query) {
+            $query->whereIn('name', ['admin', 'staff']);
+        })->get()->map(function ($user) {
             return [
                 'id' => $user->id,
                 'name' => trim(($user->first_name ?? '') . ' ' . ($user->last_name ?? '')) ?: $user->name,
@@ -106,6 +120,7 @@ class PatientController extends Controller
 
         return Inertia::render('Admin/Patients/Create', [
             'pet_types' => $pet_types,
+            'pet_breeds' => $pet_breeds,
             'users' => $users,
         ]);
     }
@@ -116,9 +131,11 @@ class PatientController extends Controller
     public function store(Request $request)
     {
         $validated = $request->validate([
-            'pet_type_id' => 'required|exists:pet_types,id',
+            'pet_type_id' => 'required_without:custom_pet_type_name',
+            'custom_pet_type_name' => 'nullable|string|max:100',
             'pet_name' => 'nullable|string|max:100',
-            'pet_breed' => 'required|string|max:100',
+            'pet_breed' => 'required_without:custom_pet_breed_name|nullable|string|max:100',
+            'custom_pet_breed_name' => 'nullable|string|max:100',
             'pet_gender' => 'nullable|in:Male,Female',
             'pet_birth_date' => 'nullable|date',
             'microchip_number' => 'nullable|string|max:100',
@@ -126,19 +143,67 @@ class PatientController extends Controller
             'user_id' => 'nullable|exists:users,id',
         ]);
 
-        $patient = Patient::create([
-            'pet_type_id' => $validated['pet_type_id'],
-            'pet_name' => $validated['pet_name'] ?? null,
-            'pet_breed' => $validated['pet_breed'],
-            'pet_gender' => $validated['pet_gender'] ?? null,
-            'pet_birth_date' => $validated['pet_birth_date'] ?? null,
-            'microchip_number' => $validated['microchip_number'] ?? null,
-            'pet_allergies' => $validated['pet_allergies'] ?? null,
-            'user_id' => $validated['user_id'] ?? null,
-        ]);
+        // Validate pet_type_id exists if not creating new
+        if (!empty($validated['pet_type_id']) && $validated['pet_type_id'] !== '__new__') {
+            $exists = PetType::where('id', $validated['pet_type_id'])->exists();
+            if (!$exists) {
+                return back()->withErrors(['pet_type_id' => 'The selected pet type is invalid.'])->withInput();
+            }
+        }
 
-        return redirect()->route('admin.patients.show', $patient->id)
-            ->with('success', 'New patient has been created successfully.');
+        return DB::transaction(function () use ($validated) {
+            // Handle custom pet type creation
+            $petTypeId = $validated['pet_type_id'];
+            if (!empty($validated['custom_pet_type_name']) && ($petTypeId === '__new__' || empty($petTypeId))) {
+                // Check if pet type with this name already exists (case-insensitive)
+                $existingPetType = PetType::whereRaw('LOWER(name) = ?', [strtolower($validated['custom_pet_type_name'])])->first();
+                
+                if ($existingPetType) {
+                    $petTypeId = $existingPetType->id;
+                } else {
+                    // Create new pet type
+                    $newPetType = PetType::create([
+                        'name' => ucfirst($validated['custom_pet_type_name']),
+                    ]);
+                    $petTypeId = $newPetType->id;
+                }
+            }
+
+            // Handle custom breed creation
+            $petBreed = $validated['pet_breed'];
+            if (!empty($validated['custom_pet_breed_name']) && ($petBreed === '__new__' || empty($petBreed))) {
+                $breedName = ucfirst($validated['custom_pet_breed_name']);
+                
+                // Check if breed with this name already exists for this pet type (case-insensitive)
+                $existingBreed = PetBreed::where('pet_type_id', $petTypeId)
+                    ->whereRaw('LOWER(name) = ?', [strtolower($breedName)])
+                    ->first();
+                
+                if (!$existingBreed) {
+                    // Create new breed
+                    PetBreed::create([
+                        'name' => $breedName,
+                        'pet_type_id' => $petTypeId,
+                    ]);
+                }
+                
+                $petBreed = $breedName;
+            }
+
+            $patient = Patient::create([
+                'pet_type_id' => $petTypeId,
+                'pet_name' => $validated['pet_name'] ?? null,
+                'pet_breed' => $petBreed,
+                'pet_gender' => $validated['pet_gender'] ?? null,
+                'pet_birth_date' => $validated['pet_birth_date'] ?? null,
+                'microchip_number' => $validated['microchip_number'] ?? null,
+                'pet_allergies' => $validated['pet_allergies'] ?? null,
+                'user_id' => $validated['user_id'] ?? null,
+            ]);
+
+            return redirect()->route('admin.patients.show', $patient->id)
+                ->with('success', 'New patient has been created successfully.');
+        });
     }
 
     /**
@@ -210,7 +275,10 @@ class PatientController extends Controller
             ];
         });
 
-        $users = User::all()->map(function ($user) {
+        // Exclude admin and staff users from owner selection
+        $users = User::whereDoesntHave('roles', function ($query) {
+            $query->whereIn('name', ['admin', 'staff']);
+        })->get()->map(function ($user) {
             return [
                 'id' => $user->id,
                 'name' => trim(($user->first_name ?? '') . ' ' . ($user->last_name ?? '')) ?: $user->name,

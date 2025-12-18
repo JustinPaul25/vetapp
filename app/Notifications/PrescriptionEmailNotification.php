@@ -94,3 +94,8 @@ class PrescriptionEmailNotification extends Notification implements ShouldQueue
             ->salutation('Thank you for choosing our veterinary services!');
     }
 }
+
+
+
+
+

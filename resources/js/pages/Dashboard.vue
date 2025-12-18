@@ -10,6 +10,7 @@ import { usePage } from '@inertiajs/vue3';
 import { computed, ref, onMounted } from 'vue';
 import { Bar } from 'vue-chartjs';
 import axios from 'axios';
+import AppointmentCalendar from '@/components/AppointmentCalendar.vue';
 import {
     Chart as ChartJS,
     CategoryScale,
@@ -42,6 +43,24 @@ interface DiseaseStatistics {
     month: number;
     year: number;
 }
+
+interface Appointment {
+    id: number;
+    appointment_type: string;
+    appointment_date: string | null;
+    appointment_time: string | null;
+    status: string;
+    pet_type: string;
+    pet_name: string;
+}
+
+interface Props {
+    appointments?: Appointment[];
+}
+
+const props = withDefaults(defineProps<Props>(), {
+    appointments: () => [],
+});
 
 const breadcrumbs: BreadcrumbItem[] = [
     {
@@ -124,7 +143,7 @@ const staffLinks = computed(() => [
         title: 'Disease Outbreak',
         href: '/admin/diseases/map',
         icon: MapPin,
-        description: 'View disease outbreak map',
+        description: 'View disease map',
         color: 'text-red-600 dark:text-red-400',
     },
     {
@@ -313,6 +332,19 @@ const chartOptions = {
                 <p class="text-muted-foreground mt-2">Welcome to the veterinary management system</p>
             </div>
 
+            <!-- Appointments Calendar Section (Admin and Staff only) -->
+            <div v-if="(isAdmin || isStaff) && !isClient" class="mb-8">
+                <div class="mb-4">
+                    <h2 class="text-xl font-semibold">Scheduled Appointments</h2>
+                    <p class="text-sm text-muted-foreground mt-1">View and manage all scheduled appointments</p>
+                </div>
+                <Card>
+                    <CardContent class="p-6">
+                        <AppointmentCalendar :appointments="props.appointments || []" />
+                    </CardContent>
+                </Card>
+            </div>
+
             <!-- Disease Statistics Section (Admin and Staff only) -->
             <div v-if="(isAdmin || isStaff) && !isClient" class="mb-8">
                 <div class="flex items-center justify-between mb-4">
@@ -425,44 +457,6 @@ const chartOptions = {
                         </CardContent>
                     </Card>
                 </div>
-            </div>
-
-            <div class="grid auto-rows-min gap-4 md:grid-cols-3">
-                <Card>
-                    <CardHeader>
-                        <CardTitle>Welcome</CardTitle>
-                        <CardDescription>
-                            Get started by managing your veterinary practice
-                        </CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                        <p class="text-sm text-muted-foreground">
-                            Use the quick links above to navigate to different sections of the application.
-                        </p>
-                    </CardContent>
-                </Card>
-                <Card>
-                    <CardHeader>
-                        <CardTitle>System Status</CardTitle>
-                        <CardDescription>All systems operational</CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                        <p class="text-sm text-muted-foreground">
-                            Your veterinary management system is running smoothly.
-                        </p>
-                    </CardContent>
-                </Card>
-                <Card>
-                    <CardHeader>
-                        <CardTitle>Need Help?</CardTitle>
-                        <CardDescription>Get support when you need it</CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                        <p class="text-sm text-muted-foreground">
-                            Contact your system administrator for assistance.
-                        </p>
-                    </CardContent>
-                </Card>
             </div>
         </div>
     </AppLayout>

@@ -15,4 +15,9 @@ class PetType extends Model
     {
         return $this->hasMany(Patient::class);
     }
+
+    public function breeds()
+    {
+        return $this->hasMany(PetBreed::class);
+    }
 }

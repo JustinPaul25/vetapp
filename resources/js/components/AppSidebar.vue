@@ -13,7 +13,7 @@ import {
 import { dashboard } from '@/routes';
 import { type NavItem } from '@/types';
 import { Link, usePage } from '@inertiajs/vue3';
-import { LayoutGrid, Users, Shield, Dog, Pill, FileText, Heart, UserCheck, MapPin, Calendar, UserPlus } from 'lucide-vue-next';
+import { LayoutGrid, Users, Shield, Dog, Pill, FileText, Heart, UserCheck, MapPin, Calendar, UserPlus, PawPrint } from 'lucide-vue-next';
 import { computed } from 'vue';
 import AppLogo from './AppLogo.vue';
 
@@ -74,9 +74,14 @@ const mainNavItems = computed<NavItem[]>(() => {
                 href: '/admin/pet_types',
                 icon: Dog,
             },
+            {
+                title: 'Pet Breeds',
+                href: '/admin/pet_breeds',
+                icon: PawPrint,
+            },
             // Reports & Analytics
             {
-                title: 'Disease Outbreak Map',
+                title: 'Disease Map',
                 href: '/admin/diseases/map',
                 icon: MapPin,
             },
@@ -118,9 +123,15 @@ const mainNavItems = computed<NavItem[]>(() => {
                 href: '/admin/medicines',
                 icon: Pill,
             },
+            // Reference Data
+            {
+                title: 'Pet Breeds',
+                href: '/admin/pet_breeds',
+                icon: PawPrint,
+            },
             // Public Health
             {
-                title: 'Disease Outbreak',
+                title: 'Disease Map',
                 href: '/admin/diseases/map',
                 icon: MapPin,
             }

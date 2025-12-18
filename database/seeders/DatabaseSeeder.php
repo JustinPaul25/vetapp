@@ -22,6 +22,9 @@ class DatabaseSeeder extends Seeder
         // Seed pet types
         $this->call(PetTypesSeeder::class);
 
+        // Seed pet breeds
+        $this->call(PetBreedsSeeder::class);
+
         // Seed appointment types
         $this->call(AppointmentTypesSeeder::class);
 
