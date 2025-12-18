@@ -41,3 +41,4 @@ class AppointmentTypesSeeder extends Seeder
 
 
 
+
