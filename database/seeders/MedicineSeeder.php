@@ -70,3 +70,6 @@ class MedicineSeeder extends Seeder
 
 
 
+
+
+

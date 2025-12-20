@@ -240,8 +240,18 @@
         <div class="signature-section">
             <div class="signature-line">
                 <div style="text-align: center;">
-                    <strong>Veterinarian Signature</strong><br>
-                    License No: _________________
+                    @if($veterinarianName)
+                        <strong>{{ $veterinarianName }}</strong><br>
+                        <strong>Veterinarian</strong><br>
+                        @if($veterinarianLicense)
+                            License No: {{ $veterinarianLicense }}
+                        @else
+                            License No: _________________
+                        @endif
+                    @else
+                        <strong>Veterinarian Signature</strong><br>
+                        License No: _________________
+                    @endif
                 </div>
             </div>
         </div>

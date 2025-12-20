@@ -5,7 +5,7 @@ import { type BreadcrumbItem } from '@/types';
 import { Head, Link } from '@inertiajs/vue3';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Users, Shield, Dog, Heart, Pill, FileText, LayoutGrid, UserCheck, MapPin, Calendar } from 'lucide-vue-next';
+import { Users, Shield, Dog, Heart, Pill, FileText, LayoutGrid, UserCheck, MapPin, Calendar, Stethoscope } from 'lucide-vue-next';
 import { usePage } from '@inertiajs/vue3';
 import { computed, ref, onMounted } from 'vue';
 import { Bar } from 'vue-chartjs';
@@ -130,6 +130,13 @@ const adminLinks = computed(() => [
         color: 'text-orange-600 dark:text-orange-400',
     },
     {
+        title: 'Diseases',
+        href: '/admin/diseases',
+        icon: Stethoscope,
+        description: 'Manage diseases and symptoms',
+        color: 'text-red-600 dark:text-red-400',
+    },
+    {
         title: 'Prescriptions',
         href: '/admin/prescriptions',
         icon: FileText,
@@ -176,6 +183,13 @@ const staffLinks = computed(() => [
         icon: Pill,
         description: 'Manage medicine inventory',
         color: 'text-orange-600 dark:text-orange-400',
+    },
+    {
+        title: 'Diseases',
+        href: '/admin/diseases',
+        icon: Stethoscope,
+        description: 'Manage diseases and symptoms',
+        color: 'text-red-600 dark:text-red-400',
     },
 ]);
 

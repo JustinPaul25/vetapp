@@ -5,14 +5,19 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Badge } from '@/components/ui/badge';
+import { Spinner } from '@/components/ui/spinner';
+import { CalendarDatePicker } from '@/components/ui/calendar-date-picker';
 // Textarea component - using native textarea
 // Using native select element
 import InputError from '@/components/InputError.vue';
-import { FileText, ArrowLeft, Plus, Trash2, Search } from 'lucide-vue-next';
+import { FileText, ArrowLeft, Plus, Trash2, Search, ChevronDown, X } from 'lucide-vue-next';
 import { Link } from '@inertiajs/vue3';
 import { dashboard } from '@/routes';
 import { ref, computed, watch } from 'vue';
 import axios from 'axios';
+import { cn } from '@/lib/utils';
 
 interface Symptom {
     id: number;
@@ -73,6 +78,7 @@ const form = router.form({
     disease_ids: [] as number[],
     medicines: [] as MedicineRow[],
     notes: '',
+    follow_up_date: '',
 });
 
 const selectedSymptoms = ref<string[]>([]);
@@ -82,6 +88,59 @@ const searchedDiseases = ref<Disease[]>([]);
 const medicineRows = ref<MedicineRow[]>([]);
 const medicineRowCounter = ref(0);
 const isSearchingDiseases = ref(false);
+const isSymptomsModalOpen = ref(false);
+const symptomSearchQuery = ref('');
+const manualDiseaseSearchQuery = ref('');
+const manualSearchedDiseases = ref<Disease[]>([]);
+const isSearchingManualDiseases = ref(false);
+
+// Computed property for filtered symptoms in modal
+const filteredSymptoms = computed(() => {
+    if (!symptomSearchQuery.value) {
+        return props.symptoms;
+    }
+    const query = symptomSearchQuery.value.toLowerCase();
+    return props.symptoms.filter(symptom => 
+        symptom.name.toLowerCase().includes(query)
+    );
+});
+
+// Computed property for selected symptom objects
+const selectedSymptomObjects = computed(() => {
+    return props.symptoms.filter(symptom => 
+        selectedSymptoms.value.includes(symptom.name)
+    );
+});
+
+// Computed property for top 5 predicted diseases
+const topPredictedDiseases = computed(() => {
+    return searchedDiseases.value.slice(0, 5);
+});
+
+// Toggle symptom selection
+const toggleSymptom = (symptomName: string) => {
+    const index = selectedSymptoms.value.indexOf(symptomName);
+    if (index > -1) {
+        selectedSymptoms.value.splice(index, 1);
+    } else {
+        selectedSymptoms.value.push(symptomName);
+    }
+};
+
+// Remove a selected symptom
+const removeSymptom = (symptomName: string, e: Event) => {
+    e.stopPropagation();
+    const index = selectedSymptoms.value.indexOf(symptomName);
+    if (index > -1) {
+        selectedSymptoms.value.splice(index, 1);
+    }
+};
+
+// Open symptoms modal
+const openSymptomsModal = () => {
+    isSymptomsModalOpen.value = true;
+    symptomSearchQuery.value = '';
+};
 
 // Add initial medicine row
 const addMedicineRow = () => {
@@ -142,6 +201,32 @@ const removeDisease = (diseaseId: number) => {
     selectedDiseases.value = selectedDiseases.value.filter(d => d.id !== diseaseId);
     form.disease_ids = selectedDiseases.value.map(d => d.id);
 };
+
+// Manual disease search
+const searchDiseasesManually = async () => {
+    if (!manualDiseaseSearchQuery.value || manualDiseaseSearchQuery.value.trim().length < 2) {
+        manualSearchedDiseases.value = [];
+        return;
+    }
+
+    isSearchingManualDiseases.value = true;
+    try {
+        const response = await axios.get('/search-diseases', {
+            params: { keyword: manualDiseaseSearchQuery.value },
+        });
+        manualSearchedDiseases.value = response.data;
+    } catch (error) {
+        console.error('Error searching diseases manually:', error);
+        manualSearchedDiseases.value = [];
+    } finally {
+        isSearchingManualDiseases.value = false;
+    }
+};
+
+// Watch for manual disease search query changes
+watch(manualDiseaseSearchQuery, () => {
+    searchDiseasesManually();
+});
 
 // Load medicines for a disease
 const loadMedicinesForDisease = async (diseaseId: number) => {
@@ -296,31 +381,122 @@ const submit = () => {
                         <!-- Symptoms Selection -->
                         <div class="space-y-2">
                             <Label>Symptoms *</Label>
-                            <div class="flex flex-wrap gap-2 mb-2">
-                                <Button
-                                    v-for="symptom in symptoms"
-                                    :key="symptom.id"
-                                    type="button"
-                                    :variant="selectedSymptoms.includes(symptom.name) ? 'default' : 'outline'"
-                                    size="sm"
-                                    @click="
-                                        selectedSymptoms.includes(symptom.name)
-                                            ? selectedSymptoms = selectedSymptoms.filter(s => s !== symptom.name)
-                                            : selectedSymptoms.push(symptom.name)
-                                    "
+                            
+                            <!-- Multi-select input trigger -->
+                            <div
+                                @click="openSymptomsModal"
+                                :class="cn(
+                                    'flex min-h-10 w-full flex-wrap items-center gap-2 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background',
+                                    'cursor-pointer hover:ring-2 hover:ring-ring/50 transition-all',
+                                    'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2'
+                                )"
+                            >
+                                <!-- Selected symptoms as badges -->
+                                <div v-if="selectedSymptomObjects.length > 0" class="flex flex-wrap gap-1.5 flex-1">
+                                    <Badge
+                                        v-for="symptom in selectedSymptomObjects"
+                                        :key="symptom.id"
+                                        variant="default"
+                                        class="flex items-center gap-1.5 px-2 py-0.5"
+                                    >
+                                        <span>{{ symptom.name }}</span>
+                                        <button
+                                            type="button"
+                                            @click="removeSymptom(symptom.name, $event)"
+                                            class="ml-0.5 rounded-sm hover:bg-primary/20 focus:outline-none focus:ring-1 focus:ring-ring"
+                                        >
+                                            <X class="h-3 w-3" />
+                                        </button>
+                                    </Badge>
+                                </div>
+                                
+                                <!-- Placeholder when nothing selected -->
+                                <span
+                                    v-else
+                                    class="text-muted-foreground flex-1"
                                 >
-                                    {{ symptom.name }}
-                                </Button>
+                                    Click to select symptoms
+                                </span>
+                                
+                                <!-- Dropdown icon -->
+                                <ChevronDown class="h-4 w-4 text-muted-foreground shrink-0" />
                             </div>
+                            
                             <InputError :message="form.errors.symptoms" />
+
+                            <!-- Symptoms Modal -->
+                            <Dialog v-model:open="isSymptomsModalOpen">
+                                <DialogContent class="w-full md:w-1/2 max-w-none max-h-[600px] flex flex-col">
+                                    <DialogHeader>
+                                        <DialogTitle>Select Symptoms</DialogTitle>
+                                    </DialogHeader>
+                                    
+                                    <!-- Search input -->
+                                    <div class="relative">
+                                        <Search class="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                                        <Input
+                                            v-model="symptomSearchQuery"
+                                            type="text"
+                                            placeholder="Search symptoms..."
+                                            class="pl-9"
+                                        />
+                                    </div>
+
+                                    <!-- Symptoms grid -->
+                                    <div class="flex-1 overflow-y-auto border rounded-md p-4">
+                                        <div v-if="filteredSymptoms.length === 0" class="text-center py-8 text-muted-foreground">
+                                            No symptoms found
+                                        </div>
+                                        <div v-else class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
+                                            <Button
+                                                v-for="symptom in filteredSymptoms"
+                                                :key="symptom.id"
+                                                type="button"
+                                                :variant="selectedSymptoms.includes(symptom.name) ? 'default' : 'outline'"
+                                                size="sm"
+                                                class="justify-start h-auto py-2 whitespace-normal text-left"
+                                                @click="toggleSymptom(symptom.name)"
+                                            >
+                                                {{ symptom.name }}
+                                            </Button>
+                                        </div>
+                                    </div>
+
+                                    <!-- Footer with selected count and close button -->
+                                    <div class="flex items-center justify-between pt-4 border-t">
+                                        <p class="text-sm text-muted-foreground">
+                                            {{ selectedSymptoms.length }} symptom{{ selectedSymptoms.length !== 1 ? 's' : '' }} selected
+                                        </p>
+                                        <Button 
+                                            type="button" 
+                                            @click="isSymptomsModalOpen = false"
+                                        >
+                                            Done
+                                        </Button>
+                                    </div>
+                                </DialogContent>
+                            </Dialog>
+                        </div>
+
+                        <!-- Loading Indicator for Predicted Diseases -->
+                        <div v-if="isSearchingDiseases" class="space-y-2">
+                            <Label>Predicted Diseases (based on symptoms)</Label>
+                            <Card>
+                                <CardContent class="p-8">
+                                    <div class="flex flex-col items-center justify-center gap-3">
+                                        <Spinner class="h-8 w-8 text-primary" />
+                                        <p class="text-sm text-muted-foreground">Analyzing symptoms and predicting diseases...</p>
+                                    </div>
+                                </CardContent>
+                            </Card>
                         </div>
 
                         <!-- Disease Search Results -->
-                        <div v-if="searchedDiseases.length > 0" class="space-y-2">
-                            <Label>Predicted Diseases (based on symptoms)</Label>
+                        <div v-else-if="searchedDiseases.length > 0" class="space-y-2">
+                            <Label>Predicted Diseases (based on symptoms) - Top 5</Label>
                             <div class="grid grid-cols-2 gap-2">
                                 <Card
-                                    v-for="disease in searchedDiseases"
+                                    v-for="disease in topPredictedDiseases"
                                     :key="disease.id"
                                     class="cursor-pointer hover:bg-muted"
                                     :class="{ 'ring-2 ring-primary': selectedDiseases.find(d => d.id === disease.id) }"
@@ -347,6 +523,63 @@ const submit = () => {
                                     </CardContent>
                                 </Card>
                             </div>
+                        </div>
+
+                        <!-- Manual Disease Search -->
+                        <div class="space-y-2">
+                            <Label>Add Disease Manually</Label>
+                            <div class="relative">
+                                <Search class="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                                <Input
+                                    v-model="manualDiseaseSearchQuery"
+                                    type="text"
+                                    placeholder="Search for diseases by name..."
+                                    class="pl-9"
+                                />
+                            </div>
+
+                            <!-- Manual Search Loading -->
+                            <div v-if="isSearchingManualDiseases" class="py-4">
+                                <div class="flex items-center justify-center gap-2">
+                                    <Spinner class="h-4 w-4 text-primary" />
+                                    <p class="text-sm text-muted-foreground">Searching diseases...</p>
+                                </div>
+                            </div>
+
+                            <!-- Manual Search Results -->
+                            <div v-else-if="manualSearchedDiseases.length > 0" class="border rounded-md p-2 max-h-[200px] overflow-y-auto">
+                                <div class="grid grid-cols-1 gap-1">
+                                    <button
+                                        v-for="disease in manualSearchedDiseases"
+                                        :key="disease.id"
+                                        type="button"
+                                        @click="addDisease(disease)"
+                                        :disabled="!!selectedDiseases.find(d => d.id === disease.id)"
+                                        :class="cn(
+                                            'flex items-center justify-between px-3 py-2 text-sm rounded-md transition-colors text-left',
+                                            selectedDiseases.find(d => d.id === disease.id)
+                                                ? 'bg-primary/10 text-primary cursor-not-allowed'
+                                                : 'hover:bg-muted cursor-pointer'
+                                        )"
+                                    >
+                                        <span>{{ disease.name }}</span>
+                                        <span v-if="selectedDiseases.find(d => d.id === disease.id)" class="text-xs text-primary">
+                                            Added
+                                        </span>
+                                        <Plus v-else class="h-4 w-4" />
+                                    </button>
+                                </div>
+                            </div>
+
+                            <!-- No results message -->
+                            <div v-else-if="manualDiseaseSearchQuery && manualDiseaseSearchQuery.length >= 2 && !isSearchingManualDiseases" class="text-center py-4 text-sm text-muted-foreground">
+                                No diseases found matching "{{ manualDiseaseSearchQuery }}"
+                            </div>
+
+                            <!-- Help text -->
+                            <p v-if="!manualDiseaseSearchQuery" class="text-xs text-muted-foreground">
+                                Type at least 2 characters to search for diseases
+                            </p>
                         </div>
 
                         <!-- Selected Diseases -->
@@ -473,6 +706,19 @@ const submit = () => {
                                 placeholder="Additional notes or instructions..."
                             />
                             <InputError :message="form.errors.notes" />
+                        </div>
+
+                        <!-- Follow-up Date -->
+                        <div class="space-y-2">
+                            <Label for="follow_up_date">Follow-up Checkup Date (Optional)</Label>
+                            <CalendarDatePicker
+                                v-model="form.follow_up_date"
+                                id="follow_up_date"
+                            />
+                            <p class="text-xs text-muted-foreground">
+                                Schedule a follow-up checkup date. A reminder will be sent to the pet owner 3 days before the scheduled date.
+                            </p>
+                            <InputError :message="form.errors.follow_up_date" />
                         </div>
 
                         <!-- Submit Buttons -->

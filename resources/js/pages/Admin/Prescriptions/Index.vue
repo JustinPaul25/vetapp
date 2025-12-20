@@ -4,7 +4,8 @@ import { Head, Link } from '@inertiajs/vue3';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import { FileText, Download, Search, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-vue-next';
+import { FileText, Download, Search, ArrowUpDown, ArrowUp, ArrowDown, CalendarCheck, Mail, Printer } from 'lucide-vue-next';
+import { Badge } from '@/components/ui/badge';
 import { ref } from 'vue';
 import { dashboard } from '@/routes';
 import { router } from '@inertiajs/vue3';
@@ -20,6 +21,8 @@ interface Prescription {
     owner_email: string;
     issued_on: string;
     created_at: string;
+    follow_up_date: string | null;
+    follow_up_notified_at: string | null;
 }
 
 interface Props {
@@ -105,6 +108,15 @@ const getSortIcon = (column: string) => {
 const downloadPrescription = (appointmentId: number) => {
     window.open(`/admin/appointments/${appointmentId}/prescription`, '_blank');
 };
+
+const printPrescription = (appointmentId: number) => {
+    const printWindow = window.open(`/admin/appointments/${appointmentId}/prescription`, '_blank');
+    if (printWindow) {
+        printWindow.onload = () => {
+            printWindow.print();
+        };
+    }
+};
 </script>
 
 <template>
@@ -164,6 +176,7 @@ const downloadPrescription = (appointmentId: number) => {
                                             <component :is="getSortIcon('created_at')" class="h-4 w-4" />
                                         </button>
                                     </th>
+                                    <th class="text-left p-3 font-semibold">Follow-up</th>
                                     <th class="text-right p-3 font-semibold">Actions</th>
                                 </tr>
                             </thead>
@@ -186,7 +199,32 @@ const downloadPrescription = (appointmentId: number) => {
                                         {{ prescription.issued_on }}
                                     </td>
                                     <td class="p-3">
+                                        <div v-if="prescription.follow_up_date" class="flex flex-col gap-1">
+                                            <div class="flex items-center gap-1 text-sm">
+                                                <CalendarCheck class="h-4 w-4 text-primary" />
+                                                <span class="font-medium">{{ new Date(prescription.follow_up_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) }}</span>
+                                            </div>
+                                            <Badge 
+                                                v-if="prescription.follow_up_notified_at" 
+                                                variant="outline" 
+                                                class="w-fit text-xs"
+                                            >
+                                                <Mail class="h-3 w-3 mr-1" />
+                                                Notified
+                                            </Badge>
+                                        </div>
+                                        <span v-else class="text-sm text-muted-foreground">-</span>
+                                    </td>
+                                    <td class="p-3">
                                         <div class="flex justify-end gap-2">
+                                            <Button
+                                                variant="outline"
+                                                size="sm"
+                                                @click="printPrescription(prescription.appointment_id)"
+                                            >
+                                                <Printer class="h-4 w-4 mr-2" />
+                                                Print
+                                            </Button>
                                             <Button
                                                 variant="outline"
                                                 size="sm"
@@ -199,7 +237,7 @@ const downloadPrescription = (appointmentId: number) => {
                                     </td>
                                 </tr>
                                 <tr v-if="prescriptions.data.length === 0">
-                                    <td colspan="6" class="p-8 text-center text-muted-foreground">
+                                    <td colspan="7" class="p-8 text-center text-muted-foreground">
                                         No prescriptions found
                                     </td>
                                 </tr>

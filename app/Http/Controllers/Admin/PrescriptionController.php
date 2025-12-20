@@ -72,6 +72,8 @@ class PrescriptionController extends Controller
                 'owner_email' => $user->email ?? 'N/A',
                 'issued_on' => $prescription->created_at->format('Y-m-d H:i'),
                 'created_at' => $prescription->created_at->toISOString(),
+                'follow_up_date' => $prescription->follow_up_date ? $prescription->follow_up_date->format('Y-m-d') : null,
+                'follow_up_notified_at' => $prescription->follow_up_notified_at ? $prescription->follow_up_notified_at->format('Y-m-d H:i') : null,
             ];
         });
 

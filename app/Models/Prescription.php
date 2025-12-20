@@ -11,6 +11,11 @@ class Prescription extends Model
 
     protected $guarded = [];
 
+    protected $casts = [
+        'follow_up_date' => 'date',
+        'follow_up_notified_at' => 'datetime',
+    ];
+
     public function appointment()
     {
         return $this->belongsTo(Appointment::class);

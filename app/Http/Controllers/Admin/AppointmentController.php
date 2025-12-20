@@ -12,6 +12,7 @@ use App\Models\PatientWeightHistory;
 use App\Models\Prescription;
 use App\Models\PrescriptionDiagnosis;
 use App\Models\PrescriptionMedicine;
+use App\Models\Setting;
 use App\Models\Symptom;
 use App\Models\User;
 use App\Notifications\ClientEmailNotification;
@@ -550,6 +551,7 @@ class AppointmentController extends Controller
             'medicines.*.instructions' => 'required|string',
             'medicines.*.quantity' => 'required|string',
             'notes' => 'nullable|string',
+            'follow_up_date' => 'nullable|date|after:today',
         ]);
 
         $appointment = Appointment::with('patient.user')
@@ -565,6 +567,7 @@ class AppointmentController extends Controller
                 'symptoms' => $request->symptoms ? implode(', ', array_map('ucwords', $request->symptoms)) : '',
                 'notes' => $request->notes ?? '',
                 'pet_weight' => $request->pet_current_weight,
+                'follow_up_date' => $request->follow_up_date,
             ]);
 
             // Save weight history
@@ -663,6 +666,10 @@ class AppointmentController extends Controller
         $base64PanaboLogo = 'data:image/png;base64,' . base64_encode(file_get_contents(public_path('media/panabo.png')));
         $base64PrescriptionLogo = 'data:image/png;base64,' . base64_encode(file_get_contents(public_path('media/prescription.png')));
 
+        // Get veterinarian information from settings
+        $veterinarianName = Setting::get('veterinarian_name', '');
+        $veterinarianLicense = Setting::get('veterinarian_license_number', '');
+
         return Pdf::setOptions([
             'isRemoteEnabled' => true,
             'isHtml5ParserEnabled' => true,
@@ -672,7 +679,9 @@ class AppointmentController extends Controller
             'prescription',
             'base64Logo',
             'base64PanaboLogo',
-            'base64PrescriptionLogo'
+            'base64PrescriptionLogo',
+            'veterinarianName',
+            'veterinarianLicense'
         ))
         ->setPaper($customPaper, 'portrait')
         ->stream('prescription-' . $prescription->id . '.pdf');

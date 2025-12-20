@@ -15,6 +15,195 @@ use Inertia\Inertia;
 class DiseaseController extends Controller
 {
     /**
+     * Display a listing of diseases.
+     */
+    public function index(Request $request)
+    {
+        $query = Disease::withCount(['symptoms', 'medicines']);
+
+        // Search functionality
+        if ($request->has('search') && !empty($request->search)) {
+            $query->where('name', 'LIKE', $request->search . '%');
+        }
+
+        // Sort functionality
+        $sortBy = $request->get('sort_by', 'created_at');
+        $sortDirection = $request->get('sort_direction', 'desc');
+        
+        // Validate sort_by to prevent SQL injection
+        $allowedSortColumns = ['name', 'created_at'];
+        if (!in_array($sortBy, $allowedSortColumns)) {
+            $sortBy = 'created_at';
+        }
+        
+        // Validate sort_direction
+        $sortDirection = strtolower($sortDirection) === 'asc' ? 'asc' : 'desc';
+        
+        $query->orderBy($sortBy, $sortDirection);
+
+        $diseases = $query->paginate(15);
+
+        // Transform the data for Inertia
+        $diseases->getCollection()->transform(function ($disease) {
+            return [
+                'id' => $disease->id,
+                'name' => $disease->name,
+                'symptoms_count' => $disease->symptoms_count ?? 0,
+                'medicines_count' => $disease->medicines_count ?? 0,
+                'home_remedy' => $disease->home_remedy ? substr($disease->home_remedy, 0, 50) . '...' : null,
+                'created_at' => $disease->created_at->toISOString(),
+            ];
+        });
+
+        return Inertia::render('Admin/Diseases/Index', [
+            'diseases' => $diseases,
+            'filters' => $request->only(['search', 'sort_by', 'sort_direction']),
+        ]);
+    }
+
+    /**
+     * Show the form for creating a new disease.
+     */
+    public function create()
+    {
+        $symptoms = Symptom::orderBy('name')->get(['id', 'name']);
+        $medicines = Medicine::orderBy('name')->get(['id', 'name', 'dosage']);
+
+        return Inertia::render('Admin/Diseases/Create', [
+            'symptoms' => $symptoms,
+            'medicines' => $medicines,
+        ]);
+    }
+
+    /**
+     * Store a newly created disease in storage.
+     */
+    public function store(Request $request)
+    {
+        $validated = $request->validate([
+            'name' => 'required|string|max:100|unique:diseases,name',
+            'symptoms' => 'nullable|array',
+            'symptoms.*' => 'exists:symptoms,id',
+            'medicines' => 'nullable|array',
+            'medicines.*' => 'exists:medicines,id',
+            'home_remedy' => 'nullable|string|max:1825',
+        ]);
+
+        $disease = Disease::create([
+            'name' => $validated['name'],
+            'home_remedy' => $validated['home_remedy'] ?? null,
+        ]);
+
+        // Attach symptoms if provided
+        if (!empty($validated['symptoms'])) {
+            $disease->symptoms()->sync($validated['symptoms']);
+        }
+
+        // Attach medicines if provided
+        if (!empty($validated['medicines'])) {
+            $disease->medicines()->sync($validated['medicines']);
+        }
+
+        return redirect()->route('admin.diseases.show', $disease->id)
+            ->with('success', 'Disease has been created successfully.');
+    }
+
+    /**
+     * Display the specified disease.
+     */
+    public function show(Disease $disease)
+    {
+        $disease->load(['symptoms', 'medicines']);
+
+        return Inertia::render('Admin/Diseases/Show', [
+            'disease' => [
+                'id' => $disease->id,
+                'name' => $disease->name,
+                'home_remedy' => $disease->home_remedy,
+                'symptoms' => $disease->symptoms->map(fn($s) => [
+                    'id' => $s->id,
+                    'name' => $s->name,
+                ]),
+                'medicines' => $disease->medicines->map(fn($m) => [
+                    'id' => $m->id,
+                    'name' => $m->name,
+                    'dosage' => $m->dosage,
+                    'stock' => $m->stock,
+                ]),
+                'created_at' => $disease->created_at->toISOString(),
+                'updated_at' => $disease->updated_at->toISOString(),
+            ],
+        ]);
+    }
+
+    /**
+     * Show the form for editing the specified disease.
+     */
+    public function edit(Disease $disease)
+    {
+        $disease->load(['symptoms', 'medicines']);
+        
+        $allSymptoms = Symptom::orderBy('name')->get(['id', 'name']);
+        $allMedicines = Medicine::orderBy('name')->get(['id', 'name', 'dosage']);
+
+        return Inertia::render('Admin/Diseases/Edit', [
+            'disease' => [
+                'id' => $disease->id,
+                'name' => $disease->name,
+                'home_remedy' => $disease->home_remedy,
+                'symptoms' => $disease->symptoms->pluck('id')->toArray(),
+                'medicines' => $disease->medicines->pluck('id')->toArray(),
+            ],
+            'allSymptoms' => $allSymptoms,
+            'allMedicines' => $allMedicines,
+        ]);
+    }
+
+    /**
+     * Update the specified disease in storage.
+     */
+    public function update(Request $request, Disease $disease)
+    {
+        $validated = $request->validate([
+            'name' => 'required|string|max:100|unique:diseases,name,' . $disease->id,
+            'symptoms' => 'nullable|array',
+            'symptoms.*' => 'exists:symptoms,id',
+            'medicines' => 'nullable|array',
+            'medicines.*' => 'exists:medicines,id',
+            'home_remedy' => 'nullable|string|max:1825',
+        ]);
+
+        $disease->update([
+            'name' => $validated['name'],
+            'home_remedy' => $validated['home_remedy'] ?? null,
+        ]);
+
+        // Sync symptoms
+        $disease->symptoms()->sync($validated['symptoms'] ?? []);
+
+        // Sync medicines
+        $disease->medicines()->sync($validated['medicines'] ?? []);
+
+        return redirect()->route('admin.diseases.show', $disease->id)
+            ->with('success', 'Disease has been updated successfully.');
+    }
+
+    /**
+     * Remove the specified disease from storage.
+     */
+    public function destroy(Disease $disease)
+    {
+        // Detach related data
+        $disease->symptoms()->detach();
+        $disease->medicines()->detach();
+        
+        $disease->delete();
+
+        return redirect()->route('admin.diseases.index')
+            ->with('success', 'Disease deleted successfully.');
+    }
+
+    /**
      * Search diseases by keyword.
      */
     public function search(Request $request)
@@ -39,6 +228,14 @@ class DiseaseController extends Controller
      */
     public function searchBySymptoms(Request $request)
     {
+        // Check if KNN prediction is enabled
+        $knnEnabled = \App\Models\Setting::get('enable_knn_prediction', true);
+        
+        if (!$knnEnabled) {
+            // Return empty array if KNN is disabled
+            return response()->json([]);
+        }
+        
         $symptoms = $request->get('symptoms', []);
         
         if (empty($symptoms)) {
@@ -100,6 +297,14 @@ class DiseaseController extends Controller
      */
     public function getMedicines($id)
     {
+        // Check if KNN prediction is enabled
+        $knnEnabled = \App\Models\Setting::get('enable_knn_prediction', true);
+        
+        if (!$knnEnabled) {
+            // Return empty array if KNN is disabled
+            return response()->json([]);
+        }
+        
         $disease = Disease::findOrFail($id);
         
         $medicines = $disease->medicines()

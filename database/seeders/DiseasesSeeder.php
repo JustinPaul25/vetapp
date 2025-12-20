@@ -404,3 +404,6 @@ class DiseasesSeeder extends Seeder
 
 
 
+
+
+
