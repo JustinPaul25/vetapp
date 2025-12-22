@@ -47,3 +47,4 @@ class PetTypesSeeder extends Seeder
 
 
 
+

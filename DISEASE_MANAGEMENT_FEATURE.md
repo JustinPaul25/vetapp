@@ -160,3 +160,4 @@ The disease management system integrates with:
 
 The disease management feature is now fully integrated into the admin dashboard, providing a complete CRUD interface for managing diseases, their symptoms, and recommended medicines. The implementation follows best practices, maintains consistency with the existing codebase, and provides an intuitive user experience.
 
+

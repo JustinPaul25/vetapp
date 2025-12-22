@@ -653,7 +653,9 @@ class AppointmentController extends Controller
      */
     public function downloadPrescription($id)
     {
-        $customPaper = [0, 0, 396, 612]; // 5.5in x 8.5in in points
+        // Custom paper size: 5.5" × 8.5" (half-letter)
+        // 1 inch = 72 points, so 5.5" = 396pt, 8.5" = 612pt
+        $customPaper = [0, 0, 396, 612];
         
         $prescription = Prescription::with(
             'medicines.medicine',
