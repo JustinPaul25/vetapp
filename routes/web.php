@@ -118,6 +118,7 @@ Route::middleware(['auth', 'verified', \App\Http\Middleware\EnsureUserIsAdminOrS
             Route::get('/{id}/prescription/create', [\App\Http\Controllers\Admin\AppointmentController::class, 'createPrescription'])->name('prescription.create');
             Route::post('/{id}/prescribe', [\App\Http\Controllers\Admin\AppointmentController::class, 'prescribe'])->name('prescribe');
             Route::get('/{id}/prescription', [\App\Http\Controllers\Admin\AppointmentController::class, 'downloadPrescription'])->name('prescription');
+            Route::get('/{id}/prescription/debug', [\App\Http\Controllers\Admin\AppointmentController::class, 'debugPrescription'])->name('prescription.debug');
         });
         
         // Disease routes - specific routes must come before resource routes

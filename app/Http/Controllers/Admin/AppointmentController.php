@@ -688,4 +688,34 @@ class AppointmentController extends Controller
         ->setPaper($customPaper, 'portrait')
         ->stream('prescription-' . $prescription->id . '.pdf');
     }
+
+    /**
+     * Debug HTML view for prescription.
+     */
+    public function debugPrescription($id)
+    {
+        $prescription = Prescription::with(
+            'medicines.medicine',
+            'appointment',
+            'patient',
+            'diagnoses.disease'
+        )->where('appointment_id', $id)->firstOrFail();
+
+        $base64Logo = 'data:image/png;base64,' . base64_encode(file_get_contents(public_path('media/logo_for_print.png')));
+        $base64PanaboLogo = 'data:image/png;base64,' . base64_encode(file_get_contents(public_path('media/panabo.png')));
+        $base64PrescriptionLogo = 'data:image/png;base64,' . base64_encode(file_get_contents(public_path('media/prescription.png')));
+
+        // Get veterinarian information from settings
+        $veterinarianName = Setting::get('veterinarian_name', '');
+        $veterinarianLicense = Setting::get('veterinarian_license_number', '');
+
+        return view('admin.appointments.pdf-debug', compact(
+            'prescription',
+            'base64Logo',
+            'base64PanaboLogo',
+            'base64PrescriptionLogo',
+            'veterinarianName',
+            'veterinarianLicense'
+        ));
+    }
 }

@@ -12,15 +12,18 @@
         }
         
         @page {
+            size: A4;
             margin: 0.5in;
         }
         
         body {
             font-family: 'DejaVu Sans', sans-serif;
             font-size: 10px;
-            color: #1a4a75;
+            color: #000;
             line-height: 1.4;
-            padding: 10px;
+            padding: 0;
+            width: 100%;
+            max-width: 100%;
         }
         
         /* Print color adjustment */
@@ -47,43 +50,53 @@
         /* Header Section */
         .header-table {
             margin-top: 0;
+            width: 100%;
             margin-bottom: 10px;
+        }
+
+        .header-table tr {
+            width: 100%;
         }
         
         .header-table td {
             vertical-align: top;
             border: none;
-            padding: 5px;
+            padding: 5px 8px;
         }
         
         .header-left {
-            width: 20%;
+            width: 15%;
             text-align: left;
         }
         
         .header-center {
-            width: 60%;
+            width: 70%;
             text-align: center;
             line-height: 1.2;
         }
         
         .header-right {
-            width: 20%;
+            width: 15%;
             text-align: right;
         }
         
         .header-logo {
-            width: 70px;
+            width: 65px;
             height: auto;
         }
         
         .header-org-name {
-            font-size: 14px;
+            font-size: 16px;
+            font-weight: bold;
             margin: 0;
+        }
+
+        .header-address {
+            font-size: 10px;
         }
         
         .header-section-name {
-            font-size: 16px;
+            font-size: 8px;
             font-weight: bold;
             margin: 0;
         }
@@ -94,14 +107,23 @@
             margin: 12px 0 15px 0;
         }
         
+        .prescription-logo {
+            width: 27px;
+            height: auto;
+            display: block;
+            margin-left: 15px;
+            margin-right: auto;
+            margin-bottom: 10px;
+        }
+        
         /* Patient Information Section */
         .patient-info-table {
             margin-top: 15px;
         }
         
         .patient-info-table td {
-            padding: 6px 8px;
-            border: 1px solid #ddd;
+            border: none;
+            padding: 2px 8px;
         }
         
         .patient-info-label {
@@ -123,46 +145,93 @@
         
         .medicines-table th,
         .medicines-table td {
-            padding: 10px 8px;
-            border: 1px solid #ddd;
+            border: none;
             text-align: left;
+            vertical-align: top;
+            padding: 4px 8px;
+        }
+
+        .medicines-table tbody tr + tr td {
+            padding-top: 8px;
         }
         
         .medicines-table th {
             background-color: #EEE;
             font-weight: bold;
+            text-align: left;
+            vertical-align: top;
         }
         
-        .medicines-table .col-product {
-            width: 100px;
+        .medicines-table th .sub-header {
+            font-weight: normal;
+            font-size: 9px;
+            font-style: normal;
+            display: block;
+            margin-top: 4px;
         }
         
-        .medicines-table .col-instructions {
-            width: 150px;
+        .medicines-table .col-medicine {
+            width: 33.33%;
+        }
+        
+        .medicines-table .col-dosage {
+            width: 33.33%;
+        }
+        
+        .medicines-table .col-quantity {
+            width: 33.33%;
+        }
+        
+        .medicine-name {
+            font-weight: bold;
+            margin-bottom: 4px;
+        }
+        
+        .medicine-route {
+            font-size: 9px;
+            color: #000;
+        }
+        
+        .dosage-value {
+            margin-bottom: 4px;
+        }
+        
+        .dosage-frequency {
+            font-size: 9px;
+            color: #000;
+        }
+        
+        .quantity-value {
+            margin-bottom: 4px;
+        }
+        
+        .quantity-time {
+            font-size: 9px;
+            color: #000;
         }
         
         /* Notes Section */
         .notes-table {
-            margin-top: 12px;
+            margin-top: 60px;
         }
         
         .notes-table td {
-            padding: 10px;
-            border: 1px solid #ddd;
+            border: none;
             line-height: 1.6;
+            padding: 8px 12px;
         }
         
         /* Footer Section */
         .footer-table {
-            margin-top: 35px;
+            margin-top: 15px;
             font-size: 10px;
         }
         
         .footer-table td {
             border: none;
             vertical-align: top;
-            padding: 8px 5px;
             line-height: 1.6;
+            padding: 6px 8px;
         }
         
         .footer-left {
@@ -199,83 +268,105 @@
             <td class="header-center">
                 <p class="header-org-name">City of Panabo</p>
                 <p class="header-org-name">City Mayor's Office</p>
-                <p class="header-section-name">CITY VETERINARY SECTION</p>
-                <p>Prk. 1 Along, National Highway, Brgy. Salvacion Panabo city</p>
             </td>
             <td class="header-right">
                 <img src="{{ $base64Logo }}" alt="Logo" class="header-logo">
             </td>
         </tr>
+        <tr>
+            <td colspan="3" class="header-center address-line" style="text-align: center;">
+                <p class="header-address">Prk. 1 Along, National Highway, Brgy. Salvacion Panabo city</p>
+            </td>
+        </tr>
     </table>
     
-    <hr class="header-separator">
+    <!-- Prescription Logo -->
+    <div style="text-align: left; margin-bottom: 10px;">
+        <img src="{{ $base64PrescriptionLogo }}" alt="Prescription Logo" class="prescription-logo">
+    </div>
     
     <!-- Patient Information Section -->
     <table class="patient-info-table">
         <tr>
             <td>
-                <span class="patient-info-label">Prescription No.:</span>
-                {{ str_pad($prescription->id, 6, '0', STR_PAD_LEFT) }}
+                <span class="patient-info-label">Clients Name:</span>
+                {{ $prescription->appointment->user ? trim(($prescription->appointment->user->first_name ?? '') . ' ' . ($prescription->appointment->user->last_name ?? '')) : 'N/A' }}
             </td>
             <td>
-                <span class="patient-info-label">Prescription Date:</span>
+                <span class="patient-info-label">Date:</span>
                 {{ $prescription->created_at->format('F d, Y') }}
             </td>
         </tr>
         <tr>
             <td>
-                <span class="patient-info-label">Pet Owner:</span>
-                {{ $prescription->appointment->user ? trim(($prescription->appointment->user->first_name ?? '') . ' ' . ($prescription->appointment->user->last_name ?? '')) : 'N/A' }}
-            </td>
-            <td>
-                <span class="patient-info-label">Contact:</span>
-                {{ $prescription->appointment->user->mobile_number ?? 'N/A' }}
-            </td>
-        </tr>
-        <tr>
-            <td>
-                <span class="patient-info-label">Pet Name:</span>
+                <span class="patient-info-label">Patients Name:</span>
                 {{ $prescription->patient->pet_name ?? 'N/A' }}
             </td>
             <td>
-                <span class="patient-info-label">Breed:</span>
+                <span class="patient-info-label">Pet Type:</span>
                 {{ $prescription->patient->petType->name ?? 'N/A' }} - {{ $prescription->patient->pet_breed ?? 'N/A' }}
-            </td>
-        </tr>
-        <tr>
-            <td>
-                <span class="patient-info-label">Pet Current Weight:</span>
-                {{ $prescription->pet_weight }}
-            </td>
-            <td>
-                <span class="patient-info-label">Pet Birthdate:</span>
-                {{ $prescription->patient->pet_birth_date ? $prescription->patient->pet_birth_date->format('F d, Y') : 'N/A' }}
             </td>
         </tr>
     </table>
     
     <!-- Medicines Section -->
-    <div class="section-header">Medicines</div>
     <table class="medicines-table">
-        <thead>
-            <tr>
-                <th class="col-product">Product</th>
-                <th>Dosage</th>
-                <th class="col-instructions">Instructions</th>
-                <th>Quantity</th>
-            </tr>
-        </thead>
         <tbody>
-            @forelse($prescription->medicines as $prescriptionMedicine)
+            @forelse($prescription->medicines as $index => $prescriptionMedicine)
                 <tr>
-                    <td>{{ $prescriptionMedicine->medicine->name }}</td>
-                    <td>{{ $prescriptionMedicine->dosage }}</td>
-                    <td>{{ $prescriptionMedicine->instructions }}</td>
-                    <td>{{ $prescriptionMedicine->quantity }}</td>
+                    <td>
+                        <div class="medicine-name">{{ $loop->iteration }}.) {{ $prescriptionMedicine->medicine->name }}</div>
+                        <div class="medicine-route">{{ $prescriptionMedicine->instructions }}</div>
+                    </td>
+                    <td>
+                        <div class="dosage-value">{{ $prescriptionMedicine->dosage }}</div>
+                        <div class="dosage-frequency">
+                            @php
+                                // Try to extract frequency from instructions if it contains frequency info
+                                $instructions = strtolower($prescriptionMedicine->instructions ?? '');
+                                $frequency = '';
+                                if (strpos($instructions, 'once') !== false || strpos($instructions, 'daily') !== false) {
+                                    $frequency = 'Once a day';
+                                } elseif (strpos($instructions, 'twice') !== false) {
+                                    $frequency = 'Twice a day';
+                                } elseif (strpos($instructions, 'three') !== false) {
+                                    $frequency = 'Three times a day';
+                                } elseif (strpos($instructions, 'every') !== false) {
+                                    // Extract "every X hours" pattern
+                                    if (preg_match('/every\s+(\d+)\s+hours?/i', $instructions, $matches)) {
+                                        $frequency = 'Every ' . $matches[1] . ' hours';
+                                    } else {
+                                        $frequency = 'As directed';
+                                    }
+                                } else {
+                                    $frequency = 'As directed';
+                                }
+                            @endphp
+                            {{ $frequency }}
+                        </div>
+                    </td>
+                    <td>
+                        <div class="quantity-value">{{ $prescriptionMedicine->quantity }}</div>
+                        <div class="quantity-time">
+                            @php
+                                // Try to extract time from instructions
+                                $instructions = $prescriptionMedicine->instructions ?? '';
+                                $time = '';
+                                if (preg_match('/(\d{1,2}(?::\d{2})?\s*(?:am|pm|AM|PM))/i', $instructions, $matches)) {
+                                    $time = $matches[1];
+                                } elseif (preg_match('/(\d{1,2}:\d{2})/i', $instructions, $matches)) {
+                                    $time = $matches[1];
+                                } else {
+                                    $time = 'As directed';
+                                }
+                            @endphp
+                            {{ $time }}
+                        </div>
+                    </td>
                 </tr>
             @empty
                 <tr>
-                    <td colspan="4" style="text-align: center;">No medicines prescribed</td>
+                    <td colspan="3" style="text-align: center;">No medicines prescribed</td>
                 </tr>
             @endforelse
         </tbody>
@@ -283,10 +374,9 @@
     
     <!-- Notes Section -->
     @if($prescription->notes)
-    <div class="section-header">Notes</div>
     <table class="notes-table">
         <tr>
-            <td>{{ $prescription->notes }}</td>
+            <td><strong>Reminder: </strong>{{ $prescription->notes }}</td>
         </tr>
     </table>
     @endif
