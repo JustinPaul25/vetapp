@@ -247,7 +247,6 @@ class HistoricalDataSeeder extends Seeder
                     'pet_breed' => $breed,
                     'pet_gender' => $gender,
                     'pet_birth_date' => $birthDate,
-                    'microchip_number' => rand(100000, 999999) . '-' . rand(100000, 999999),
                     'pet_allergies' => rand(0, 1) ? $this->generateAllergies() : null,
                     'created_at' => $createdAt,
                     'updated_at' => $createdAt,

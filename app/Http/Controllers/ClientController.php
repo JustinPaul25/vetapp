@@ -87,6 +87,9 @@ class ClientController extends Controller
             ]);
         }
 
+        $user = auth()->user();
+        $hasLocationPin = !!($user->lat && $user->long);
+
         return Inertia::render('Client/Appointments/Index', [
             'pets' => $pets->map(function ($pet) {
                 return [
@@ -101,6 +104,7 @@ class ClientController extends Controller
                     'name' => $type->name,
                 ];
             }),
+            'has_location_pin' => $hasLocationPin,
         ]);
     }
 
@@ -116,6 +120,14 @@ class ClientController extends Controller
             'appointment_time' => 'required|string',
             'symptoms' => 'nullable|string|max:1825',
         ]);
+
+        // Check if user has location pin set
+        $user = Auth::user();
+        if (!$user->lat || !$user->long) {
+            return back()->withErrors([
+                'location_pin' => 'Please set your home address location pin in settings before booking an appointment.',
+            ])->withInput();
+        }
 
         // Verify the pet belongs to the authenticated user
         $pet = Patient::where('id', $request->pet_id)
@@ -227,7 +239,7 @@ class ClientController extends Controller
         ]);
 
         return redirect()->route('client.appointments.index')
-            ->with('message', 'Appointment created successfully.');
+            ->with('success', 'Appointment created successfully.');
     }
 
     /**
@@ -275,6 +287,7 @@ class ClientController extends Controller
                 'is_completed' => $appointment->is_completed,
                 'is_canceled' => $appointment->is_canceled ?? false,
                 'remarks' => $appointment->remarks,
+                'summary' => $appointment->summary,
                 'created_at' => $appointment->created_at->toISOString(),
                 'updated_at' => $appointment->updated_at->toISOString(),
             ],
@@ -284,7 +297,6 @@ class ClientController extends Controller
                 'pet_breed' => $appointment->patient->pet_breed,
                 'pet_gender' => $appointment->patient->pet_gender,
                 'pet_birth_date' => $appointment->patient->pet_birth_date ? $appointment->patient->pet_birth_date->format('Y-m-d') : null,
-                'microchip_number' => $appointment->patient->microchip_number,
                 'pet_allergies' => $appointment->patient->pet_allergies,
                 'pet_type' => $appointment->patient->petType ? $appointment->patient->petType->name : 'N/A',
             ] : null,
@@ -317,6 +329,9 @@ class ClientController extends Controller
      */
     public function cancelAppointment(Request $request, $id)
     {
+        // Check if this is an API request (not Inertia)
+        $isApiRequest = ($request->ajax() || $request->wantsJson()) && !$request->header('X-Inertia');
+        
         try {
             $appointment = Appointment::where('id', $id)
                 ->where(function ($query) {
@@ -329,7 +344,7 @@ class ClientController extends Controller
 
             // Only allow canceling pending appointments that are not already canceled
             if ($appointment->is_canceled) {
-                if ($request->wantsJson() || $request->ajax()) {
+                if ($isApiRequest) {
                     return response()->json(['error' => 'This appointment is already canceled.'], 403);
                 }
                 return redirect()->route('client.appointments.show', $id)
@@ -337,7 +352,7 @@ class ClientController extends Controller
             }
 
             if ($appointment->is_approved || $appointment->is_completed) {
-                if ($request->wantsJson() || $request->ajax()) {
+                if ($isApiRequest) {
                     return response()->json(['error' => 'Only pending appointments can be canceled.'], 403);
                 }
                 return redirect()->route('client.appointments.show', $id)
@@ -347,21 +362,286 @@ class ClientController extends Controller
             // Mark appointment as canceled instead of deleting
             $appointment->update(['is_canceled' => true]);
 
-            if ($request->wantsJson() || $request->ajax()) {
+            if ($isApiRequest) {
                 return response()->json(['message' => 'Appointment canceled successfully.']);
             }
 
             return redirect()->route('client.appointments.index')
-                ->with('message', 'Appointment canceled successfully.');
+                ->with('success', 'Appointment canceled successfully.');
         } catch (\Exception $e) {
             Log::error('Error canceling appointment: ' . $e->getMessage());
             
-            if ($request->wantsJson() || $request->ajax()) {
+            if ($isApiRequest) {
                 return response()->json(['error' => 'Failed to cancel appointment.'], 500);
             }
             
             return redirect()->route('client.appointments.show', $id)
                 ->with('error', 'Failed to cancel appointment. Please try again.');
+        }
+    }
+
+    /**
+     * Reschedule a pending appointment.
+     */
+    public function rescheduleAppointment(Request $request, $id)
+    {
+        // Check if this is an API request (not Inertia)
+        $isApiRequest = ($request->ajax() || $request->wantsJson()) && !$request->header('X-Inertia');
+        
+        try {
+            $request->validate([
+                'appointment_date' => 'required|date|after:today',
+                'appointment_time' => 'required|string',
+            ]);
+
+            $appointment = Appointment::where('id', $id)
+                ->where(function ($query) {
+                    $query->whereHas('patient', function ($q) {
+                        $q->where('user_id', auth()->id());
+                    })
+                    ->orWhere('user_id', auth()->id());
+                })
+                ->with(['appointment_type', 'patient.petType', 'patient.user'])
+                ->firstOrFail();
+
+            // Only allow rescheduling appointments that are not canceled or completed
+            if ($appointment->is_canceled) {
+                if ($isApiRequest) {
+                    return response()->json(['error' => 'Canceled appointments cannot be rescheduled.'], 403);
+                }
+                return redirect()->route('client.appointments.show', $id)
+                    ->with('error', 'Canceled appointments cannot be rescheduled.');
+            }
+
+            if ($appointment->is_completed) {
+                if ($isApiRequest) {
+                    return response()->json(['error' => 'Completed appointments cannot be rescheduled.'], 403);
+                }
+                return redirect()->route('client.appointments.show', $id)
+                    ->with('error', 'Completed appointments cannot be rescheduled.');
+            }
+
+            // Convert time from 12-hour format (h:i A) to 24-hour format (H:i)
+            $time = Carbon::createFromFormat('h:i A', $request->appointment_time);
+
+            // Validate timeslot restrictions (excluding current appointment)
+            $this->validateTimeslotRestrictionsForReschedule(
+                $request->appointment_date,
+                $time->format('H:i'),
+                $id
+            );
+
+            // Store old date and time for notification
+            $oldDate = $appointment->appointment_date->format('Y-m-d');
+            $oldTime = Carbon::createFromFormat('H:i', $appointment->appointment_time)->format('h:i A');
+
+            // Update appointment date and time
+            $appointment->update([
+                'appointment_date' => $request->appointment_date,
+                'appointment_time' => $time->format('H:i'), // Store in 24-hour format
+                'is_approved' => false, // Reset approval status since it's a new time
+            ]);
+
+            // Reload appointment with relationships
+            $appointment->load('appointment_type', 'patient.petType', 'patient.user');
+
+            // Notify Super Admins
+            $adminUsers = User::select('users.*')
+                ->leftJoin('model_has_roles as mhr', 'mhr.model_id', 'users.id')
+                ->leftJoin('roles', 'roles.id', 'mhr.role_id')
+                ->where('roles.name', 'admin')
+                ->distinct()
+                ->get();
+
+            // Notify Staff
+            $staffUsers = User::select('users.*')
+                ->leftJoin('model_has_roles as mhr', 'mhr.model_id', 'users.id')
+                ->leftJoin('roles', 'roles.id', 'mhr.role_id')
+                ->where('roles.name', 'staff')
+                ->distinct()
+                ->get();
+
+            $pet = $appointment->patient;
+            $patient_owner_full_name = $pet->user ? 
+                trim(($pet->user->first_name ?? '') . ' ' . ($pet->user->last_name ?? '')) ?: $pet->user->name : 'N/A';
+            $appointmentTypeName = $appointment->appointment_type->name ?? 'N/A';
+
+            $link = config('app.url') . '/admin/appointments/' . $appointment->id;
+            $subject = sprintf("%s has rescheduled an appointment.", $patient_owner_full_name ?? '');
+            $message = "Hi, an appointment has been rescheduled<br><br>" .
+                "Appointment Details.<br><br>" .
+                "Full Name: " . $patient_owner_full_name . "<br>" .
+                "Mobile Number: " . ($pet->user ? ($pet->user->mobile_number ?? 'N/A') : 'N/A') . "<br>" .
+                "Email Address: " . ($pet->user ? ($pet->user->email ?? 'N/A') : 'N/A') . "<br>" .
+                "Pet Type: " . ($pet->petType->name ?? 'N/A') . "<br>" .
+                "Breed: " . ($pet->pet_breed ?? 'N/A') . "<br>" .
+                "Appointment Type: " . $appointmentTypeName . "<br>" .
+                "Previous Date: " . $oldDate . "<br>" .
+                "Previous Time: " . $oldTime . "<br>" .
+                "New Date: " . $request->appointment_date . "<br>" .
+                "New Time: " . $request->appointment_time . "<br>" .
+                "<p style='text-align:center'><a href='" . $link . "' style='background-color: #4CAF50; border: none; color: white; padding: 15px 32px; text-align: center; text-decoration: none; font-size: 12px; border-radius: 15px;'>View Appointment</a></p>";
+
+            $ablyService = app(AblyService::class);
+            $appointmentMessage = $appointmentTypeName . ' appointment rescheduled from ' . $oldDate . ' at ' . $oldTime . ' to ' . $request->appointment_date . ' at ' . $request->appointment_time;
+
+            // Send notifications via database, email, and Ably to admins
+            foreach ($adminUsers as $user) {
+                $user->notify(new \App\Notifications\DefaultNotification($subject, $message, $link));
+                
+                // Send real-time notification via Ably
+                $ablyService->publishToUser($user->id, 'appointment.rescheduled', [
+                    'appointment_id' => $appointment->id,
+                    'subject' => $subject,
+                    'message' => $appointmentMessage,
+                    'link' => $link,
+                    'patient_name' => $pet->pet_name,
+                    'owner_name' => $patient_owner_full_name,
+                    'old_date' => $oldDate,
+                    'old_time' => $oldTime,
+                    'new_date' => $request->appointment_date,
+                    'new_time' => $request->appointment_time,
+                ]);
+            }
+
+            // Send real-time notifications via Ably to staff
+            foreach ($staffUsers as $user) {
+                $ablyService->publishToUser($user->id, 'appointment.rescheduled', [
+                    'appointment_id' => $appointment->id,
+                    'subject' => $subject,
+                    'message' => $appointmentMessage,
+                    'link' => $link,
+                    'patient_name' => $pet->pet_name,
+                    'owner_name' => $patient_owner_full_name,
+                    'old_date' => $oldDate,
+                    'old_time' => $oldTime,
+                    'new_date' => $request->appointment_date,
+                    'new_time' => $request->appointment_time,
+                ]);
+            }
+
+            // Also publish to admin channel for all admins
+            $ablyService->publishToAdmins('appointment.rescheduled', [
+                'appointment_id' => $appointment->id,
+                'subject' => $subject,
+                'message' => $appointmentMessage,
+                'link' => $link,
+                'patient_name' => $pet->pet_name,
+                'owner_name' => $patient_owner_full_name,
+                'old_date' => $oldDate,
+                'old_time' => $oldTime,
+                'new_date' => $request->appointment_date,
+                'new_time' => $request->appointment_time,
+            ]);
+
+            // Also publish to staff channel for all staff
+            $ablyService->publishToStaff('appointment.rescheduled', [
+                'appointment_id' => $appointment->id,
+                'subject' => $subject,
+                'message' => $appointmentMessage,
+                'link' => $link,
+                'patient_name' => $pet->pet_name,
+                'owner_name' => $patient_owner_full_name,
+                'old_date' => $oldDate,
+                'old_time' => $oldTime,
+                'new_date' => $request->appointment_date,
+                'new_time' => $request->appointment_time,
+            ]);
+
+            if ($isApiRequest) {
+                return response()->json(['message' => 'Appointment rescheduled successfully.']);
+            }
+
+            return redirect()->route('client.appointments.show', $id)
+                ->with('success', 'Appointment rescheduled successfully.');
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            if ($isApiRequest) {
+                return response()->json(['errors' => $e->errors()], 422);
+            }
+            throw $e;
+        } catch (\Exception $e) {
+            Log::error('Error rescheduling appointment: ' . $e->getMessage());
+            
+            if ($isApiRequest) {
+                return response()->json(['error' => 'Failed to reschedule appointment: ' . $e->getMessage()], 500);
+            }
+            
+            return redirect()->route('client.appointments.show', $id)
+                ->with('error', 'Failed to reschedule appointment. Please try again.');
+        }
+    }
+
+    /**
+     * Validate timeslot restrictions for rescheduling (excluding current appointment).
+     */
+    private function validateTimeslotRestrictionsForReschedule($date, $time, $excludeAppointmentId)
+    {
+        $restrictions = $this->getTimeslotRestrictions();
+        $timeCarbon = Carbon::createFromFormat('H:i', $time);
+        $time12Hour = $timeCarbon->format('h:i A');
+
+        // Check minimum notice time
+        $appointmentDateTime = Carbon::parse($date . ' ' . $time);
+        $minimumNotice = Carbon::now()->addHours($restrictions['minimum_notice_hours']);
+        if ($appointmentDateTime->lt($minimumNotice)) {
+            throw new \Illuminate\Validation\ValidationException(
+                validator([], []),
+                ['appointment_time' => ['Appointments must be rescheduled at least ' . $restrictions['minimum_notice_hours'] . ' hours in advance.']]
+            );
+        }
+
+        // Check working hours
+        if (!$this->isWithinWorkingHours($time12Hour, $restrictions)) {
+            throw new \Illuminate\Validation\ValidationException(
+                validator([], []),
+                ['appointment_time' => ['Appointments can only be rescheduled during working hours.']]
+            );
+        }
+
+        // Check lunch break
+        if ($this->isDuringLunchBreak($time12Hour, $restrictions)) {
+            throw new \Illuminate\Validation\ValidationException(
+                validator([], []),
+                ['appointment_time' => ['Appointments cannot be rescheduled during lunch break.']]
+            );
+        }
+
+        // Check if already booked (excluding current appointment)
+        $existing = Appointment::where('appointment_date', $date)
+            ->where('appointment_time', $time)
+            ->where('id', '!=', $excludeAppointmentId)
+            ->exists();
+        if ($existing) {
+            throw new \Illuminate\Validation\ValidationException(
+                validator([], []),
+                ['appointment_time' => ['This time slot is already booked.']]
+            );
+        }
+
+        // Check daily limit (excluding current appointment)
+        $dailyCount = Appointment::where('appointment_date', $date)
+            ->where('id', '!=', $excludeAppointmentId)
+            ->count();
+        if ($dailyCount >= $restrictions['max_appointments_per_day']) {
+            throw new \Illuminate\Validation\ValidationException(
+                validator([], []),
+                ['appointment_date' => ['Maximum number of appointments for this day has been reached.']]
+            );
+        }
+
+        // Check buffer time (excluding current appointment)
+        $bookedTimes = Appointment::where('appointment_date', $date)
+            ->where('id', '!=', $excludeAppointmentId)
+            ->pluck('appointment_time')
+            ->map(function ($t) {
+                return Carbon::createFromFormat('H:i', $t)->format('h:i A');
+            })
+            ->toArray();
+        if ($this->violatesBufferTime($time12Hour, $bookedTimes, $restrictions)) {
+            throw new \Illuminate\Validation\ValidationException(
+                validator([], []),
+                ['appointment_time' => ['This time slot violates the buffer time restriction.']]
+            );
         }
     }
 
@@ -590,7 +870,6 @@ class ClientController extends Controller
             $query->where(function ($q) use ($keyword) {
                 $q->where('pet_name', 'LIKE', "%{$keyword}%")
                     ->orWhere('pet_breed', 'LIKE', "%{$keyword}%")
-                    ->orWhere('microchip_number', 'LIKE', "%{$keyword}%")
                     ->orWhereHas('petType', function ($q) use ($keyword) {
                         $q->where('name', 'LIKE', "%{$keyword}%");
                     });
@@ -622,7 +901,6 @@ class ClientController extends Controller
                 'pet_breed' => $pet->pet_breed,
                 'pet_gender' => $pet->pet_gender,
                 'pet_birth_date' => $pet->pet_birth_date ? $pet->pet_birth_date->toDateString() : null,
-                'microchip_number' => $pet->microchip_number,
                 'pet_allergies' => $pet->pet_allergies,
                 'pet_type' => [
                     'id' => $pet->petType->id ?? null,
@@ -687,7 +965,6 @@ class ClientController extends Controller
             'custom_pet_breed_name' => 'nullable|string|max:100',
             'pet_gender' => 'nullable|in:Male,Female',
             'pet_birth_date' => 'nullable|date',
-            'microchip_number' => 'nullable|string|max:100',
             'pet_allergies' => 'nullable|string',
         ]);
 
@@ -744,7 +1021,6 @@ class ClientController extends Controller
                 'pet_breed' => $petBreed,
                 'pet_gender' => $validated['pet_gender'] ?? null,
                 'pet_birth_date' => $validated['pet_birth_date'] ?? null,
-                'microchip_number' => $validated['microchip_number'] ?? null,
                 'pet_allergies' => $validated['pet_allergies'] ?? null,
                 'user_id' => auth()->id(), // Automatically assign to authenticated user
             ]);
@@ -789,7 +1065,6 @@ class ClientController extends Controller
                 'pet_breed' => $pet->pet_breed,
                 'pet_gender' => $pet->pet_gender,
                 'pet_birth_date' => $pet->pet_birth_date ? $pet->pet_birth_date->toDateString() : null,
-                'microchip_number' => $pet->microchip_number,
                 'pet_allergies' => $pet->pet_allergies,
             ],
             'pet_types' => $pet_types,
@@ -813,7 +1088,6 @@ class ClientController extends Controller
             'pet_breed' => 'required|string|max:100',
             'pet_gender' => 'nullable|in:Male,Female',
             'pet_birth_date' => 'nullable|date',
-            'microchip_number' => 'nullable|string|max:100',
             'pet_allergies' => 'nullable|string',
         ]);
 
@@ -823,7 +1097,6 @@ class ClientController extends Controller
             'pet_breed' => $validated['pet_breed'],
             'pet_gender' => $validated['pet_gender'] ?? null,
             'pet_birth_date' => $validated['pet_birth_date'] ?? null,
-            'microchip_number' => $validated['microchip_number'] ?? null,
             'pet_allergies' => $validated['pet_allergies'] ?? null,
         ]);
 

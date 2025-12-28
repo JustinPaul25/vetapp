@@ -9,6 +9,7 @@ import { Badge } from '@/components/ui/badge';
 import { ref } from 'vue';
 import { dashboard } from '@/routes';
 import { router } from '@inertiajs/vue3';
+import ReportGenerator from '@/components/ReportGenerator.vue';
 
 interface Prescription {
     id: number;
@@ -136,6 +137,11 @@ const printPrescription = (appointmentId: number) => {
                                 View and manage all prescriptions in the system
                             </CardDescription>
                         </div>
+                        <ReportGenerator
+                            export-url="/admin/prescriptions/export"
+                            report-title="Prescriptions"
+                            :filters="{ search: searchQuery, sort_by: sortBy, sort_direction: sortDirection }"
+                        />
                     </div>
                 </CardHeader>
                 <CardContent>

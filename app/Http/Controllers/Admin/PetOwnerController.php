@@ -150,7 +150,6 @@ class PetOwnerController extends Controller
                         'pet_breed' => $patient->pet_breed,
                         'pet_gender' => $patient->pet_gender,
                         'pet_birth_date' => $patient->pet_birth_date ? $patient->pet_birth_date->toDateString() : null,
-                        'microchip_number' => $patient->microchip_number,
                         'pet_type' => [
                             'id' => $patient->petType->id ?? null,
                             'name' => $patient->petType->name ?? null,

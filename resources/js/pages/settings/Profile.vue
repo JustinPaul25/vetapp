@@ -3,10 +3,12 @@ import ProfileController from '@/actions/App/Http/Controllers/Settings/ProfileCo
 import { edit } from '@/routes/profile';
 import { send } from '@/routes/verification';
 import { Form, Head, Link, usePage } from '@inertiajs/vue3';
+import { ref } from 'vue';
 
 import DeleteUser from '@/components/DeleteUser.vue';
 import HeadingSmall from '@/components/HeadingSmall.vue';
 import InputError from '@/components/InputError.vue';
+import LocationMapPicker from '@/components/LocationMapPicker.vue';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -30,6 +32,20 @@ const breadcrumbItems: BreadcrumbItem[] = [
 
 const page = usePage();
 const user = page.props.auth.user;
+
+// Location state - convert from database 'long' to component 'lng'
+const location = ref<{ lat: number | null; lng: number | null } | null>(
+    user.lat && user.long
+        ? { lat: parseFloat(user.lat), lng: parseFloat(user.long) }
+        : null
+);
+
+const address = ref<string>(user.address || '');
+
+// Update location when map picker changes
+const updateLocation = (value: { lat: number | null; lng: number | null }) => {
+    location.value = value;
+};
 </script>
 
 <template>
@@ -75,6 +91,45 @@ const user = page.props.auth.user;
                             placeholder="Email address"
                         />
                         <InputError class="mt-2" :message="errors.email" />
+                    </div>
+
+                    <div class="grid gap-2">
+                        <Label for="address">Address</Label>
+                        <Input
+                            id="address"
+                            type="text"
+                            class="mt-1 block w-full"
+                            name="address"
+                            v-model="address"
+                            autocomplete="street-address"
+                            placeholder="Street, Barangay, City, Province"
+                        />
+                        <InputError class="mt-2" :message="errors.address" />
+                    </div>
+
+                    <div class="grid gap-2">
+                        <Label>Location Pin</Label>
+                        <p class="text-xs text-muted-foreground mb-2">
+                            Click on the map to set a location pin, or drag the pin to adjust its position.
+                        </p>
+                        <LocationMapPicker
+                            :model-value="location"
+                            @update:model-value="updateLocation"
+                            height="400px"
+                        />
+                        <InputError class="mt-2" :message="errors.lat" />
+                        <InputError class="mt-2" :message="errors.long" />
+                        <!-- Hidden inputs for location data -->
+                        <input
+                            type="hidden"
+                            name="lat"
+                            :value="location?.lat ?? ''"
+                        />
+                        <input
+                            type="hidden"
+                            name="long"
+                            :value="location?.lng ?? ''"
+                        />
                     </div>
 
                     <div v-if="mustVerifyEmail && !user.email_verified_at">

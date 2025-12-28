@@ -34,6 +34,12 @@ class DatabaseSeeder extends Seeder
         // Seed medicines
         $this->call(MedicineSeeder::class);
 
+        // Seed symptoms (including specific vomiting types)
+        $this->call(SymptomsSeeder::class);
+
+        // Associate vomiting types with relevant diseases for ML training
+        $this->call(VomitingTypesDiseaseAssociationSeeder::class);
+
         // Seed historical data (patients, appointments, prescriptions, etc.)
         $this->call(HistoricalDataSeeder::class);
     }

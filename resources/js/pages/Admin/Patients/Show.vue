@@ -59,7 +59,6 @@ interface Patient {
     pet_breed: string;
     pet_gender: string | null;
     pet_birth_date: string | null;
-    microchip_number: string | null;
     pet_allergies: string | null;
     pet_type: PetType | null;
     owner: Owner | null;
@@ -222,11 +221,6 @@ const getWeightChange = () => {
                                     <div class="text-lg font-semibold">
                                         {{ calculateAge(patient.pet_birth_date) }}
                                     </div>
-                                </div>
-
-                                <div class="space-y-2">
-                                    <Label class="text-sm font-medium text-muted-foreground">Microchip Number</Label>
-                                    <div class="text-lg font-semibold">{{ patient.microchip_number || '—' }}</div>
                                 </div>
 
                                 <div class="space-y-2">

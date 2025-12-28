@@ -6,9 +6,12 @@ use App\Http\Controllers\Controller;
 use App\Models\Medicine;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
+use App\Traits\HasDateFiltering;
+use Barryvdh\DomPDF\Facade\Pdf;
 
 class MedicineController extends Controller
 {
+    use HasDateFiltering;
     /**
      * Display a listing of the resource.
      */
@@ -20,6 +23,9 @@ class MedicineController extends Controller
         if ($request->has('search') && !empty($request->search)) {
             $query->where('name', 'LIKE', $request->search . '%');
         }
+
+        // Date filtering
+        $this->applyDateFilter($query, $request, 'created_at');
 
         // Sort functionality
         $sortBy = $request->get('sort_by', 'created_at');
@@ -153,5 +159,103 @@ class MedicineController extends Controller
 
         return redirect()->route('admin.medicines.index')
             ->with('success', 'Medicine deleted successfully.');
+    }
+
+    /**
+     * Export medicines report.
+     */
+    public function export(Request $request)
+    {
+        $query = Medicine::query();
+
+        if ($request->has('search') && !empty($request->search)) {
+            $query->where('name', 'LIKE', $request->search . '%');
+        }
+
+        $this->applyDateFilter($query, $request, 'created_at');
+
+        $medicines = $query->orderBy('created_at', 'desc')->get();
+
+        $format = $request->get('format', 'pdf');
+
+        if ($format === 'csv') {
+            return $this->exportCsv($medicines);
+        }
+
+        return $this->exportPdf($medicines, $request);
+    }
+
+    private function exportPdf($medicines, $request)
+    {
+        $data = $medicines->map(function ($medicine) {
+            return [
+                'name' => $medicine->name,
+                'stock' => $medicine->stock,
+                'dosage' => $medicine->dosage,
+                'route' => $medicine->route,
+                'created_at' => $medicine->created_at->format('Y-m-d'),
+            ];
+        });
+
+        $filterInfo = $this->getFilterInfo($request);
+
+        $pdf = Pdf::loadView('admin.reports.medicines', [
+            'medicines' => $data,
+            'title' => 'Medicines Report',
+            'filterInfo' => $filterInfo,
+            'total' => $data->count(),
+        ]);
+
+        return $pdf->stream('medicines-report-' . date('Y-m-d') . '.pdf');
+    }
+
+    private function exportCsv($medicines)
+    {
+        $filename = 'medicines-report-' . date('Y-m-d') . '.csv';
+        $headers = [
+            'Content-Type' => 'text/csv',
+            'Content-Disposition' => "attachment; filename=\"{$filename}\"",
+        ];
+
+        $callback = function () use ($medicines) {
+            $file = fopen('php://output', 'w');
+            
+            fputcsv($file, ['Name', 'Stock', 'Dosage', 'Route', 'Created At']);
+
+            foreach ($medicines as $medicine) {
+                fputcsv($file, [
+                    $medicine->name,
+                    $medicine->stock,
+                    $medicine->dosage,
+                    $medicine->route,
+                    $medicine->created_at->format('Y-m-d'),
+                ]);
+            }
+
+            fclose($file);
+        };
+
+        return response()->stream($callback, 200, $headers);
+    }
+
+    private function getFilterInfo($request)
+    {
+        $filterType = $request->get('filter_type');
+        
+        switch ($filterType) {
+            case 'date':
+                return 'Date: ' . $request->get('date');
+            case 'month':
+                $month = $request->get('month');
+                $year = $request->get('year');
+                $monthName = date('F', mktime(0, 0, 0, (int)$month, 1));
+                return "Month: {$monthName} {$year}";
+            case 'year':
+                return 'Year: ' . $request->get('year');
+            case 'range':
+                return 'Range: ' . $request->get('date_from') . ' to ' . $request->get('date_to');
+            default:
+                return 'All Records';
+        }
     }
 }

@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { Users, Plus, Edit, Trash2, Search, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-vue-next';
 import { ref, computed } from 'vue';
 import { dashboard } from '@/routes';
+import ReportGenerator from '@/components/ReportGenerator.vue';
 
 interface User {
     id: number;
@@ -128,12 +129,19 @@ const adminUsersRoute = (path: string) => {
                                 Manage all users and their roles
                             </CardDescription>
                         </div>
-                        <Link :href="adminUsersRoute('/create')">
-                            <Button>
-                                <Plus class="h-4 w-4 mr-2" />
-                                Add User
-                            </Button>
-                        </Link>
+                        <div class="flex gap-2">
+                            <ReportGenerator
+                                export-url="/admin/users/export"
+                                report-title="Users"
+                                :filters="{ search: searchQuery, sort_by: sortBy, sort_direction: sortDirection }"
+                            />
+                            <Link :href="adminUsersRoute('/create')">
+                                <Button>
+                                    <Plus class="h-4 w-4 mr-2" />
+                                    Add User
+                                </Button>
+                            </Link>
+                        </div>
                     </div>
                 </CardHeader>
                 <CardContent>

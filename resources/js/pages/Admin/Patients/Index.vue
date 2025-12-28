@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Heart, Plus, Edit, Trash2, Eye, Search, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-vue-next';
 import { computed, ref } from 'vue';
 import { dashboard } from '@/routes';
+import ReportGenerator from '@/components/ReportGenerator.vue';
 
 interface PetType {
     id: number;
@@ -26,7 +27,6 @@ interface Patient {
     pet_breed: string;
     pet_gender: string | null;
     pet_birth_date: string | null;
-    microchip_number: string | null;
     pet_allergies: string | null;
     pet_type: PetType | null;
     owner: Owner | null;
@@ -166,12 +166,19 @@ const calculateAge = (birthDate: string | null) => {
                                 Manage all patients in the system
                             </CardDescription>
                         </div>
-                        <Link :href="adminPatientsRoute('/create')">
-                            <Button>
-                                <Plus class="h-4 w-4 mr-2" />
-                                Add Patient
-                            </Button>
-                        </Link>
+                        <div class="flex gap-2">
+                            <ReportGenerator
+                                export-url="/admin/patients/export"
+                                report-title="Patients"
+                                :filters="{ search: searchQuery, sort_by: sortBy, sort_direction: sortDirection }"
+                            />
+                            <Link :href="adminPatientsRoute('/create')">
+                                <Button>
+                                    <Plus class="h-4 w-4 mr-2" />
+                                    Add Patient
+                                </Button>
+                            </Link>
+                        </div>
                     </div>
                 </CardHeader>
                 <CardContent>

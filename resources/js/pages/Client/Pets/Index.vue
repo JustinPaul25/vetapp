@@ -19,7 +19,6 @@ interface Pet {
     pet_breed: string;
     pet_gender: string | null;
     pet_birth_date: string | null;
-    microchip_number: string | null;
     pet_allergies: string | null;
     pet_type: PetType | null;
     created_at: string;
@@ -175,7 +174,7 @@ const calculateAge = (birthDate: string | null) => {
                             <Input
                                 v-model="searchQuery"
                                 type="text"
-                                placeholder="Search by name, breed, microchip..."
+                                placeholder="Search by name, breed..."
                                 class="pl-10"
                                 @keyup.enter="handleSearch"
                             />
@@ -221,7 +220,6 @@ const calculateAge = (birthDate: string | null) => {
                                         </button>
                                     </th>
                                     <th class="text-left p-3 font-semibold">Age</th>
-                                    <th class="text-left p-3 font-semibold">Microchip</th>
                                     <th class="text-right p-3 font-semibold">Actions</th>
                                 </tr>
                             </thead>
@@ -245,9 +243,6 @@ const calculateAge = (birthDate: string | null) => {
                                     </td>
                                     <td class="p-3 text-sm">
                                         {{ calculateAge(pet.pet_birth_date) }}
-                                    </td>
-                                    <td class="p-3 text-sm">
-                                        {{ pet.microchip_number || '—' }}
                                     </td>
                                     <td class="p-3">
                                         <div class="flex justify-end gap-2">

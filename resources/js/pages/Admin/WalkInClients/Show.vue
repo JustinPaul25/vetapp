@@ -21,7 +21,6 @@ interface Patient {
     pet_breed: string;
     pet_gender: string | null;
     pet_birth_date: string | null;
-    microchip_number: string | null;
     pet_type: PetType | null;
     created_at: string;
 }

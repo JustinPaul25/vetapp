@@ -8,6 +8,8 @@ import { Badge } from '@/components/ui/badge';
 import { UserPlus, Plus, Edit, Trash2, Eye, Search, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-vue-next';
 import { computed, ref } from 'vue';
 import { dashboard } from '@/routes';
+import { useToast } from '@/composables/useToast';
+import ReportGenerator from '@/components/ReportGenerator.vue';
 
 interface Patient {
     id: number;
@@ -53,9 +55,16 @@ const searchQuery = ref(props.filters?.search || '');
 const sortBy = ref(props.filters?.sort_by || 'created_at');
 const sortDirection = ref(props.filters?.sort_direction || 'desc');
 
+const { error: showError } = useToast();
+
 const deleteWalkInClient = (clientId: number, clientName: string) => {
     if (confirm(`Are you sure you want to delete ${clientName}? This will also delete all associated patients.`)) {
-        router.delete(`/admin/walk_in_clients/${clientId}`);
+        router.delete(`/admin/walk_in_clients/${clientId}`, {
+            onError: (errors) => {
+                const errorMessage = errors.message || 'Failed to delete walk-in client. Please try again.';
+                showError(errorMessage);
+            },
+        });
     }
 };
 
@@ -138,12 +147,19 @@ const getSortIcon = (column: string) => {
                                 Manage walk-in clients who visit without prior appointments
                             </CardDescription>
                         </div>
-                        <Link :href="adminWalkInClientsRoute('/create')">
-                            <Button>
-                                <Plus class="h-4 w-4 mr-2" />
-                                Add Walk-In Client
-                            </Button>
-                        </Link>
+                        <div class="flex gap-2">
+                            <ReportGenerator
+                                export-url="/admin/walk_in_clients/export"
+                                report-title="Walk-In Clients"
+                                :filters="{ search: searchQuery, sort_by: sortBy, sort_direction: sortDirection }"
+                            />
+                            <Link :href="adminWalkInClientsRoute('/create')">
+                                <Button>
+                                    <Plus class="h-4 w-4 mr-2" />
+                                    Add Walk-In Client
+                                </Button>
+                            </Link>
+                        </div>
                     </div>
                 </CardHeader>
                 <CardContent>
@@ -190,7 +206,7 @@ const getSortIcon = (column: string) => {
                                         </button>
                                     </th>
                                     <th class="text-left p-3 font-semibold">Mobile</th>
-                                    <th class="text-left p-3 font-semibold">Patients</th>
+                                    <th class="text-left p-3 font-semibold">Pet</th>
                                     <th class="text-left p-3 font-semibold">
                                         <button
                                             @click="handleSort('created_at')"

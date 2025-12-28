@@ -30,7 +30,6 @@ interface Patient {
     pet_breed: string;
     pet_gender: string | null;
     pet_birth_date: string | null;
-    microchip_number: string | null;
     pet_allergies: string | null;
     user_id: number | null;
 }
@@ -55,7 +54,6 @@ const form = router.form({
     pet_breed: props.patient.pet_breed,
     pet_gender: props.patient.pet_gender || '',
     pet_birth_date: props.patient.pet_birth_date || '',
-    microchip_number: props.patient.microchip_number || '',
     pet_allergies: props.patient.pet_allergies || '',
     user_id: props.patient.user_id ? props.patient.user_id.toString() : '',
 });
@@ -161,18 +159,6 @@ const petTypeOptions = computed(() => {
                                     autocomplete="off"
                                 />
                                 <InputError :message="form.errors.pet_birth_date" />
-                            </div>
-
-                            <div class="space-y-2">
-                                <Label for="microchip_number">Microchip Number</Label>
-                                <Input
-                                    id="microchip_number"
-                                    v-model="form.microchip_number"
-                                    type="text"
-                                    placeholder="Microchip number"
-                                    autocomplete="off"
-                                />
-                                <InputError :message="form.errors.microchip_number" />
                             </div>
                         </div>
 

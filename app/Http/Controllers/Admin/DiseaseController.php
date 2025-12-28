@@ -66,7 +66,10 @@ class DiseaseController extends Controller
      */
     public function create()
     {
-        $symptoms = Symptom::orderBy('name')->get(['id', 'name']);
+        // Exclude general "Diarrhea" and "Vomiting" when specific types exist
+        $symptoms = Symptom::whereNotIn('name', ['Diarrhea', 'Vomiting'])
+            ->orderBy('name')
+            ->get(['id', 'name']);
         $medicines = Medicine::orderBy('name')->get(['id', 'name', 'dosage']);
 
         return Inertia::render('Admin/Diseases/Create', [
@@ -143,7 +146,10 @@ class DiseaseController extends Controller
     {
         $disease->load(['symptoms', 'medicines']);
         
-        $allSymptoms = Symptom::orderBy('name')->get(['id', 'name']);
+        // Exclude general "Diarrhea" and "Vomiting" when specific types exist
+        $allSymptoms = Symptom::whereNotIn('name', ['Diarrhea', 'Vomiting'])
+            ->orderBy('name')
+            ->get(['id', 'name']);
         $allMedicines = Medicine::orderBy('name')->get(['id', 'name', 'dosage']);
 
         return Inertia::render('Admin/Diseases/Edit', [

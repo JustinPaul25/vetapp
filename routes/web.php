@@ -24,6 +24,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::get('/', [\App\Http\Controllers\ClientController::class, 'appointments'])->name('index');
         Route::post('/', [\App\Http\Controllers\ClientController::class, 'bookAppointment'])->name('book');
         Route::get('/times/available', [\App\Http\Controllers\ClientController::class, 'getAvailableTimes'])->name('times.available');
+        Route::patch('/{id}/reschedule', [\App\Http\Controllers\ClientController::class, 'rescheduleAppointment'])->name('reschedule');
         Route::delete('/{id}', [\App\Http\Controllers\ClientController::class, 'cancelAppointment'])->name('cancel');
         Route::get('/{id}', [\App\Http\Controllers\ClientController::class, 'showAppointments'])->name('show');
     });
@@ -45,13 +46,14 @@ Route::middleware(['auth', 'verified', \App\Http\Middleware\EnsureUserIsAdmin::c
     ->name('admin.')
     ->group(function () {
         Route::resource('users', \App\Http\Controllers\Admin\UserController::class);
+        Route::get('users/export', [\App\Http\Controllers\Admin\UserController::class, 'export'])->name('users.export');
         Route::resource('roles', \App\Http\Controllers\Admin\RoleController::class);
-        Route::resource('pet_types', \App\Http\Controllers\Admin\PetTypeController::class);
-        Route::resource('pet_breeds', \App\Http\Controllers\Admin\PetBreedController::class);
-        Route::resource('pet_owners', \App\Http\Controllers\Admin\PetOwnerController::class);
-        Route::post('walk_in_clients/search-pets', [\App\Http\Controllers\Admin\WalkInClientController::class, 'searchPets'])->name('walk_in_clients.search-pets');
-        Route::post('walk_in_clients/lookup-by-email', [\App\Http\Controllers\Admin\WalkInClientController::class, 'lookupByEmail'])->name('walk_in_clients.lookup-by-email');
-        Route::resource('walk_in_clients', \App\Http\Controllers\Admin\WalkInClientController::class);
+        
+        // Prescription creation routes (admin-only)
+        Route::prefix('appointments')->name('appointments.')->group(function () {
+            Route::get('/{id}/prescription/create', [\App\Http\Controllers\Admin\AppointmentController::class, 'createPrescription'])->name('prescription.create');
+            Route::post('/{id}/prescribe', [\App\Http\Controllers\Admin\AppointmentController::class, 'prescribe'])->name('prescribe');
+        });
         
         // Settings routes
         Route::prefix('settings')->name('settings.')->group(function () {
@@ -100,23 +102,36 @@ Route::middleware(['auth', 'verified', \App\Http\Middleware\EnsureUserIsAdminOrS
     ->name('admin.')
     ->group(function () {
         Route::resource('patients', \App\Http\Controllers\Admin\PatientController::class);
+        Route::get('patients/export', [\App\Http\Controllers\Admin\PatientController::class, 'export'])->name('patients.export');
         Route::get('patients/{patient}/weight-history', [\App\Http\Controllers\Admin\PatientController::class, 'getWeightHistory'])->name('patients.weight-history');
         Route::post('patients/{patient}/weight-history', [\App\Http\Controllers\Admin\PatientController::class, 'storeWeightHistory'])->name('patients.weight-history.store');
         Route::resource('medicines', \App\Http\Controllers\Admin\MedicineController::class);
+        Route::get('medicines/export', [\App\Http\Controllers\Admin\MedicineController::class, 'export'])->name('medicines.export');
         
-        // Prescription routes
+        // Reference Data - accessible to both admin and staff
+        Route::resource('pet_types', \App\Http\Controllers\Admin\PetTypeController::class);
+        Route::resource('pet_breeds', \App\Http\Controllers\Admin\PetBreedController::class);
+        Route::resource('pet_owners', \App\Http\Controllers\Admin\PetOwnerController::class);
+        
+        // Prescription routes (view only for staff, admin can also create via appointments route)
         Route::prefix('prescriptions')->name('prescriptions.')->group(function () {
             Route::get('/', [\App\Http\Controllers\Admin\PrescriptionController::class, 'index'])->name('all');
+            Route::get('/export', [\App\Http\Controllers\Admin\PrescriptionController::class, 'export'])->name('export');
         });
         
-        // Appointment routes
+        // Walk-in client routes (admin and staff)
+        Route::post('walk_in_clients/search-pets', [\App\Http\Controllers\Admin\WalkInClientController::class, 'searchPets'])->name('walk_in_clients.search-pets');
+        Route::post('walk_in_clients/lookup-by-email', [\App\Http\Controllers\Admin\WalkInClientController::class, 'lookupByEmail'])->name('walk_in_clients.lookup-by-email');
+        Route::get('walk_in_clients/export', [\App\Http\Controllers\Admin\WalkInClientController::class, 'export'])->name('walk_in_clients.export');
+        Route::resource('walk_in_clients', \App\Http\Controllers\Admin\WalkInClientController::class);
+        
+        // Appointment routes (admin and staff)
         Route::prefix('appointments')->name('appointments.')->group(function () {
             Route::get('/', [\App\Http\Controllers\Admin\AppointmentController::class, 'index'])->name('index');
             // Removed create and store routes - only clients can create appointments
             Route::get('/{id}', [\App\Http\Controllers\Admin\AppointmentController::class, 'show'])->name('show');
             Route::patch('/{id}/approve', [\App\Http\Controllers\Admin\AppointmentController::class, 'approve'])->name('approve');
-            Route::get('/{id}/prescription/create', [\App\Http\Controllers\Admin\AppointmentController::class, 'createPrescription'])->name('prescription.create');
-            Route::post('/{id}/prescribe', [\App\Http\Controllers\Admin\AppointmentController::class, 'prescribe'])->name('prescribe');
+            // Prescription viewing routes (admin and staff can view/download prescriptions)
             Route::get('/{id}/prescription', [\App\Http\Controllers\Admin\AppointmentController::class, 'downloadPrescription'])->name('prescription');
             Route::get('/{id}/prescription/debug', [\App\Http\Controllers\Admin\AppointmentController::class, 'debugPrescription'])->name('prescription.debug');
         });

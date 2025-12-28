@@ -112,9 +112,9 @@ const selectedSymptomObjects = computed(() => {
     );
 });
 
-// Computed property for top 5 predicted diseases
+// Computed property for top 10 predicted diseases
 const topPredictedDiseases = computed(() => {
-    return searchedDiseases.value.slice(0, 5);
+    return searchedDiseases.value.slice(0, 10);
 });
 
 // Toggle symptom selection
@@ -300,6 +300,9 @@ addMedicineRow();
 
 // Submit form
 const submit = () => {
+    // Sync disease_ids from selectedDiseases before submission
+    form.disease_ids = selectedDiseases.value.map(d => d.id);
+    
     // Prepare medicines data
     form.medicines = medicineRows.value
         .filter(row => row.medicine_id && row.dosage && row.instructions && row.quantity)
@@ -311,8 +314,9 @@ const submit = () => {
         }));
 
     form.post(`/admin/appointments/${props.appointment.id}/prescribe`, {
-        onSuccess: () => {
-            router.visit('/admin/prescriptions');
+        onError: (errors) => {
+            // Error handling - errors will be displayed via form validation
+            console.error('Error creating prescription:', errors);
         },
     });
 };
@@ -493,12 +497,12 @@ const submit = () => {
 
                         <!-- Disease Search Results -->
                         <div v-else-if="searchedDiseases.length > 0" class="space-y-2">
-                            <Label>Predicted Diseases (based on symptoms) - Top 5</Label>
+                            <Label>Predicted Diseases (based on symptoms) - Top 10</Label>
                             <div class="grid grid-cols-2 gap-2">
                                 <Card
                                     v-for="disease in topPredictedDiseases"
                                     :key="disease.id"
-                                    class="cursor-pointer hover:bg-muted"
+                                    class="cursor-pointer hover:bg-muted py-0"
                                     :class="{ 'ring-2 ring-primary': selectedDiseases.find(d => d.id === disease.id) }"
                                     @click="addDisease(disease)"
                                 >

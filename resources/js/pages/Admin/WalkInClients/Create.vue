@@ -25,7 +25,6 @@ interface FoundPet {
     pet_breed: string;
     pet_gender: string | null;
     pet_birth_date: string | null;
-    microchip_number: string | null;
     pet_allergies: string | null;
     pet_type: {
         id: number;
@@ -92,7 +91,6 @@ const existingPetInfo = ref<{
     pet_breed: string;
     pet_gender: string | null;
     pet_birth_date: string | null;
-    microchip_number: string | null;
     pet_allergies: string | null;
 } | null>(null);
 
@@ -120,7 +118,6 @@ const form = router.form({
     custom_pet_breed_name: '', // For new custom breeds
     pet_gender: '',
     pet_birth_date: '',
-    microchip_number: '',
     pet_allergies: '',
     // Appointment fields
     appointment_type_id: '',
@@ -322,7 +319,6 @@ const useExistingPet = (pet: FoundPet) => {
         pet_breed: pet.pet_breed,
         pet_gender: pet.pet_gender,
         pet_birth_date: pet.pet_birth_date,
-        microchip_number: pet.microchip_number,
         pet_allergies: pet.pet_allergies,
     };
     
@@ -654,10 +650,6 @@ const submit = () => {
                                             <p class="text-sm font-medium text-muted-foreground">Birth Date</p>
                                             <p class="text-sm">{{ existingPetInfo.pet_birth_date || 'Not provided' }}</p>
                                         </div>
-                                        <div>
-                                            <p class="text-sm font-medium text-muted-foreground">Microchip Number</p>
-                                            <p class="text-sm">{{ existingPetInfo.microchip_number || 'Not provided' }}</p>
-                                        </div>
                                     </div>
                                     <div v-if="existingPetInfo.pet_allergies">
                                         <p class="text-sm font-medium text-muted-foreground">Allergies</p>
@@ -749,18 +741,6 @@ const submit = () => {
                                             autocomplete="off"
                                         />
                                         <InputError :message="form.errors.pet_birth_date" />
-                                    </div>
-
-                                    <div class="space-y-2">
-                                        <Label for="microchip_number">Microchip Number</Label>
-                                        <Input
-                                            id="microchip_number"
-                                            v-model="form.microchip_number"
-                                            type="text"
-                                            placeholder="Microchip number"
-                                            autocomplete="off"
-                                        />
-                                        <InputError :message="form.errors.microchip_number" />
                                     </div>
                                 </div>
 

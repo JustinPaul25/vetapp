@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Pill, Plus, Edit, Trash2, Eye, Search, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-vue-next';
 import { ref } from 'vue';
 import { dashboard } from '@/routes';
+import ReportGenerator from '@/components/ReportGenerator.vue';
 
 interface Medicine {
     id: number;
@@ -128,12 +129,19 @@ const getSortIcon = (column: string) => {
                                 Manage all medicines in the system
                             </CardDescription>
                         </div>
-                        <Link :href="adminMedicinesRoute('/create')">
-                            <Button>
-                                <Plus class="h-4 w-4 mr-2" />
-                                Add Medicine
-                            </Button>
-                        </Link>
+                        <div class="flex gap-2">
+                            <ReportGenerator
+                                export-url="/admin/medicines/export"
+                                report-title="Medicines"
+                                :filters="{ search: searchQuery, sort_by: sortBy, sort_direction: sortDirection }"
+                            />
+                            <Link :href="adminMedicinesRoute('/create')">
+                                <Button>
+                                    <Plus class="h-4 w-4 mr-2" />
+                                    Add Medicine
+                                </Button>
+                            </Link>
+                        </div>
                     </div>
                 </CardHeader>
                 <CardContent>

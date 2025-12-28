@@ -11,10 +11,14 @@ import {
     DialogFooter,
     DialogHeader,
     DialogTitle,
+    DialogTrigger,
 } from '@/components/ui/dialog';
-import { Calendar, ArrowLeft, X } from 'lucide-vue-next';
+import { Calendar, ArrowLeft, X, CalendarClock } from 'lucide-vue-next';
 import { dashboard } from '@/routes';
-import { ref } from 'vue';
+import { ref, computed, watch } from 'vue';
+import { CalendarDatePicker } from '@/components/ui/calendar-date-picker';
+import axios from 'axios';
+import { useToast } from '@/composables/useToast';
 
 interface Diagnosis {
     id: number;
@@ -44,7 +48,6 @@ interface Patient {
     pet_breed: string;
     pet_gender: string | null;
     pet_birth_date: string | null;
-    microchip_number: string | null;
     pet_allergies: string | null;
     pet_type: string;
 }
@@ -59,6 +62,7 @@ interface Appointment {
     is_completed: boolean;
     is_canceled: boolean;
     remarks: string | null;
+    summary: string | null;
     created_at: string;
     updated_at: string;
 }
@@ -124,6 +128,99 @@ const calculateAge = (birthDate: string | null) => {
 
 const cancelDialogOpen = ref(false);
 const canceling = ref(false);
+const { error: showError } = useToast();
+
+// Reschedule functionality
+const rescheduleDialogOpen = ref(false);
+const rescheduling = ref(false);
+const rescheduleForm = ref({
+    appointment_date: '',
+    appointment_time: '',
+});
+const availableTimes = ref<string[]>([]);
+const loadingTimes = ref(false);
+const rescheduleErrors = ref<Record<string, string[]>>({});
+
+// Get tomorrow's date as minimum date
+const minDate = computed(() => {
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    return tomorrow.toISOString().split('T')[0];
+});
+
+// Watch for date changes to fetch available times
+watch(() => rescheduleForm.value.appointment_date, (newDate) => {
+    if (newDate) {
+        fetchAvailableTimes(newDate);
+    } else {
+        availableTimes.value = [];
+        rescheduleForm.value.appointment_time = '';
+    }
+});
+
+// Watch for dialog open to initialize form
+watch(() => rescheduleDialogOpen.value, (isOpen) => {
+    if (isOpen) {
+        // Initialize with current appointment date/time, but ensure it's not in the past
+        const currentDate = props.appointment.appointment_date || '';
+        const today = new Date().toISOString().split('T')[0];
+        const appointmentDate = currentDate > today ? currentDate : minDate.value;
+        
+        rescheduleForm.value = {
+            appointment_date: appointmentDate,
+            appointment_time: formatTime(props.appointment.appointment_time) || '',
+        };
+        rescheduleErrors.value = {};
+        if (rescheduleForm.value.appointment_date) {
+            fetchAvailableTimes(rescheduleForm.value.appointment_date);
+        }
+    }
+});
+
+const fetchAvailableTimes = async (date: string) => {
+    loadingTimes.value = true;
+    rescheduleForm.value.appointment_time = '';
+    try {
+        const response = await axios.get('/appointments/times/available', {
+            params: { selectedDate: date },
+        });
+        availableTimes.value = response.data.availableTimes || [];
+    } catch (error) {
+        console.error('Error fetching available times:', error);
+        availableTimes.value = [];
+    } finally {
+        loadingTimes.value = false;
+    }
+};
+
+const handleReschedule = () => {
+    rescheduleErrors.value = {};
+    rescheduling.value = true;
+    
+    router.patch(
+        `/appointments/${props.appointment.id}/reschedule`,
+        {
+            appointment_date: rescheduleForm.value.appointment_date,
+            appointment_time: rescheduleForm.value.appointment_time,
+        },
+        {
+            preserveScroll: false,
+            onSuccess: () => {
+                rescheduleDialogOpen.value = false;
+                rescheduling.value = false;
+            },
+            onError: (err: any) => {
+                rescheduleErrors.value = (err.errors as Record<string, string[]>) || {};
+                rescheduling.value = false;
+                const errorMessage = err.message || 'Failed to reschedule appointment. Please check the form for errors.';
+                showError(errorMessage);
+            },
+            onFinish: () => {
+                rescheduling.value = false;
+            },
+        }
+    );
+};
 
 const cancelAppointment = () => {
     console.log('Cancel appointment called', {
@@ -134,19 +231,16 @@ const cancelAppointment = () => {
     
     if (!props.appointment.id) {
         console.error('Appointment ID is missing');
-        alert('Appointment ID is missing. Please refresh the page and try again.');
         return;
     }
     
     // Double check that appointment can be canceled
     if (props.appointment.is_canceled) {
-        alert('This appointment is already canceled.');
         cancelDialogOpen.value = false;
         return;
     }
     
     if (props.appointment.is_approved || props.appointment.is_completed) {
-        alert('Only pending appointments can be canceled.');
         cancelDialogOpen.value = false;
         return;
     }
@@ -165,8 +259,8 @@ const cancelAppointment = () => {
         onError: (errors) => {
             canceling.value = false;
             console.error('Error canceling appointment:', errors);
-            const errorMessage = errors?.error || errors?.message || 'Failed to cancel appointment. Please try again.';
-            alert(errorMessage);
+            const errorMessage = errors.message || 'Failed to cancel appointment. Please try again.';
+            showError(errorMessage);
         },
         onFinish: () => {
             canceling.value = false;
@@ -199,7 +293,79 @@ const cancelAppointment = () => {
                                 </CardDescription>
                             </div>
                         </div>
-                        <div v-if="!appointment.is_approved && !appointment.is_completed && !appointment.is_canceled">
+                        <div v-if="!appointment.is_completed && !appointment.is_canceled" class="flex gap-2">
+                            <Dialog v-model:open="rescheduleDialogOpen">
+                                <DialogTrigger as-child>
+                                    <Button variant="outline" type="button">
+                                        <CalendarClock class="h-4 w-4 mr-2" />
+                                        Reschedule
+                                    </Button>
+                                </DialogTrigger>
+                                <DialogContent class="sm:max-w-[500px]">
+                                    <DialogHeader>
+                                        <DialogTitle>Reschedule Appointment</DialogTitle>
+                                        <DialogDescription>
+                                            Choose a new date and time for your appointment
+                                        </DialogDescription>
+                                    </DialogHeader>
+                                    <div class="space-y-4 py-4">
+                                        <div class="space-y-2">
+                                            <Label for="reschedule_date">Appointment Date</Label>
+                                            <CalendarDatePicker
+                                                id="reschedule_date"
+                                                v-model="rescheduleForm.appointment_date"
+                                                :min-date="minDate"
+                                                :disabled="rescheduling"
+                                            />
+                                            <p v-if="rescheduleErrors.appointment_date" class="text-sm text-destructive">
+                                                {{ rescheduleErrors.appointment_date[0] }}
+                                            </p>
+                                        </div>
+                                        <div class="space-y-2">
+                                            <Label for="reschedule_time">Appointment Time</Label>
+                                            <select
+                                                id="reschedule_time"
+                                                v-model="rescheduleForm.appointment_time"
+                                                :disabled="!rescheduleForm.appointment_date || loadingTimes || rescheduling"
+                                                class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                                            >
+                                                <option value="">Select a time</option>
+                                                <option
+                                                    v-for="time in availableTimes"
+                                                    :key="time"
+                                                    :value="time"
+                                                >
+                                                    {{ time }}
+                                                </option>
+                                            </select>
+                                            <p v-if="loadingTimes" class="text-sm text-muted-foreground">
+                                                Loading available times...
+                                            </p>
+                                            <p v-if="rescheduleErrors.appointment_time" class="text-sm text-destructive">
+                                                {{ rescheduleErrors.appointment_time[0] }}
+                                            </p>
+                                        </div>
+                                    </div>
+                                    <DialogFooter>
+                                        <Button
+                                            type="button"
+                                            variant="outline"
+                                            @click="rescheduleDialogOpen = false"
+                                            :disabled="rescheduling"
+                                        >
+                                            Cancel
+                                        </Button>
+                                        <Button
+                                            type="button"
+                                            @click="handleReschedule"
+                                            :disabled="rescheduling || !rescheduleForm.appointment_date || !rescheduleForm.appointment_time"
+                                        >
+                                            <span v-if="rescheduling">Rescheduling...</span>
+                                            <span v-else>Reschedule Appointment</span>
+                                        </Button>
+                                    </DialogFooter>
+                                </DialogContent>
+                            </Dialog>
                             <Dialog v-model:open="cancelDialogOpen">
                                 <DialogTrigger as-child>
                                     <Button variant="destructive" type="button">
@@ -329,10 +495,6 @@ const cancelAppointment = () => {
                                                 <div class="text-lg font-semibold">{{ calculateAge(pet.pet_birth_date) }}</div>
                                             </div>
                                             <div class="space-y-2">
-                                                <Label class="text-sm font-medium text-muted-foreground">Microchip Number</Label>
-                                                <div class="text-lg font-semibold">{{ pet.microchip_number || '—' }}</div>
-                                            </div>
-                                            <div class="space-y-2">
                                                 <Label class="text-sm font-medium text-muted-foreground">Allergies</Label>
                                                 <div class="text-lg font-semibold">{{ pet.pet_allergies || '—' }}</div>
                                             </div>
@@ -370,14 +532,20 @@ const cancelAppointment = () => {
                                     <div class="text-lg font-semibold">{{ calculateAge(patient.pet_birth_date) }}</div>
                                 </div>
                                 <div class="space-y-2">
-                                    <Label class="text-sm font-medium text-muted-foreground">Microchip Number</Label>
-                                    <div class="text-lg font-semibold">{{ patient.microchip_number || '—' }}</div>
-                                </div>
-                                <div class="space-y-2">
                                     <Label class="text-sm font-medium text-muted-foreground">Allergies</Label>
                                     <div class="text-lg font-semibold">{{ patient.pet_allergies || '—' }}</div>
                                 </div>
                             </div>
+                        </div>
+
+                        <!-- Appointment Summary -->
+                        <div v-if="appointment.is_completed && appointment.summary">
+                            <h3 class="text-lg font-semibold mb-4">Appointment Summary</h3>
+                            <Card>
+                                <CardContent class="p-6">
+                                    <pre class="whitespace-pre-wrap text-sm font-mono bg-muted p-4 rounded-md">{{ appointment.summary }}</pre>
+                                </CardContent>
+                            </Card>
                         </div>
 
                         <!-- Prescription Details -->

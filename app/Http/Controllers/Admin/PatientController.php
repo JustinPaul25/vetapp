@@ -11,9 +11,12 @@ use App\Models\User;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Illuminate\Support\Facades\DB;
+use App\Traits\HasDateFiltering;
+use Barryvdh\DomPDF\Facade\Pdf;
 
 class PatientController extends Controller
 {
+    use HasDateFiltering;
     /**
      * Display a listing of the resource.
      */
@@ -37,6 +40,9 @@ class PatientController extends Controller
                     });
             });
         }
+
+        // Date filtering
+        $this->applyDateFilter($query, $request, 'created_at');
 
         // Sort functionality
         $sortBy = $request->get('sort_by', 'created_at');
@@ -63,7 +69,6 @@ class PatientController extends Controller
                 'pet_breed' => $patient->pet_breed,
                 'pet_gender' => $patient->pet_gender,
                 'pet_birth_date' => $patient->pet_birth_date ? $patient->pet_birth_date->toDateString() : null,
-                'microchip_number' => $patient->microchip_number,
                 'pet_allergies' => $patient->pet_allergies,
                 'pet_type' => [
                     'id' => $patient->petType->id ?? null,
@@ -138,7 +143,6 @@ class PatientController extends Controller
             'custom_pet_breed_name' => 'nullable|string|max:100',
             'pet_gender' => 'nullable|in:Male,Female',
             'pet_birth_date' => 'nullable|date',
-            'microchip_number' => 'nullable|string|max:100',
             'pet_allergies' => 'nullable|string',
             'user_id' => 'nullable|exists:users,id',
         ]);
@@ -196,7 +200,6 @@ class PatientController extends Controller
                 'pet_breed' => $petBreed,
                 'pet_gender' => $validated['pet_gender'] ?? null,
                 'pet_birth_date' => $validated['pet_birth_date'] ?? null,
-                'microchip_number' => $validated['microchip_number'] ?? null,
                 'pet_allergies' => $validated['pet_allergies'] ?? null,
                 'user_id' => $validated['user_id'] ?? null,
             ]);
@@ -220,7 +223,6 @@ class PatientController extends Controller
                 'pet_breed' => $patient->pet_breed,
                 'pet_gender' => $patient->pet_gender,
                 'pet_birth_date' => $patient->pet_birth_date ? $patient->pet_birth_date->toDateString() : null,
-                'microchip_number' => $patient->microchip_number,
                 'pet_allergies' => $patient->pet_allergies,
                 'pet_type' => [
                     'id' => $patient->petType->id ?? null,
@@ -294,7 +296,6 @@ class PatientController extends Controller
                 'pet_breed' => $patient->pet_breed,
                 'pet_gender' => $patient->pet_gender,
                 'pet_birth_date' => $patient->pet_birth_date ? $patient->pet_birth_date->toDateString() : null,
-                'microchip_number' => $patient->microchip_number,
                 'pet_allergies' => $patient->pet_allergies,
                 'user_id' => $patient->user_id,
             ],
@@ -314,7 +315,6 @@ class PatientController extends Controller
             'pet_breed' => 'required|string|max:100',
             'pet_gender' => 'nullable|in:Male,Female',
             'pet_birth_date' => 'nullable|date',
-            'microchip_number' => 'nullable|string|max:100',
             'pet_allergies' => 'nullable|string',
             'user_id' => 'nullable|exists:users,id',
         ]);
@@ -325,7 +325,6 @@ class PatientController extends Controller
             'pet_breed' => $validated['pet_breed'],
             'pet_gender' => $validated['pet_gender'] ?? null,
             'pet_birth_date' => $validated['pet_birth_date'] ?? null,
-            'microchip_number' => $validated['microchip_number'] ?? null,
             'pet_allergies' => $validated['pet_allergies'] ?? null,
             'user_id' => $validated['user_id'] ?? null,
         ]);
@@ -391,5 +390,123 @@ class PatientController extends Controller
                 'notes' => $weightHistory->notes,
             ],
         ]);
+    }
+
+    /**
+     * Export patients report.
+     */
+    public function export(Request $request)
+    {
+        $query = Patient::with(['petType', 'user']);
+
+        // Apply search if provided
+        if ($request->has('search') && !empty($request->search)) {
+            $keyword = $request->search;
+            $query->where(function ($q) use ($keyword) {
+                $q->where('pet_name', 'LIKE', "%{$keyword}%")
+                    ->orWhere('pet_breed', 'LIKE', "%{$keyword}%")
+                    ->orWhereHas('petType', function ($q) use ($keyword) {
+                        $q->where('name', 'LIKE', "%{$keyword}%");
+                    })
+                    ->orWhereHas('user', function ($q) use ($keyword) {
+                        $q->where(DB::raw("CONCAT(first_name, ' ', last_name)"), 'LIKE', "%{$keyword}%")
+                            ->orWhere('email', 'LIKE', "%{$keyword}%")
+                            ->orWhere('name', 'LIKE', "%{$keyword}%");
+                    });
+            });
+        }
+
+        // Apply date filtering
+        $this->applyDateFilter($query, $request, 'created_at');
+
+        $patients = $query->orderBy('created_at', 'desc')->get();
+
+        $format = $request->get('format', 'pdf');
+
+        if ($format === 'csv') {
+            return $this->exportCsv($patients);
+        }
+
+        return $this->exportPdf($patients, $request);
+    }
+
+    private function exportPdf($patients, $request)
+    {
+        $data = $patients->map(function ($patient) {
+            return [
+                'pet_name' => $patient->pet_name ?? 'N/A',
+                'pet_type' => $patient->petType->name ?? 'N/A',
+                'pet_breed' => $patient->pet_breed,
+                'pet_gender' => $patient->pet_gender ?? 'N/A',
+                'owner' => $patient->user ? (trim(($patient->user->first_name ?? '') . ' ' . ($patient->user->last_name ?? '')) ?: $patient->user->name) : 'N/A',
+                'owner_email' => $patient->user->email ?? 'N/A',
+                'created_at' => $patient->created_at->format('Y-m-d'),
+            ];
+        });
+
+        $filterInfo = $this->getFilterInfo($request);
+
+        $pdf = Pdf::loadView('admin.reports.patients', [
+            'patients' => $data,
+            'title' => 'Patients Report',
+            'filterInfo' => $filterInfo,
+            'total' => $data->count(),
+        ]);
+
+        return $pdf->stream('patients-report-' . date('Y-m-d') . '.pdf');
+    }
+
+    private function exportCsv($patients)
+    {
+        $filename = 'patients-report-' . date('Y-m-d') . '.csv';
+        $headers = [
+            'Content-Type' => 'text/csv',
+            'Content-Disposition' => "attachment; filename=\"{$filename}\"",
+        ];
+
+        $callback = function () use ($patients) {
+            $file = fopen('php://output', 'w');
+            
+            // Header row
+            fputcsv($file, ['Pet Name', 'Pet Type', 'Breed', 'Gender', 'Owner', 'Owner Email', 'Created At']);
+
+            // Data rows
+            foreach ($patients as $patient) {
+                fputcsv($file, [
+                    $patient->pet_name ?? 'N/A',
+                    $patient->petType->name ?? 'N/A',
+                    $patient->pet_breed,
+                    $patient->pet_gender ?? 'N/A',
+                    $patient->user ? (trim(($patient->user->first_name ?? '') . ' ' . ($patient->user->last_name ?? '')) ?: $patient->user->name) : 'N/A',
+                    $patient->user->email ?? 'N/A',
+                    $patient->created_at->format('Y-m-d'),
+                ]);
+            }
+
+            fclose($file);
+        };
+
+        return response()->stream($callback, 200, $headers);
+    }
+
+    private function getFilterInfo($request)
+    {
+        $filterType = $request->get('filter_type');
+        
+        switch ($filterType) {
+            case 'date':
+                return 'Date: ' . $request->get('date');
+            case 'month':
+                $month = $request->get('month');
+                $year = $request->get('year');
+                $monthName = date('F', mktime(0, 0, 0, (int)$month, 1));
+                return "Month: {$monthName} {$year}";
+            case 'year':
+                return 'Year: ' . $request->get('year');
+            case 'range':
+                return 'Range: ' . $request->get('date_from') . ' to ' . $request->get('date_to');
+            default:
+                return 'All Records';
+        }
     }
 }

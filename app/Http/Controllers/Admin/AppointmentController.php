@@ -278,7 +278,7 @@ class AppointmentController extends Controller
         ]);
 
         return redirect()->route('admin.appointments.show', $appointment->id)
-            ->with('message', 'New appointment has been created successfully.');
+            ->with('success', 'New appointment has been created successfully.');
     }
 
     /**
@@ -315,6 +315,7 @@ class AppointmentController extends Controller
                 'is_approved' => $appointment->is_approved,
                 'is_completed' => $appointment->is_completed,
                 'remarks' => $appointment->remarks,
+                'summary' => $appointment->summary,
                 'created_at' => $appointment->created_at->toISOString(),
                 'updated_at' => $appointment->updated_at->toISOString(),
             ],
@@ -325,7 +326,6 @@ class AppointmentController extends Controller
                     'pet_breed' => $patient->pet_breed,
                     'pet_gender' => $patient->pet_gender,
                     'pet_birth_date' => $patient->pet_birth_date ? $patient->pet_birth_date->format('Y-m-d') : null,
-                    'microchip_number' => $patient->microchip_number,
                     'pet_allergies' => $patient->pet_allergies,
                     'pet_type' => $patient->petType->name ?? 'N/A',
                     'owner' => $patient->user ? [
@@ -343,7 +343,6 @@ class AppointmentController extends Controller
                 'pet_breed' => $appointment->patient->pet_breed,
                 'pet_gender' => $appointment->patient->pet_gender,
                 'pet_birth_date' => $appointment->patient->pet_birth_date ? $appointment->patient->pet_birth_date->format('Y-m-d') : null,
-                'microchip_number' => $appointment->patient->microchip_number,
                 'pet_allergies' => $appointment->patient->pet_allergies,
                 'pet_type' => $appointment->patient->petType->name ?? 'N/A',
                 'owner' => $appointment->patient->user ? [
@@ -387,7 +386,6 @@ class AppointmentController extends Controller
             'appointment_date' => 'required|date|after_or_equal:today',
             'appointment_time' => 'required|string',
             'pet_gender' => 'nullable|string',
-            'microchip_number' => 'nullable|string',
             'pet_allergies' => 'nullable|string',
         ]);
 
@@ -433,9 +431,6 @@ class AppointmentController extends Controller
         if ($request->has('pet_gender')) {
             $patient->pet_gender = $request->pet_gender ?? '';
         }
-        if ($request->has('microchip_number')) {
-            $patient->microchip_number = $request->microchip_number ?? '';
-        }
         if ($request->has('pet_allergies')) {
             $patient->pet_allergies = $request->pet_allergies ?? '';
         }
@@ -479,19 +474,22 @@ class AppointmentController extends Controller
             ]);
         }
 
-        return redirect()->back()->with('message', 'Appointment has been approved successfully.');
+        return redirect()->back()->with('success', 'Appointment has been approved successfully.');
     }
     /**
      * Show the prescription creation form.
      */
     public function createPrescription($id)
     {
-        $symptoms = Symptom::all()->map(function ($symptom) {
-            return [
-                'id' => $symptom->id,
-                'name' => $symptom->name,
-            ];
-        });
+        // Exclude general "Diarrhea" and "Vomiting" when specific types exist
+        $symptoms = Symptom::whereNotIn('name', ['Diarrhea', 'Vomiting'])
+            ->get()
+            ->map(function ($symptom) {
+                return [
+                    'id' => $symptom->id,
+                    'name' => $symptom->name,
+                ];
+            });
         
         $instructions = PrescriptionMedicine::selectRaw('DISTINCT(instructions) as instructions')
             ->whereNotNull('instructions')
@@ -554,7 +552,7 @@ class AppointmentController extends Controller
             'follow_up_date' => 'nullable|date|after:today',
         ]);
 
-        $appointment = Appointment::with('patient.user')
+        $appointment = Appointment::with(['patient.user', 'patient.petType', 'appointment_type'])
             ->where('is_approved', 1)
             ->doesntHave('prescription')
             ->where('id', $id)
@@ -635,7 +633,11 @@ class AppointmentController extends Controller
                 ]);
             }
 
+            // Generate appointment summary
+            $summary = $this->generateAppointmentSummary($appointment, $request, $prescription);
+            
             $appointment->is_completed = true;
+            $appointment->summary = $summary;
             $appointment->save();
 
             // Send prescription email notification to the owner (queued)
@@ -644,8 +646,88 @@ class AppointmentController extends Controller
                 $patient->user->notify(new PrescriptionEmailNotification($prescription));
             }
 
-            return response()->json(['success' => true, 'message' => 'Prescription created successfully.']);
+            return redirect()->route('admin.prescriptions.all')
+                ->with('success', 'Prescription created successfully.');
         });
+    }
+
+    /**
+     * Generate appointment summary text.
+     */
+    private function generateAppointmentSummary($appointment, $request, $prescription)
+    {
+        $summaryParts = [];
+        
+        // Appointment Information
+        $summaryParts[] = "APPOINTMENT SUMMARY";
+        $summaryParts[] = "Date: " . $appointment->appointment_date->format('F d, Y');
+        
+        // Format time from 24-hour to 12-hour format
+        $timeParts = explode(':', $appointment->appointment_time);
+        $hour = (int)$timeParts[0];
+        $minute = $timeParts[1] ?? '00';
+        $ampm = $hour >= 12 ? 'PM' : 'AM';
+        $hour12 = $hour % 12;
+        if ($hour12 == 0) $hour12 = 12;
+        $formattedTime = sprintf('%d:%s %s', $hour12, $minute, $ampm);
+        $summaryParts[] = "Time: " . $formattedTime;
+        $summaryParts[] = "Type: " . ($appointment->appointment_type ? $appointment->appointment_type->name : 'N/A');
+        
+        // Patient Information
+        $patient = $appointment->patient;
+        if ($patient) {
+            $summaryParts[] = "";
+            $summaryParts[] = "PATIENT INFORMATION";
+            $summaryParts[] = "Pet Name: " . $patient->pet_name;
+            $summaryParts[] = "Pet Type: " . ($patient->petType ? $patient->petType->name : 'N/A');
+            $summaryParts[] = "Breed: " . ($patient->pet_breed ?? 'N/A');
+            $summaryParts[] = "Current Weight: " . $request->pet_current_weight . " kg";
+        }
+        
+        // Symptoms
+        if (!empty($request->symptoms)) {
+            $summaryParts[] = "";
+            $summaryParts[] = "SYMPTOMS OBSERVED";
+            $summaryParts[] = implode(', ', array_map('ucwords', $request->symptoms));
+        }
+        
+        // Diagnoses
+        if (!empty($request->disease_ids)) {
+            $diseases = Disease::whereIn('id', $request->disease_ids)->pluck('name')->toArray();
+            $summaryParts[] = "";
+            $summaryParts[] = "DIAGNOSES";
+            $summaryParts[] = implode(', ', $diseases);
+        }
+        
+        // Prescribed Medicines
+        if (!empty($request->medicines)) {
+            $summaryParts[] = "";
+            $summaryParts[] = "PRESCRIBED MEDICINES";
+            foreach ($request->medicines as $medicine) {
+                $medicineModel = Medicine::find($medicine['id']);
+                $medicineName = $medicineModel ? $medicineModel->name : 'Unknown';
+                $summaryParts[] = "- " . $medicineName . " (" . $medicine['dosage'] . ") - " . $medicine['instructions'] . " - Quantity: " . $medicine['quantity'];
+            }
+        }
+        
+        // Notes
+        if (!empty($request->notes)) {
+            $summaryParts[] = "";
+            $summaryParts[] = "ADDITIONAL NOTES";
+            $summaryParts[] = $request->notes;
+        }
+        
+        // Follow-up Date
+        if (!empty($request->follow_up_date)) {
+            $summaryParts[] = "";
+            $summaryParts[] = "FOLLOW-UP APPOINTMENT";
+            $summaryParts[] = "Scheduled for: " . date('F d, Y', strtotime($request->follow_up_date));
+        }
+        
+        $summaryParts[] = "";
+        $summaryParts[] = "Appointment completed on " . now()->format('F d, Y \a\t g:i A');
+        
+        return implode("\n", $summaryParts);
     }
 
     /**

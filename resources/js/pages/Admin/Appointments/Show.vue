@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import AppLayout from '@/layouts/AppLayout.vue';
-import { Head, Link, router, useForm } from '@inertiajs/vue3';
+import { Head, Link, router, useForm, usePage } from '@inertiajs/vue3';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Calendar, ArrowLeft, CheckCircle, FileText, Download } from 'lucide-vue-next';
 import { dashboard } from '@/routes';
-import { ref } from 'vue';
+import { ref, computed } from 'vue';
 
 interface Owner {
     id: number;
@@ -23,7 +23,6 @@ interface Patient {
     pet_breed: string;
     pet_gender: string | null;
     pet_birth_date: string | null;
-    microchip_number: string | null;
     pet_allergies: string | null;
     pet_type: string;
     owner: Owner | null;
@@ -60,6 +59,7 @@ interface Appointment {
     is_approved: boolean;
     is_completed: boolean;
     remarks: string | null;
+    summary: string | null;
     created_at: string;
     updated_at: string;
 }
@@ -78,6 +78,10 @@ interface Props {
 }
 
 const props = defineProps<Props>();
+
+const page = usePage();
+const auth = computed(() => page.props.auth);
+const isAdmin = computed(() => auth.value?.user?.roles?.includes('admin') ?? false);
 
 const breadcrumbs = [
     { title: 'Dashboard', href: dashboard().url },
@@ -135,7 +139,6 @@ const approveForm = useForm({
     appointment_date: props.appointment.appointment_date,
     appointment_time: props.appointment.appointment_time,
     pet_gender: props.patient.pet_gender || '',
-    microchip_number: props.patient.microchip_number || '',
     pet_allergies: props.patient.pet_allergies || '',
 });
 
@@ -224,15 +227,6 @@ const downloadPrescription = () => {
                                                     <option value="Female">Female</option>
                                                 </select>
                                             </div>
-                                            <div class="space-y-2">
-                                                <Label for="microchip_number">Microchip Number</Label>
-                                                <Input
-                                                    id="microchip_number"
-                                                    v-model="approveForm.microchip_number"
-                                                    type="text"
-                                                    placeholder="Microchip number"
-                                                />
-                                            </div>
                                             <div class="space-y-2 md:col-span-2">
                                                 <Label for="pet_allergies">Pet Allergies</Label>
                                                 <Input
@@ -255,7 +249,7 @@ const downloadPrescription = () => {
                                 </DialogContent>
                             </Dialog>
                             <Link
-                                v-if="appointment.is_approved && !appointment.is_completed"
+                                v-if="isAdmin && appointment.is_approved && !appointment.is_completed"
                                 :href="`/admin/appointments/${appointment.id}/prescription/create`"
                             >
                                 <Button>
@@ -363,10 +357,6 @@ const downloadPrescription = () => {
                                                     <div class="text-lg font-semibold">{{ calculateAge(pet.pet_birth_date) }}</div>
                                                 </div>
                                                 <div class="space-y-2">
-                                                    <Label class="text-sm font-medium text-muted-foreground">Microchip Number</Label>
-                                                    <div class="text-lg font-semibold">{{ pet.microchip_number || '—' }}</div>
-                                                </div>
-                                                <div class="space-y-2">
                                                     <Label class="text-sm font-medium text-muted-foreground">Allergies</Label>
                                                     <div class="text-lg font-semibold">{{ pet.pet_allergies || '—' }}</div>
                                                 </div>
@@ -423,10 +413,6 @@ const downloadPrescription = () => {
                                     <div class="text-lg font-semibold">{{ calculateAge(patient.pet_birth_date) }}</div>
                                 </div>
                                 <div class="space-y-2">
-                                    <Label class="text-sm font-medium text-muted-foreground">Microchip Number</Label>
-                                    <div class="text-lg font-semibold">{{ patient.microchip_number || '—' }}</div>
-                                </div>
-                                <div class="space-y-2">
                                     <Label class="text-sm font-medium text-muted-foreground">Allergies</Label>
                                     <div class="text-lg font-semibold">{{ patient.pet_allergies || '—' }}</div>
                                 </div>
@@ -450,6 +436,16 @@ const downloadPrescription = () => {
                                     </div>
                                 </div>
                             </div>
+                        </div>
+
+                        <!-- Appointment Summary -->
+                        <div v-if="appointment.is_completed && appointment.summary">
+                            <h3 class="text-lg font-semibold mb-4">Appointment Summary</h3>
+                            <Card>
+                                <CardContent class="p-6">
+                                    <pre class="whitespace-pre-wrap text-sm font-mono bg-muted p-4 rounded-md">{{ appointment.summary }}</pre>
+                                </CardContent>
+                            </Card>
                         </div>
 
                         <!-- Prescription Details -->

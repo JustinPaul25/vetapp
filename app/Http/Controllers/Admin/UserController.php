@@ -7,9 +7,12 @@ use App\Models\User;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Spatie\Permission\Models\Role;
+use App\Traits\HasDateFiltering;
+use Barryvdh\DomPDF\Facade\Pdf;
 
 class UserController extends Controller
 {
+    use HasDateFiltering;
     /**
      * Display a listing of the resource.
      */
@@ -25,6 +28,9 @@ class UserController extends Controller
                     ->orWhere('email', 'LIKE', "%{$keyword}%");
             });
         }
+
+        // Date filtering
+        $this->applyDateFilter($query, $request, 'created_at');
 
         // Sort functionality
         $sortBy = $request->get('sort_by', 'created_at');
@@ -176,5 +182,105 @@ class UserController extends Controller
 
         return redirect()->route('admin.users.index')
             ->with('success', 'User deleted successfully.');
+    }
+
+    /**
+     * Export users report.
+     */
+    public function export(Request $request)
+    {
+        $query = User::with('roles');
+
+        if ($request->has('search') && !empty($request->search)) {
+            $keyword = $request->search;
+            $query->where(function ($q) use ($keyword) {
+                $q->where('name', 'LIKE', "%{$keyword}%")
+                    ->orWhere('email', 'LIKE', "%{$keyword}%");
+            });
+        }
+
+        $this->applyDateFilter($query, $request, 'created_at');
+
+        $users = $query->orderBy('created_at', 'desc')->get();
+
+        $format = $request->get('format', 'pdf');
+
+        if ($format === 'csv') {
+            return $this->exportCsv($users);
+        }
+
+        return $this->exportPdf($users, $request);
+    }
+
+    private function exportPdf($users, $request)
+    {
+        $data = $users->map(function ($user) {
+            return [
+                'name' => $user->name,
+                'email' => $user->email,
+                'roles' => $user->roles->pluck('name')->join(', ') ?: 'No roles',
+                'created_at' => $user->created_at->format('Y-m-d'),
+            ];
+        });
+
+        $filterInfo = $this->getFilterInfo($request);
+
+        $pdf = Pdf::loadView('admin.reports.users', [
+            'users' => $data,
+            'title' => 'Users Report',
+            'filterInfo' => $filterInfo,
+            'total' => $data->count(),
+        ]);
+
+        return $pdf->stream('users-report-' . date('Y-m-d') . '.pdf');
+    }
+
+    private function exportCsv($users)
+    {
+        $filename = 'users-report-' . date('Y-m-d') . '.csv';
+        $headers = [
+            'Content-Type' => 'text/csv',
+            'Content-Disposition' => "attachment; filename=\"{$filename}\"",
+        ];
+
+        $callback = function () use ($users) {
+            $file = fopen('php://output', 'w');
+            
+            fputcsv($file, ['Name', 'Email', 'Roles', 'Created At']);
+
+            foreach ($users as $user) {
+                fputcsv($file, [
+                    $user->name,
+                    $user->email,
+                    $user->roles->pluck('name')->join(', ') ?: 'No roles',
+                    $user->created_at->format('Y-m-d'),
+                ]);
+            }
+
+            fclose($file);
+        };
+
+        return response()->stream($callback, 200, $headers);
+    }
+
+    private function getFilterInfo($request)
+    {
+        $filterType = $request->get('filter_type');
+        
+        switch ($filterType) {
+            case 'date':
+                return 'Date: ' . $request->get('date');
+            case 'month':
+                $month = $request->get('month');
+                $year = $request->get('year');
+                $monthName = date('F', mktime(0, 0, 0, (int)$month, 1));
+                return "Month: {$monthName} {$year}";
+            case 'year':
+                return 'Year: ' . $request->get('year');
+            case 'range':
+                return 'Range: ' . $request->get('date_from') . ' to ' . $request->get('date_to');
+            default:
+                return 'All Records';
+        }
     }
 }

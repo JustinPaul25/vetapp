@@ -123,11 +123,21 @@ const mainNavItems = computed<NavItem[]>(() => {
                 icon: Heart,
             },
             {
+                title: 'Pet Owners',
+                href: '/admin/pet_owners',
+                icon: UserCheck,
+            },
+            {
+                title: 'Walk-In Clients',
+                href: '/admin/walk_in_clients',
+                icon: UserPlus,
+            },
+            // Clinical Resources
+            {
                 title: 'Prescriptions',
                 href: '/admin/prescriptions',
                 icon: FileText,
             },
-            // Clinical Resources
             {
                 title: 'Medicines',
                 href: '/admin/medicines',
@@ -139,6 +149,11 @@ const mainNavItems = computed<NavItem[]>(() => {
                 icon: Stethoscope,
             },
             // Reference Data
+            {
+                title: 'Pet Types',
+                href: '/admin/pet_types',
+                icon: Dog,
+            },
             {
                 title: 'Pet Breeds',
                 href: '/admin/pet_breeds',

@@ -66,21 +66,8 @@ onMounted(() => {
         maxZoom: 19,
     }).addTo(map.value);
 
-    // Add hotspot zones (circles)
+    // Add hotspot zones
     props.outbreakZones.forEach((zone) => {
-        // Add circle for hotspot zone
-        L.circle([zone.lat, zone.lng], {
-            color: '#dc2626',
-            fillColor: '#dc2626',
-            fillOpacity: 0.2,
-            radius: 1000, // 1000 meters
-            weight: 2,
-        })
-            .addTo(map.value!)
-            .bindPopup(
-                `<strong>Hotspot</strong><br/>${zone.address}<br/>Cases: ${zone.count}`
-            );
-
         // Add marker for zone center
         L.marker([zone.lat, zone.lng], {
             icon: L.icon({

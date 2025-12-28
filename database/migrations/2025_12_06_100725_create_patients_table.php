@@ -21,7 +21,6 @@ return new class extends Migration
             $table->string('pet_breed', 100)->nullable(false);
             $table->string('pet_gender', 100)->nullable();
             $table->date('pet_birth_date')->nullable();
-            $table->string('microchip_number', 100)->nullable();
             $table->string('pet_allergies')->nullable();
             $table->timestamps();
         });

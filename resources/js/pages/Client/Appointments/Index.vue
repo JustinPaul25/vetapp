@@ -19,9 +19,10 @@ import { MultiSelect } from '@/components/ui/multi-select';
 import { CalendarDatePicker } from '@/components/ui/calendar-date-picker';
 import AppointmentCalendar from '@/components/AppointmentCalendar.vue';
 // Using native textarea
-import { Calendar, Plus, Eye, Search, List, ChevronRight, ChevronLeft, Check } from 'lucide-vue-next';
+import { Calendar, Plus, Eye, Search, List, ChevronRight, ChevronLeft, Check, MapPin, AlertCircle } from 'lucide-vue-next';
 import { computed, ref, watch } from 'vue';
 import { dashboard } from '@/routes';
+import { edit as editProfile } from '@/routes/profile';
 import axios from 'axios';
 
 interface Appointment {
@@ -48,6 +49,7 @@ interface AppointmentType {
 interface Props {
     pets: Pet[];
     appointment_types: AppointmentType[];
+    has_location_pin: boolean;
 }
 
 const props = defineProps<Props>();
@@ -79,6 +81,7 @@ const availableTimes = ref<string[]>([]);
 const loadingTimes = ref(false);
 const errors = ref<Record<string, string[]>>({});
 const currentStep = ref(0);
+const showLocationPinDialog = ref(false);
 
 // Step definitions
 const steps = [
@@ -167,6 +170,12 @@ const fetchAvailableTimes = async (date: string) => {
 
 
 const handleBookAppointment = () => {
+    // Check if user has location pin set
+    if (!props.has_location_pin) {
+        showLocationPinDialog.value = true;
+        return;
+    }
+
     errors.value = {};
     submitting.value = true;
     router.post(
@@ -187,6 +196,10 @@ const handleBookAppointment = () => {
             },
             onError: (err: any) => {
                 errors.value = (err.errors as Record<string, string[]>) || {};
+                // Check if error is about location pin
+                if (err.errors?.location_pin) {
+                    showLocationPinDialog.value = true;
+                }
                 submitting.value = false;
             },
             onFinish: () => {
@@ -755,5 +768,45 @@ fetchAppointments();
                 </CardContent>
             </Card>
         </div>
+        
+        <!-- Location Pin Warning Dialog -->
+        <Dialog v-model:open="showLocationPinDialog">
+            <DialogContent class="sm:max-w-[500px]">
+                <DialogHeader>
+                    <div class="flex items-center gap-3">
+                        <div class="flex items-center justify-center w-12 h-12 rounded-full bg-yellow-100 dark:bg-yellow-900/20">
+                            <AlertCircle class="h-6 w-6 text-yellow-600 dark:text-yellow-400" />
+                        </div>
+                        <div>
+                            <DialogTitle>Location Pin Required</DialogTitle>
+                            <DialogDescription class="mt-1">
+                                You need to set your home address location pin before booking an appointment.
+                            </DialogDescription>
+                        </div>
+                    </div>
+                </DialogHeader>
+                <div class="py-4">
+                    <p class="text-sm text-muted-foreground">
+                        To book an appointment, please set the location pin of your home address in your profile settings. 
+                        This helps us provide better service and accurate location information.
+                    </p>
+                </div>
+                <DialogFooter>
+                    <Button
+                        variant="outline"
+                        @click="showLocationPinDialog = false"
+                    >
+                        Cancel
+                    </Button>
+                    <Button
+                        as-child
+                    >
+                        <Link :href="editProfile().url">
+                            Go to Settings
+                        </Link>
+                    </Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
     </AppLayout>
 </template>

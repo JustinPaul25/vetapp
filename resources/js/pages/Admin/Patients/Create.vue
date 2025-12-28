@@ -45,7 +45,6 @@ const form = router.form({
     custom_pet_breed_name: '', // For new custom breeds
     pet_gender: '',
     pet_birth_date: '',
-    microchip_number: '',
     pet_allergies: '',
     user_id: '',
 });
@@ -226,18 +225,6 @@ watch(() => form.pet_breed, (newValue) => {
                                     autocomplete="off"
                                 />
                                 <InputError :message="form.errors.pet_birth_date" />
-                            </div>
-
-                            <div class="space-y-2">
-                                <Label for="microchip_number">Microchip Number</Label>
-                                <Input
-                                    id="microchip_number"
-                                    v-model="form.microchip_number"
-                                    type="text"
-                                    placeholder="Microchip number"
-                                    autocomplete="off"
-                                />
-                                <InputError :message="form.errors.microchip_number" />
                             </div>
                         </div>
 

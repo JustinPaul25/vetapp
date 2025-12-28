@@ -14,9 +14,12 @@ use App\Services\AppointmentLimitService;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Illuminate\Support\Facades\DB;
+use App\Traits\HasDateFiltering;
+use Barryvdh\DomPDF\Facade\Pdf;
 
 class WalkInClientController extends Controller
 {
+    use HasDateFiltering;
     /**
      * Display a listing of walk-in clients (users with walk_in_client role).
      */
@@ -38,6 +41,9 @@ class WalkInClientController extends Controller
                     ->orWhere(DB::raw("CONCAT(first_name, ' ', last_name)"), 'LIKE', "%{$keyword}%");
             });
         }
+
+        // Date filtering
+        $this->applyDateFilter($query, $request, 'created_at');
 
         // Sort functionality
         $sortBy = $request->get('sort_by', 'created_at');
@@ -140,7 +146,6 @@ class WalkInClientController extends Controller
                     'pet_breed' => $pet->pet_breed,
                     'pet_gender' => $pet->pet_gender,
                     'pet_birth_date' => $pet->pet_birth_date ? $pet->pet_birth_date->format('Y-m-d') : null,
-                    'microchip_number' => $pet->microchip_number,
                     'pet_allergies' => $pet->pet_allergies,
                     'pet_type' => [
                         'id' => $pet->petType->id ?? null,
@@ -290,7 +295,6 @@ class WalkInClientController extends Controller
             'custom_pet_breed_name' => 'nullable|string|max:100',
             'pet_gender' => 'nullable|in:Male,Female',
             'pet_birth_date' => 'nullable|date',
-            'microchip_number' => 'nullable|string|max:100',
             'pet_allergies' => 'nullable|string',
             // Appointment fields (always required for walk-in)
             'appointment_type_id' => 'required|exists:appointment_types,id',
@@ -410,7 +414,6 @@ class WalkInClientController extends Controller
                     'pet_breed' => $validated['pet_breed'],
                     'pet_gender' => $validated['pet_gender'] ?? null,
                     'pet_birth_date' => $validated['pet_birth_date'] ?? null,
-                    'microchip_number' => $validated['microchip_number'] ?? null,
                     'pet_allergies' => $validated['pet_allergies'] ?? null,
                     'user_id' => $existingClient->id,
                 ]);
@@ -507,7 +510,6 @@ class WalkInClientController extends Controller
                         'pet_breed' => $patient->pet_breed,
                         'pet_gender' => $patient->pet_gender,
                         'pet_birth_date' => $patient->pet_birth_date ? $patient->pet_birth_date->toDateString() : null,
-                        'microchip_number' => $patient->microchip_number,
                         'pet_type' => [
                             'id' => $patient->petType->id ?? null,
                             'name' => $patient->petType->name ?? null,
@@ -599,6 +601,116 @@ class WalkInClientController extends Controller
 
         return redirect()->route('admin.walk_in_clients.index')
             ->with('success', 'Walk-in client deleted successfully.');
+    }
+
+    /**
+     * Export walk-in clients report.
+     */
+    public function export(Request $request)
+    {
+        $query = User::role('walk_in_client')
+            ->with(['patients.petType', 'roles'])
+            ->withCount('patients');
+
+        if ($request->has('search') && !empty($request->search)) {
+            $keyword = $request->search;
+            $query->where(function ($q) use ($keyword) {
+                $q->where('name', 'LIKE', "%{$keyword}%")
+                    ->orWhere('email', 'LIKE', "%{$keyword}%")
+                    ->orWhere('first_name', 'LIKE', "%{$keyword}%")
+                    ->orWhere('last_name', 'LIKE', "%{$keyword}%")
+                    ->orWhere('mobile_number', 'LIKE', "%{$keyword}%")
+                    ->orWhere(DB::raw("CONCAT(first_name, ' ', last_name)"), 'LIKE', "%{$keyword}%");
+            });
+        }
+
+        $this->applyDateFilter($query, $request, 'created_at');
+
+        $walkInClients = $query->orderBy('created_at', 'desc')->get();
+
+        $format = $request->get('format', 'pdf');
+
+        if ($format === 'csv') {
+            return $this->exportCsv($walkInClients);
+        }
+
+        return $this->exportPdf($walkInClients, $request);
+    }
+
+    private function exportPdf($walkInClients, $request)
+    {
+        $data = $walkInClients->map(function ($user) {
+            return [
+                'name' => trim(($user->first_name ?? '') . ' ' . ($user->last_name ?? '')) ?: $user->name,
+                'email' => $user->email,
+                'mobile_number' => $user->mobile_number ?? 'N/A',
+                'address' => $user->address ?? 'N/A',
+                'patients_count' => $user->patients_count,
+                'created_at' => $user->created_at->format('Y-m-d'),
+            ];
+        });
+
+        $filterInfo = $this->getFilterInfo($request);
+
+        $pdf = Pdf::loadView('admin.reports.walk_in_clients', [
+            'walkInClients' => $data,
+            'title' => 'Walk-In Clients Report',
+            'filterInfo' => $filterInfo,
+            'total' => $data->count(),
+        ]);
+
+        return $pdf->stream('walk-in-clients-report-' . date('Y-m-d') . '.pdf');
+    }
+
+    private function exportCsv($walkInClients)
+    {
+        $filename = 'walk-in-clients-report-' . date('Y-m-d') . '.csv';
+        $headers = [
+            'Content-Type' => 'text/csv',
+            'Content-Disposition' => "attachment; filename=\"{$filename}\"",
+        ];
+
+        $callback = function () use ($walkInClients) {
+            $file = fopen('php://output', 'w');
+            
+            fputcsv($file, ['Name', 'Email', 'Mobile Number', 'Address', 'Patients Count', 'Created At']);
+
+            foreach ($walkInClients as $user) {
+                fputcsv($file, [
+                    trim(($user->first_name ?? '') . ' ' . ($user->last_name ?? '')) ?: $user->name,
+                    $user->email,
+                    $user->mobile_number ?? 'N/A',
+                    $user->address ?? 'N/A',
+                    $user->patients_count,
+                    $user->created_at->format('Y-m-d'),
+                ]);
+            }
+
+            fclose($file);
+        };
+
+        return response()->stream($callback, 200, $headers);
+    }
+
+    private function getFilterInfo($request)
+    {
+        $filterType = $request->get('filter_type');
+        
+        switch ($filterType) {
+            case 'date':
+                return 'Date: ' . $request->get('date');
+            case 'month':
+                $month = $request->get('month');
+                $year = $request->get('year');
+                $monthName = date('F', mktime(0, 0, 0, (int)$month, 1));
+                return "Month: {$monthName} {$year}";
+            case 'year':
+                return 'Year: ' . $request->get('year');
+            case 'range':
+                return 'Range: ' . $request->get('date_from') . ' to ' . $request->get('date_to');
+            default:
+                return 'All Records';
+        }
     }
 }
 
