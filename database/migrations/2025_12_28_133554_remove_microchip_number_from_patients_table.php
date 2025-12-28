@@ -11,9 +11,11 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::table('patients', function (Blueprint $table) {
-            $table->dropColumn('microchip_number');
-        });
+        if (Schema::hasColumn('patients', 'microchip_number')) {
+            Schema::table('patients', function (Blueprint $table) {
+                $table->dropColumn('microchip_number');
+            });
+        }
     }
 
     /**
@@ -21,8 +23,10 @@ return new class extends Migration
      */
     public function down(): void
     {
-        Schema::table('patients', function (Blueprint $table) {
-            $table->string('microchip_number', 100)->nullable();
-        });
+        if (!Schema::hasColumn('patients', 'microchip_number')) {
+            Schema::table('patients', function (Blueprint $table) {
+                $table->string('microchip_number', 100)->nullable();
+            });
+        }
     }
 };
