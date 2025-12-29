@@ -42,6 +42,7 @@ interface Appointment {
 
 interface Prescription {
     id: number;
+    appointment_id: number;
     created_at: string;
 }
 

@@ -476,6 +476,122 @@ class AppointmentController extends Controller
 
         return redirect()->back()->with('success', 'Appointment has been approved successfully.');
     }
+
+    /**
+     * Reschedule an approved appointment.
+     */
+    public function reschedule(Request $request, $id)
+    {
+        $request->validate([
+            'appointment_date' => 'required|date|after_or_equal:today',
+            'appointment_time' => 'required|string',
+        ]);
+
+        $appointment = Appointment::with('patient.user', 'appointment_type')->findOrFail($id);
+        
+        // Only allow rescheduling appointments that are approved but not completed
+        if (!$appointment->is_approved) {
+            return back()->withErrors([
+                'appointment_date' => 'Only approved appointments can be rescheduled.',
+            ]);
+        }
+
+        if ($appointment->is_completed) {
+            return back()->withErrors([
+                'appointment_date' => 'Completed appointments cannot be rescheduled.',
+            ]);
+        }
+
+        if ($appointment->is_canceled) {
+            return back()->withErrors([
+                'appointment_date' => 'Canceled appointments cannot be rescheduled.',
+            ]);
+        }
+        
+        // Store old date and time for notification
+        $oldDate = $appointment->appointment_date->format('Y-m-d');
+        $oldTime = $appointment->appointment_time;
+        
+        // If date is changing, validate daily limits for the new date (excluding current appointment)
+        if ($appointment->appointment_date->format('Y-m-d') !== $request->appointment_date) {
+            $limitService = app(AppointmentLimitService::class);
+            
+            // Get all appointment types for this appointment
+            $appointmentTypeIds = $appointment->appointment_types->pluck('id')->toArray();
+            if (empty($appointmentTypeIds)) {
+                // Fallback to single appointment_type_id if many-to-many is empty
+                $appointmentTypeIds = [$appointment->appointment_type_id];
+            }
+            
+            foreach ($appointmentTypeIds as $typeId) {
+                $limitCheck = $limitService->checkDailyLimit($typeId, $request->appointment_date, $appointment->id);
+                
+                if (!$limitCheck['available']) {
+                    $appointmentType = AppointmentType::find($typeId);
+                    $typeName = $appointmentType ? $appointmentType->name : 'Unknown';
+                    
+                    return back()->withErrors([
+                        'appointment_date' => sprintf(
+                            'Daily limit reached for %s appointments on the selected date. Current: %d/%d',
+                            $typeName,
+                            $limitCheck['current_count'],
+                            $limitCheck['limit']
+                        ),
+                    ]);
+                }
+            }
+        }
+        
+        $appointment->appointment_date = $request->appointment_date;
+        $appointment->appointment_time = $request->appointment_time;
+        $appointment->save();
+
+        // Reload appointment with relationships for notification
+        $appointment->load('appointment_type', 'patient.petType');
+        $appointmentTypeName = $appointment->appointment_type->name ?? 'N/A';
+        $patient = $appointment->patient;
+
+        // Send email notification
+        if ($patient && $patient->user && $patient->user->email) {
+            $ownerName = trim(($patient->user->first_name ?? '') . ' ' . ($patient->user->last_name ?? '')) ?: $patient->user->name;
+            $details = [
+                'subject' => 'Your appointment has been rescheduled',
+                'body' => "Hi {$ownerName},<br><br>Your appointment has been rescheduled.<br><br>" .
+                    "Previous Date: {$oldDate}<br>" .
+                    "Previous Time: {$oldTime}<br><br>" .
+                    "New Date: {$request->appointment_date}<br>" .
+                    "New Time: {$request->appointment_time}"
+            ];
+
+            Notification::route('mail', $patient->user->email)
+                ->notify(new ClientEmailNotification($details));
+        }
+
+        // Send real-time notification to client via Ably
+        if ($patient && $patient->user) {
+            $ablyService = app(AblyService::class);
+            $link = config('app.url') . '/appointments/' . $appointment->id;
+            $subject = 'Your appointment has been rescheduled';
+            $message = "Your {$appointmentTypeName} appointment has been rescheduled from {$oldDate} at {$oldTime} to {$request->appointment_date} at {$request->appointment_time}.";
+
+            // Send to client's user channel
+            $ablyService->publishToUser($patient->user->id, 'appointment.rescheduled', [
+                'appointment_id' => $appointment->id,
+                'subject' => $subject,
+                'message' => $message,
+                'link' => $link,
+                'appointment_date' => $request->appointment_date,
+                'appointment_time' => $request->appointment_time,
+                'appointment_type' => $appointmentTypeName,
+                'patient_name' => $patient->pet_name ?? 'N/A',
+                'old_date' => $oldDate,
+                'old_time' => $oldTime,
+            ]);
+        }
+
+        return redirect()->back()->with('success', 'Appointment has been rescheduled successfully.');
+    }
+
     /**
      * Show the prescription creation form.
      */

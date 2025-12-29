@@ -68,6 +68,33 @@ class ClientController extends Controller
                 });
             }
 
+            // Status filtering
+            if ($request->has('status') && !empty($request->status) && $request->status !== 'all') {
+                $status = strtolower($request->status);
+                switch ($status) {
+                    case 'pending':
+                        $appointments->where('appointments.is_approved', false)
+                              ->where('appointments.is_completed', false)
+                              ->where(function ($q) {
+                                  $q->whereNull('appointments.is_canceled')->orWhere('appointments.is_canceled', false);
+                              });
+                        break;
+                    case 'approved':
+                        $appointments->where('appointments.is_approved', true)
+                              ->where('appointments.is_completed', false)
+                              ->where(function ($q) {
+                                  $q->whereNull('appointments.is_canceled')->orWhere('appointments.is_canceled', false);
+                              });
+                        break;
+                    case 'completed':
+                        $appointments->where('appointments.is_completed', true);
+                        break;
+                    case 'canceled':
+                        $appointments->where('appointments.is_canceled', true);
+                        break;
+                }
+            }
+
             $appointments = $appointments->orderBy('appointments.appointment_date', 'desc')
                 ->orderBy('appointments.appointment_time', 'desc')
                 ->get();
@@ -379,8 +406,144 @@ class ClientController extends Controller
                     ->with('error', 'Only pending appointments can be canceled.');
             }
 
+            // Reload appointment with relationships for notification
+            $appointment->load('appointment_type', 'patient.petType', 'patient.user');
+
             // Mark appointment as canceled instead of deleting
             $appointment->update(['is_canceled' => true]);
+
+            // Prepare notification data
+            $pet = $appointment->patient;
+            $patient_owner_full_name = $pet->user ? 
+                trim(($pet->user->first_name ?? '') . ' ' . ($pet->user->last_name ?? '')) ?: $pet->user->name : 'N/A';
+            $appointmentTypeName = $appointment->appointment_type->name ?? 'N/A';
+            $appointmentDate = $appointment->appointment_date->format('Y-m-d');
+            $appointmentTime = Carbon::createFromFormat('H:i', $appointment->appointment_time)->format('h:i A');
+
+            // Notify Super Admins
+            $adminUsers = User::select('users.*')
+                ->leftJoin('model_has_roles as mhr', 'mhr.model_id', 'users.id')
+                ->leftJoin('roles', 'roles.id', 'mhr.role_id')
+                ->where('roles.name', 'admin')
+                ->distinct()
+                ->get();
+
+            // Notify Staff
+            $staffUsers = User::select('users.*')
+                ->leftJoin('model_has_roles as mhr', 'mhr.model_id', 'users.id')
+                ->leftJoin('roles', 'roles.id', 'mhr.role_id')
+                ->where('roles.name', 'staff')
+                ->distinct()
+                ->get();
+
+            $adminLink = config('app.url') . '/admin/appointments/' . $appointment->id;
+            $adminSubject = sprintf("%s has canceled an appointment.", $patient_owner_full_name ?? '');
+            $adminMessage = "Hi, an appointment has been canceled<br><br>" .
+                "Appointment Details.<br><br>" .
+                "Full Name: " . $patient_owner_full_name . "<br>" .
+                "Mobile Number: " . ($pet->user ? ($pet->user->mobile_number ?? 'N/A') : 'N/A') . "<br>" .
+                "Email Address: " . ($pet->user ? ($pet->user->email ?? 'N/A') : 'N/A') . "<br>" .
+                "Pet Type: " . ($pet->petType->name ?? 'N/A') . "<br>" .
+                "Breed: " . ($pet->pet_breed ?? 'N/A') . "<br>" .
+                "Appointment Type: " . $appointmentTypeName . "<br>" .
+                "Appointment Date: " . $appointmentDate . "<br>" .
+                "Appointment Time: " . $appointmentTime . "<br>" .
+                "<p style='text-align:center'><a href='" . $adminLink . "' style='background-color: #4CAF50; border: none; color: white; padding: 15px 32px; text-align: center; text-decoration: none; font-size: 12px; border-radius: 15px;'>View Appointment</a></p>";
+
+            $ablyService = app(AblyService::class);
+            $appointmentMessage = $appointmentTypeName . ' appointment scheduled for ' . $appointmentDate . ' at ' . $appointmentTime . ' has been canceled';
+
+            // Send notifications via database, email, and Ably to admins
+            foreach ($adminUsers as $user) {
+                $user->notify(new \App\Notifications\DefaultNotification($adminSubject, $adminMessage, $adminLink));
+                
+                // Send real-time notification via Ably
+                $ablyService->publishToUser($user->id, 'appointment.canceled', [
+                    'appointment_id' => $appointment->id,
+                    'subject' => $adminSubject,
+                    'message' => $appointmentMessage,
+                    'link' => $adminLink,
+                    'patient_name' => $pet->pet_name,
+                    'owner_name' => $patient_owner_full_name,
+                    'appointment_date' => $appointmentDate,
+                    'appointment_time' => $appointmentTime,
+                ]);
+            }
+
+            // Send real-time notifications via Ably to staff
+            foreach ($staffUsers as $user) {
+                $ablyService->publishToUser($user->id, 'appointment.canceled', [
+                    'appointment_id' => $appointment->id,
+                    'subject' => $adminSubject,
+                    'message' => $appointmentMessage,
+                    'link' => $adminLink,
+                    'patient_name' => $pet->pet_name,
+                    'owner_name' => $patient_owner_full_name,
+                    'appointment_date' => $appointmentDate,
+                    'appointment_time' => $appointmentTime,
+                ]);
+            }
+
+            // Also publish to admin channel for all admins
+            $ablyService->publishToAdmins('appointment.canceled', [
+                'appointment_id' => $appointment->id,
+                'subject' => $adminSubject,
+                'message' => $appointmentMessage,
+                'link' => $adminLink,
+                'patient_name' => $pet->pet_name,
+                'owner_name' => $patient_owner_full_name,
+                'appointment_date' => $appointmentDate,
+                'appointment_time' => $appointmentTime,
+            ]);
+
+            // Also publish to staff channel for all staff
+            $ablyService->publishToStaff('appointment.canceled', [
+                'appointment_id' => $appointment->id,
+                'subject' => $adminSubject,
+                'message' => $appointmentMessage,
+                'link' => $adminLink,
+                'patient_name' => $pet->pet_name,
+                'owner_name' => $patient_owner_full_name,
+                'appointment_date' => $appointmentDate,
+                'appointment_time' => $appointmentTime,
+            ]);
+
+            // Send notification to client confirming cancellation
+            if ($pet->user) {
+                $clientLink = config('app.url') . '/appointments/' . $appointment->id;
+                $clientSubject = 'Your appointment has been canceled';
+                $clientMessage = "Hi {$patient_owner_full_name},<br><br>" .
+                    "Your appointment has been successfully canceled.<br><br>" .
+                    "Appointment Details:<br><br>" .
+                    "Pet Name: {$pet->pet_name}<br>" .
+                    "Appointment Type: {$appointmentTypeName}<br>" .
+                    "Appointment Date: {$appointmentDate}<br>" .
+                    "Appointment Time: {$appointmentTime}<br><br>" .
+                    "If you need to schedule a new appointment, please visit our appointment booking page.<br><br>" .
+                    "<p style='text-align:center'><a href='" . $clientLink . "' style='background-color: #4CAF50; border: none; color: white; padding: 15px 32px; text-align: center; text-decoration: none; font-size: 12px; border-radius: 15px;'>View Appointment</a></p>";
+
+                // Send email notification to client
+                if ($pet->user->email) {
+                    Notification::route('mail', $pet->user->email)
+                        ->notify(new \App\Notifications\ClientEmailNotification([
+                            'subject' => $clientSubject,
+                            'body' => $clientMessage,
+                        ]));
+                }
+
+                // Send real-time notification to client via Ably
+                $clientAppointmentMessage = "Your {$appointmentTypeName} appointment scheduled for {$appointmentDate} at {$appointmentTime} has been canceled";
+                $ablyService->publishToUser($pet->user->id, 'appointment.canceled', [
+                    'appointment_id' => $appointment->id,
+                    'subject' => $clientSubject,
+                    'message' => $clientAppointmentMessage,
+                    'link' => $clientLink,
+                    'patient_name' => $pet->pet_name,
+                    'appointment_date' => $appointmentDate,
+                    'appointment_time' => $appointmentTime,
+                    'appointment_type' => $appointmentTypeName,
+                ]);
+            }
 
             if ($isApiRequest) {
                 return response()->json(['message' => 'Appointment canceled successfully.']);
@@ -567,6 +730,47 @@ class ClientController extends Controller
                 'new_date' => $request->appointment_date,
                 'new_time' => $request->appointment_time,
             ]);
+
+            // Send notification to client confirming reschedule
+            if ($pet->user) {
+                $clientLink = config('app.url') . '/appointments/' . $appointment->id;
+                $clientSubject = 'Your appointment has been rescheduled';
+                $clientMessage = "Hi {$patient_owner_full_name},<br><br>" .
+                    "Your appointment has been successfully rescheduled.<br><br>" .
+                    "Appointment Details:<br><br>" .
+                    "Pet Name: {$pet->pet_name}<br>" .
+                    "Appointment Type: {$appointmentTypeName}<br>" .
+                    "Previous Date: {$oldDate}<br>" .
+                    "Previous Time: {$oldTime}<br>" .
+                    "New Date: {$request->appointment_date}<br>" .
+                    "New Time: {$request->appointment_time}<br><br>" .
+                    "Please note that your appointment status has been reset to pending and will need to be approved again.<br><br>" .
+                    "<p style='text-align:center'><a href='" . $clientLink . "' style='background-color: #4CAF50; border: none; color: white; padding: 15px 32px; text-align: center; text-decoration: none; font-size: 12px; border-radius: 15px;'>View Appointment</a></p>";
+
+                // Send email notification to client
+                if ($pet->user->email) {
+                    Notification::route('mail', $pet->user->email)
+                        ->notify(new \App\Notifications\ClientEmailNotification([
+                            'subject' => $clientSubject,
+                            'body' => $clientMessage,
+                        ]));
+                }
+
+                // Send real-time notification to client via Ably
+                $clientAppointmentMessage = "Your {$appointmentTypeName} appointment has been rescheduled from {$oldDate} at {$oldTime} to {$request->appointment_date} at {$request->appointment_time}";
+                $ablyService->publishToUser($pet->user->id, 'appointment.rescheduled', [
+                    'appointment_id' => $appointment->id,
+                    'subject' => $clientSubject,
+                    'message' => $clientAppointmentMessage,
+                    'link' => $clientLink,
+                    'patient_name' => $pet->pet_name,
+                    'old_date' => $oldDate,
+                    'old_time' => $oldTime,
+                    'new_date' => $request->appointment_date,
+                    'new_time' => $request->appointment_time,
+                    'appointment_type' => $appointmentTypeName,
+                ]);
+            }
 
             if ($isApiRequest) {
                 return response()->json(['message' => 'Appointment rescheduled successfully.']);
@@ -803,7 +1007,7 @@ class ClientController extends Controller
     {
         return [
             'working_hours_start' => config('appointments.working_hours_start', '09:00'),
-            'working_hours_end' => config('appointments.working_hours_end', '16:00'),
+            'working_hours_end' => config('appointments.working_hours_end', '16:30'),
             'lunch_break_start' => config('appointments.lunch_break_start', '12:00'),
             'lunch_break_end' => config('appointments.lunch_break_end', '13:00'),
             'slot_duration_minutes' => config('appointments.slot_duration_minutes', 30),
@@ -824,7 +1028,7 @@ class ClientController extends Controller
         $duration = $restrictions['slot_duration_minutes'];
 
         $current = $start->copy();
-        while ($current->lt($end)) {
+        while ($current->lte($end)) {
             $slots[] = $current->format('h:i A');
             $current->addMinutes($duration);
         }
@@ -841,7 +1045,7 @@ class ClientController extends Controller
         $start = Carbon::createFromFormat('H:i', $restrictions['working_hours_start']);
         $end = Carbon::createFromFormat('H:i', $restrictions['working_hours_end']);
 
-        return $time->gte($start) && $time->lt($end);
+        return $time->gte($start) && $time->lte($end);
     }
 
     /**

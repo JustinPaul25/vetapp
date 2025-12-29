@@ -13,7 +13,7 @@ return [
 
     // Working hours (24-hour format)
     'working_hours_start' => env('APPOINTMENT_WORKING_HOURS_START', '09:00'),
-    'working_hours_end' => env('APPOINTMENT_WORKING_HOURS_END', '16:00'),
+    'working_hours_end' => env('APPOINTMENT_WORKING_HOURS_END', '16:30'),
 
     // Lunch break (24-hour format)
     'lunch_break_start' => env('APPOINTMENT_LUNCH_BREAK_START', '12:00'),

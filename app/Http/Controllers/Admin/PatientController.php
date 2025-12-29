@@ -247,6 +247,7 @@ class PatientController extends Controller
                 'prescriptions' => $patient->prescriptions->map(function ($prescription) {
                     return [
                         'id' => $prescription->id,
+                        'appointment_id' => $prescription->appointment_id,
                         'created_at' => $prescription->created_at->toISOString(),
                     ];
                 }),

@@ -25,6 +25,7 @@ import { computed, ref, watch } from 'vue';
 import { dashboard } from '@/routes';
 import { edit as editProfile } from '@/routes/profile';
 import axios from 'axios';
+import { useToast } from '@/composables/useToast';
 
 interface Appointment {
     id: number;
@@ -62,6 +63,7 @@ interface Props {
 
 const props = defineProps<Props>();
 const page = usePage();
+const { success: showSuccess } = useToast();
 
 const breadcrumbs = [
     { title: 'Dashboard', href: dashboard().url },
@@ -221,6 +223,7 @@ const handleBookAppointment = () => {
                 resetForm();
                 fetchAppointments();
                 submitting.value = false;
+                showSuccess('Appointment booked successfully!', 'Your appointment has been submitted and is pending approval.');
             },
             onError: (err: any) => {
                 errors.value = (err.errors as Record<string, string[]>) || {};

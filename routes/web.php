@@ -117,6 +117,7 @@ Route::middleware(['auth', 'verified', \App\Http\Middleware\EnsureUserIsAdminOrS
         Route::prefix('prescriptions')->name('prescriptions.')->group(function () {
             Route::get('/', [\App\Http\Controllers\Admin\PrescriptionController::class, 'index'])->name('all');
             Route::get('/export', [\App\Http\Controllers\Admin\PrescriptionController::class, 'export'])->name('export');
+            Route::get('/{id}', [\App\Http\Controllers\Admin\PrescriptionController::class, 'show'])->name('show');
         });
         
         // Walk-in client routes (admin and staff)
@@ -131,6 +132,7 @@ Route::middleware(['auth', 'verified', \App\Http\Middleware\EnsureUserIsAdminOrS
             // Removed create and store routes - only clients can create appointments
             Route::get('/{id}', [\App\Http\Controllers\Admin\AppointmentController::class, 'show'])->name('show');
             Route::patch('/{id}/approve', [\App\Http\Controllers\Admin\AppointmentController::class, 'approve'])->name('approve');
+            Route::patch('/{id}/reschedule', [\App\Http\Controllers\Admin\AppointmentController::class, 'reschedule'])->name('reschedule');
             // Prescription viewing routes (admin and staff can view/download prescriptions)
             Route::get('/{id}/prescription', [\App\Http\Controllers\Admin\AppointmentController::class, 'downloadPrescription'])->name('prescription');
             Route::get('/{id}/prescription/debug', [\App\Http\Controllers\Admin\AppointmentController::class, 'debugPrescription'])->name('prescription.debug');

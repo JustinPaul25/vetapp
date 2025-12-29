@@ -123,11 +123,11 @@ class DiseaseController extends Controller
                 'id' => $disease->id,
                 'name' => $disease->name,
                 'home_remedy' => $disease->home_remedy,
-                'symptoms' => $disease->symptoms->map(fn($s) => [
+                'symptoms' => ($disease->symptoms ?? collect())->map(fn($s) => [
                     'id' => $s->id,
                     'name' => $s->name,
                 ]),
-                'medicines' => $disease->medicines->map(fn($m) => [
+                'medicines' => ($disease->medicines ?? collect())->map(fn($m) => [
                     'id' => $m->id,
                     'name' => $m->name,
                     'dosage' => $m->dosage,

@@ -90,6 +90,72 @@ class PrescriptionController extends Controller
     }
 
     /**
+     * Display the specified prescription.
+     */
+    public function show($id)
+    {
+        $prescription = Prescription::with([
+            'appointment.appointment_type',
+            'appointment.user',
+            'patient.petType',
+            'patient.user',
+            'diagnoses.disease',
+            'medicines.medicine'
+        ])->findOrFail($id);
+
+        return Inertia::render('Admin/Prescriptions/Show', [
+            'prescription' => [
+                'id' => $prescription->id,
+                'appointment_id' => $prescription->appointment_id,
+                'symptoms' => $prescription->symptoms,
+                'notes' => $prescription->notes,
+                'pet_weight' => $prescription->pet_weight,
+                'follow_up_date' => $prescription->follow_up_date ? $prescription->follow_up_date->format('Y-m-d') : null,
+                'created_at' => $prescription->created_at->toISOString(),
+                'updated_at' => $prescription->updated_at->toISOString(),
+            ],
+            'appointment' => [
+                'id' => $prescription->appointment->id,
+                'appointment_type' => $prescription->appointment->appointment_type->name ?? 'N/A',
+                'appointment_date' => $prescription->appointment->appointment_date->format('Y-m-d'),
+                'appointment_time' => $prescription->appointment->appointment_time,
+                'created_at' => $prescription->appointment->created_at->toISOString(),
+            ],
+            'patient' => [
+                'id' => $prescription->patient->id,
+                'pet_name' => $prescription->patient->pet_name,
+                'pet_breed' => $prescription->patient->pet_breed,
+                'pet_gender' => $prescription->patient->pet_gender,
+                'pet_birth_date' => $prescription->patient->pet_birth_date ? $prescription->patient->pet_birth_date->format('Y-m-d') : null,
+                'pet_allergies' => $prescription->patient->pet_allergies,
+                'pet_type' => $prescription->patient->petType->name ?? 'N/A',
+            ],
+            'owner' => $prescription->appointment->user ? [
+                'id' => $prescription->appointment->user->id,
+                'name' => trim(($prescription->appointment->user->first_name ?? '') . ' ' . ($prescription->appointment->user->last_name ?? '')) ?: $prescription->appointment->user->name,
+                'email' => $prescription->appointment->user->email,
+                'mobile_number' => $prescription->appointment->user->mobile_number ?? null,
+                'address' => $prescription->appointment->user->address ?? null,
+            ] : null,
+            'diagnoses' => $prescription->diagnoses->map(function ($diagnosis) {
+                return [
+                    'id' => $diagnosis->id,
+                    'disease' => $diagnosis->disease->name ?? 'N/A',
+                ];
+            }),
+            'medicines' => $prescription->medicines->map(function ($prescriptionMedicine) {
+                return [
+                    'id' => $prescriptionMedicine->id,
+                    'medicine' => $prescriptionMedicine->medicine->name ?? 'N/A',
+                    'dosage' => $prescriptionMedicine->dosage,
+                    'instructions' => $prescriptionMedicine->instructions,
+                    'quantity' => $prescriptionMedicine->quantity,
+                ];
+            }),
+        ]);
+    }
+
+    /**
      * Export prescriptions report.
      */
     public function export(Request $request)
