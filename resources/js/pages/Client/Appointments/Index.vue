@@ -18,8 +18,9 @@ import { SearchableSelect } from '@/components/ui/searchable-select';
 import { MultiSelect } from '@/components/ui/multi-select';
 import { CalendarDatePicker } from '@/components/ui/calendar-date-picker';
 import AppointmentCalendar from '@/components/AppointmentCalendar.vue';
+import InputError from '@/components/InputError.vue';
 // Using native textarea
-import { Calendar, Plus, Eye, Search, List, ChevronRight, ChevronLeft, Check, MapPin, AlertCircle } from 'lucide-vue-next';
+import { Calendar, Plus, Eye, Search, List, ChevronRight, ChevronLeft, Check, MapPin, AlertCircle, Heart } from 'lucide-vue-next';
 import { computed, ref, watch } from 'vue';
 import { dashboard } from '@/routes';
 import { edit as editProfile } from '@/routes/profile';
@@ -46,9 +47,16 @@ interface AppointmentType {
     name: string;
 }
 
+interface PetType {
+    id: number;
+    name: string;
+}
+
 interface Props {
     pets: Pet[];
     appointment_types: AppointmentType[];
+    pet_types: PetType[];
+    pet_breeds: Record<string, string[]>;
     has_location_pin: boolean;
 }
 
@@ -82,6 +90,26 @@ const loadingTimes = ref(false);
 const errors = ref<Record<string, string[]>>({});
 const currentStep = ref(0);
 const showLocationPinDialog = ref(false);
+
+// Pet creation dialog state
+const showCreatePetDialog = ref(false);
+const creatingPet = ref(false);
+
+// Pet creation form
+const petForm = ref({
+    pet_type_id: '',
+    custom_pet_type_name: '',
+    pet_name: '',
+    pet_breed: '',
+    custom_pet_breed_name: '',
+    pet_gender: '',
+    pet_birth_date: '',
+    pet_allergies: '',
+});
+
+const petFormErrors = ref<Record<string, string[]>>({});
+const customPetTypeDisplay = ref<string | null>(null);
+const customBreedDisplay = ref<string | null>(null);
 
 // Step definitions
 const steps = [
@@ -299,6 +327,118 @@ const getStatusBadgeClass = (status: string) => {
     }
 };
 
+// Pet type options for SearchableSelect
+const petTypeOptions = computed(() => {
+    return (props.pet_types || []).map(pt => ({
+        value: pt.id.toString(),
+        label: pt.name,
+    }));
+});
+
+// Get the selected pet type name
+const selectedPetTypeName = computed(() => {
+    if (!petForm.value.pet_type_id) return null;
+    const petType = props.pet_types?.find(pt => pt.id.toString() === petForm.value.pet_type_id);
+    return petType?.name || null;
+});
+
+// Get breed options based on selected pet type
+const breedOptions = computed(() => {
+    const typeName = selectedPetTypeName.value || customPetTypeDisplay.value;
+    if (!typeName || !props.pet_breeds || !props.pet_breeds[typeName]) {
+        return [];
+    }
+    return props.pet_breeds[typeName].map(breed => ({
+        value: breed,
+        label: breed,
+    }));
+});
+
+// Handle creating a new pet type
+const handleCreatePetType = (name: string) => {
+    petForm.value.custom_pet_type_name = name;
+    customPetTypeDisplay.value = name;
+};
+
+// Handle creating a new breed
+const handleCreateBreed = (name: string) => {
+    petForm.value.custom_pet_breed_name = name;
+    customBreedDisplay.value = name;
+};
+
+// Watch for pet type changes to clear breed
+watch(() => petForm.value.pet_type_id, (newValue) => {
+    petForm.value.pet_breed = '';
+    petForm.value.custom_pet_breed_name = '';
+    customBreedDisplay.value = null;
+    if (newValue !== '__new__') {
+        petForm.value.custom_pet_type_name = '';
+        customPetTypeDisplay.value = null;
+    }
+});
+
+// Watch for breed changes
+watch(() => petForm.value.pet_breed, (newValue) => {
+    if (newValue !== '__new__') {
+        petForm.value.custom_pet_breed_name = '';
+        customBreedDisplay.value = null;
+    }
+});
+
+// Handle pet creation
+const handleCreatePet = async () => {
+    petFormErrors.value = {};
+    creatingPet.value = true;
+    
+    try {
+        const response = await axios.post('/pets', petForm.value, {
+            headers: {
+                'X-Requested-With': 'XMLHttpRequest',
+                'Accept': 'application/json',
+            },
+        });
+        
+        // Reload pets from server to get updated list
+        await router.reload({ 
+            only: ['pets'],
+            preserveScroll: true,
+        });
+        
+        // Get the newly created pet from the response
+        if (response.data?.pet) {
+            const newPet = response.data.pet;
+            // Add the new pet to the selection if not already selected
+            if (!form.value.pet_ids.includes(newPet.id.toString())) {
+                form.value.pet_ids.push(newPet.id.toString());
+            }
+        }
+        
+        // Reset pet form
+        petForm.value = {
+            pet_type_id: '',
+            custom_pet_type_name: '',
+            pet_name: '',
+            pet_breed: '',
+            custom_pet_breed_name: '',
+            pet_gender: '',
+            pet_birth_date: '',
+            pet_allergies: '',
+        };
+        customPetTypeDisplay.value = null;
+        customBreedDisplay.value = null;
+        petFormErrors.value = {};
+        showCreatePetDialog.value = false;
+    } catch (error: any) {
+        if (error.response?.data?.errors) {
+            petFormErrors.value = error.response.data.errors;
+        } else {
+            petFormErrors.value = { general: ['Failed to create pet. Please try again.'] };
+        }
+    } finally {
+        creatingPet.value = false;
+    }
+};
+
 // Fetch appointments on mount
 fetchAppointments();
 </script>
@@ -406,13 +546,25 @@ fetchAppointments();
                                     <div v-if="currentStep === 0" class="space-y-4">
                                         <div class="grid gap-2">
                                             <Label for="pet_ids">Pet(s)</Label>
-                                            <MultiSelect
-                                                v-model="form.pet_ids"
-                                                :options="(props.pets || []).map(pet => ({ value: pet.id.toString(), label: `${pet.pet_name} (${pet.pet_type})` }))"
-                                                placeholder="Select one or more pets"
-                                                search-placeholder="Search pets..."
-                                                :disabled="!props.pets || props.pets.length === 0"
-                                            />
+                                            <div class="flex gap-2">
+                                                <MultiSelect
+                                                    v-model="form.pet_ids"
+                                                    :options="(props.pets || []).map(pet => ({ value: pet.id.toString(), label: `${pet.pet_name} (${pet.pet_type})` }))"
+                                                    placeholder="Select one or more pets"
+                                                    search-placeholder="Search pets..."
+                                                    :disabled="!props.pets || props.pets.length === 0"
+                                                    class="flex-1"
+                                                />
+                                                <Button
+                                                    type="button"
+                                                    variant="outline"
+                                                    @click="showCreatePetDialog = true"
+                                                    class="shrink-0"
+                                                >
+                                                    <Plus class="h-4 w-4 mr-2" />
+                                                    Add Pet
+                                                </Button>
+                                            </div>
                                             <p
                                                 v-if="errors.pet_ids"
                                                 class="text-sm text-destructive"
@@ -423,7 +575,7 @@ fetchAppointments();
                                                 v-if="!props.pets || props.pets.length === 0"
                                                 class="text-sm text-muted-foreground"
                                             >
-                                                No pets registered. Please add a pet first.
+                                                No pets registered. Click "Add Pet" to create one.
                                             </p>
                                             <p class="text-sm text-muted-foreground">
                                                 You can select multiple pets for this appointment.
@@ -769,6 +921,140 @@ fetchAppointments();
             </Card>
         </div>
         
+        <!-- Create New Pet Dialog -->
+        <Dialog v-model:open="showCreatePetDialog">
+            <DialogContent class="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
+                <DialogHeader>
+                    <div class="flex items-center gap-2">
+                        <Heart class="h-5 w-5" />
+                        <DialogTitle>Create New Pet</DialogTitle>
+                    </div>
+                    <DialogDescription>
+                        Add a new pet to your account and continue booking your appointment
+                    </DialogDescription>
+                </DialogHeader>
+                
+                <div class="grid gap-4 py-4">
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div class="space-y-2">
+                            <Label for="create_pet_type_id">Pet Type <span class="text-destructive">*</span></Label>
+                            <SearchableSelect
+                                id="create_pet_type_id"
+                                v-model="petForm.pet_type_id"
+                                :options="petTypeOptions"
+                                placeholder="Select Pet Type"
+                                search-placeholder="Search pet types..."
+                                :required="true"
+                                :allow-create="true"
+                                create-prefix="Add new type"
+                                :custom-value="customPetTypeDisplay"
+                                @update:custom-value="(val) => customPetTypeDisplay = val"
+                                @create="handleCreatePetType"
+                            />
+                            <p v-if="customPetTypeDisplay" class="text-xs text-blue-600">
+                                New pet type "{{ customPetTypeDisplay }}" will be created.
+                            </p>
+                            <InputError :message="petFormErrors.pet_type_id?.[0]" />
+                            <InputError :message="petFormErrors.custom_pet_type_name?.[0]" />
+                        </div>
+
+                        <div class="space-y-2">
+                            <Label for="create_pet_name">Pet Name</Label>
+                            <Input
+                                id="create_pet_name"
+                                v-model="petForm.pet_name"
+                                type="text"
+                                placeholder="e.g., Max, Bella"
+                                autocomplete="off"
+                            />
+                            <InputError :message="petFormErrors.pet_name?.[0]" />
+                        </div>
+
+                        <div class="space-y-2">
+                            <Label for="create_pet_breed">Pet Breed <span class="text-destructive">*</span></Label>
+                            <SearchableSelect
+                                id="create_pet_breed"
+                                v-model="petForm.pet_breed"
+                                :options="breedOptions"
+                                placeholder="Select Pet Breed"
+                                search-placeholder="Search breeds..."
+                                :required="true"
+                                :disabled="!selectedPetTypeName && !customPetTypeDisplay"
+                                :allow-create="!!selectedPetTypeName || !!customPetTypeDisplay"
+                                create-prefix="Add new breed"
+                                :custom-value="customBreedDisplay"
+                                @update:custom-value="(val) => customBreedDisplay = val"
+                                @create="handleCreateBreed"
+                            />
+                            <p v-if="customBreedDisplay" class="text-xs text-blue-600">
+                                New breed "{{ customBreedDisplay }}" will be created.
+                            </p>
+                            <InputError :message="petFormErrors.pet_breed?.[0]" />
+                            <InputError :message="petFormErrors.custom_pet_breed_name?.[0]" />
+                        </div>
+
+                        <div class="space-y-2">
+                            <Label for="create_pet_gender">Pet Gender</Label>
+                            <select
+                                id="create_pet_gender"
+                                v-model="petForm.pet_gender"
+                                class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                            >
+                                <option value="">Select Gender</option>
+                                <option value="Male">Male</option>
+                                <option value="Female">Female</option>
+                            </select>
+                            <InputError :message="petFormErrors.pet_gender?.[0]" />
+                        </div>
+
+                        <div class="space-y-2">
+                            <Label for="create_pet_birth_date">Pet Birth Date</Label>
+                            <Input
+                                id="create_pet_birth_date"
+                                v-model="petForm.pet_birth_date"
+                                type="date"
+                                autocomplete="off"
+                            />
+                            <InputError :message="petFormErrors.pet_birth_date?.[0]" />
+                        </div>
+
+                        <div class="space-y-2 md:col-span-2">
+                            <Label for="create_pet_allergies">Pet Allergies</Label>
+                            <Input
+                                id="create_pet_allergies"
+                                v-model="petForm.pet_allergies"
+                                type="text"
+                                placeholder="e.g., Peanuts, Pollen"
+                                autocomplete="off"
+                            />
+                            <InputError :message="petFormErrors.pet_allergies?.[0]" />
+                        </div>
+                    </div>
+                    
+                    <p v-if="petFormErrors.general" class="text-sm text-destructive">
+                        {{ petFormErrors.general[0] }}
+                    </p>
+                </div>
+
+                <DialogFooter>
+                    <Button
+                        variant="outline"
+                        @click="showCreatePetDialog = false"
+                        :disabled="creatingPet"
+                    >
+                        Cancel
+                    </Button>
+                    <Button
+                        @click="handleCreatePet"
+                        :disabled="creatingPet || !petForm.pet_type_id || !petForm.pet_breed"
+                    >
+                        <span v-if="creatingPet">Creating...</span>
+                        <span v-else>Create Pet</span>
+                    </Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
+
         <!-- Location Pin Warning Dialog -->
         <Dialog v-model:open="showLocationPinDialog">
             <DialogContent class="sm:max-w-[500px]">

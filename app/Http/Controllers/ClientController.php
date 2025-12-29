@@ -90,6 +90,24 @@ class ClientController extends Controller
         $user = auth()->user();
         $hasLocationPin = !!($user->lat && $user->long);
 
+        // Get pet types and breeds for creating new pets
+        $pet_types = PetType::all()->map(function ($pet_type) {
+            return [
+                'id' => $pet_type->id,
+                'name' => $pet_type->name,
+            ];
+        });
+
+        // Build pet breeds mapping from database
+        $pet_breeds = [];
+        foreach ($pet_types as $pet_type) {
+            $breeds = PetBreed::where('pet_type_id', $pet_type['id'])
+                ->orderBy('name')
+                ->pluck('name')
+                ->toArray();
+            $pet_breeds[$pet_type['name']] = $breeds;
+        }
+
         return Inertia::render('Client/Appointments/Index', [
             'pets' => $pets->map(function ($pet) {
                 return [
@@ -104,6 +122,8 @@ class ClientController extends Controller
                     'name' => $type->name,
                 ];
             }),
+            'pet_types' => $pet_types,
+            'pet_breeds' => $pet_breeds,
             'has_location_pin' => $hasLocationPin,
         ]);
     }
@@ -976,7 +996,7 @@ class ClientController extends Controller
             }
         }
 
-        return DB::transaction(function () use ($validated) {
+        return DB::transaction(function () use ($validated, $request) {
             // Handle custom pet type creation
             $petTypeId = $validated['pet_type_id'];
             if (!empty($validated['custom_pet_type_name']) && ($petTypeId === '__new__' || empty($petTypeId))) {
@@ -1024,6 +1044,22 @@ class ClientController extends Controller
                 'pet_allergies' => $validated['pet_allergies'] ?? null,
                 'user_id' => auth()->id(), // Automatically assign to authenticated user
             ]);
+
+            // Load relationships for response
+            $patient->load('petType');
+
+            // If it's an AJAX request, return JSON
+            if ($request->ajax() || $request->wantsJson()) {
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Pet registered successfully.',
+                    'pet' => [
+                        'id' => $patient->id,
+                        'pet_name' => $patient->pet_name,
+                        'pet_type' => $patient->petType->name ?? 'N/A',
+                    ],
+                ]);
+            }
 
             return redirect()->route('client.pets.index')
                 ->with('message', 'Pet registered successfully.');

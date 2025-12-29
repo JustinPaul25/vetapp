@@ -73,7 +73,7 @@
             <nav class="bg-blue-600 text-white shadow-lg">
                 <div class="container mx-auto px-4">
                     <div class="flex items-center justify-between h-16">
-                        <Link :href="home()" class="flex items-center space-x-3">
+                        <Link :href="home().url" class="flex items-center space-x-3">
                             <img src="/media/logo.png" alt="Panabo City ANIMED" class="h-12" />
                             <span class="font-bold text-lg">Panabo City ANIMED</span>
                         </Link>
@@ -84,12 +84,12 @@
                             <button @click="scrollToSection('services')" class="hover:text-blue-200 transition">Services</button>
                             <button @click="scrollToSection('about')" class="hover:text-blue-200 transition">About</button>
                             <template v-if="$page.props.auth.user">
-                                <Link :href="dashboard()" class="login-button bg-white px-4 py-2 rounded font-semibold hover:bg-blue-50 transition">
+                                <Link :href="dashboard().url" class="login-button bg-white px-4 py-2 rounded font-semibold hover:bg-blue-50 transition">
                                     Dashboard
                                 </Link>
                             </template>
                             <template v-else>
-                                <Link :href="login()" class="login-button bg-white px-4 py-2 rounded font-semibold hover:bg-blue-50 transition">
+                                <Link :href="login().url" class="login-button bg-white px-4 py-2 rounded font-semibold hover:bg-blue-50 transition">
                                     Log In
                                 </Link>
                             </template>
@@ -136,14 +136,14 @@
                     <p class="text-xl md:text-2xl mb-8">Trusted veterinary care for your beloved pets.</p>
                     <Link
                         v-if="$page.props.auth.user"
-                        :href="dashboard()"
+                        :href="dashboard().url"
                         class="inline-block bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-8 rounded-lg text-lg transition"
                     >
                         Book an Appointment
                     </Link>
                     <Link
                         v-else
-                        :href="login()"
+                        :href="login().url"
                         class="inline-block bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-8 rounded-lg text-lg transition"
                     >
                         Book an Appointment
@@ -279,14 +279,14 @@
                             <div class="text-center mt-6">
                                 <Link
                                     v-if="$page.props.auth.user"
-                                    :href="dashboard()"
+                                    :href="dashboard().url"
                                     class="inline-block bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-8 rounded-lg text-lg transition"
                                 >
                                     Book an Appointment
                                 </Link>
                                 <Link
                                     v-else
-                                    :href="login()"
+                                    :href="login().url"
                                     class="inline-block bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-8 rounded-lg text-lg transition"
                                 >
                                     Book an Appointment
