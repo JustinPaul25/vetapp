@@ -293,7 +293,7 @@ const cancelAppointment = () => {
                                 </CardDescription>
                             </div>
                         </div>
-                        <div v-if="!appointment.is_completed && !appointment.is_canceled" class="flex gap-2">
+                        <div v-if="!appointment.is_approved && !appointment.is_completed && !appointment.is_canceled" class="flex gap-2">
                             <Dialog v-model:open="rescheduleDialogOpen">
                                 <DialogTrigger as-child>
                                     <Button variant="outline" type="button">

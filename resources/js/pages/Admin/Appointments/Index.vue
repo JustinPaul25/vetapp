@@ -231,6 +231,7 @@ const getStatusBadgeClass = (status: string) => {
                                     <th class="text-left p-3 font-semibold">Owner</th>
                                     <th class="text-left p-3 font-semibold">Email</th>
                                     <th class="text-left p-3 font-semibold">Phone</th>
+                                    <th class="text-left p-3 font-semibold">Date & Time</th>
                                     <th class="text-left p-3 font-semibold">Status</th>
                                     <th class="text-right p-3 font-semibold">Actions</th>
                                 </tr>
@@ -250,6 +251,10 @@ const getStatusBadgeClass = (status: string) => {
                                     <td class="p-3 text-sm">
                                         {{ appointment.owner_mobile }}
                                     </td>
+                                    <td class="p-3 text-sm">
+                                        <div>{{ formatDate(appointment.appointment_date) }}</div>
+                                        <div class="text-muted-foreground text-xs">{{ formatTime(appointment.appointment_time) }}</div>
+                                    </td>
                                     <td class="p-3">
                                         <span
                                             :class="['px-2 py-1 rounded-full text-xs font-medium', getStatusBadgeClass(appointment.status)]"
@@ -268,7 +273,7 @@ const getStatusBadgeClass = (status: string) => {
                                     </td>
                                 </tr>
                                 <tr v-if="appointments.data.length === 0">
-                                    <td colspan="5" class="p-8 text-center text-muted-foreground">
+                                    <td colspan="6" class="p-8 text-center text-muted-foreground">
                                         No appointments found
                                     </td>
                                 </tr>

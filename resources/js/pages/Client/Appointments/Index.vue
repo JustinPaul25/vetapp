@@ -253,11 +253,9 @@ const resetForm = () => {
     currentStep.value = 0;
 };
 
-// Computed property for step 2 validation - time slots must match pet count
+// Computed property for step 2 validation - only one time slot required (multiple pets can share)
 const canProceedStep2 = computed(() => {
-    const petCount = form.value.pet_ids.length;
-    const timeSlotCount = form.value.appointment_times.length;
-    return petCount > 0 && timeSlotCount === petCount;
+    return form.value.appointment_times.length > 0;
 });
 
 // Step validation
@@ -638,10 +636,7 @@ fetchAppointments();
                                     <div v-if="currentStep === 2" class="space-y-4">
                                         <div class="grid gap-2">
                                             <Label for="appointment_times">
-                                                Appointment Time(s)
-                                                <span class="text-muted-foreground font-normal">
-                                                    (Select {{ form.pet_ids.length }} time slot{{ form.pet_ids.length !== 1 ? 's' : '' }} - one for each pet)
-                                                </span>
+                                                Appointment Time
                                             </Label>
                                             <MultiSelect
                                                 v-model="form.appointment_times"
@@ -653,10 +648,10 @@ fetchAppointments();
                                                           ? 'Please select a date first'
                                                           : !availableTimes || availableTimes.length === 0
                                                             ? 'No available times for this date'
-                                                            : `Select ${form.pet_ids.length} time slot${form.pet_ids.length !== 1 ? 's' : ''}`
+                                                            : 'Select a time slot'
                                                 "
                                                 :disabled="!form.appointment_date || loadingTimes || !availableTimes || availableTimes.length === 0"
-                                                :max-selected="form.pet_ids.length"
+                                                :max-selected="1"
                                             />
                                             <p
                                                 v-if="errors.appointment_times"
@@ -681,8 +676,10 @@ fetchAppointments();
                                                 class="text-sm text-muted-foreground"
                                             >
                                                 You have selected {{ form.pet_ids.length }} pet{{ form.pet_ids.length !== 1 ? 's' : '' }}. 
-                                                Please select {{ form.pet_ids.length }} time slot{{ form.pet_ids.length !== 1 ? 's' : '' }} 
-                                                ({{ form.appointment_times.length }} of {{ form.pet_ids.length }} selected).
+                                                All pets will share the same time slot.
+                                                <span v-if="form.appointment_times.length > 0">
+                                                    Selected: {{ form.appointment_times[0] }}
+                                                </span>
                                             </p>
                                         </div>
                                     </div>
@@ -740,7 +737,7 @@ fetchAppointments();
                                             <Button
                                                 v-if="currentStep === steps.length - 1"
                                                 @click="handleBookAppointment"
-                                                :disabled="form.pet_ids.length === 0 || form.appointment_type_ids.length === 0 || !form.appointment_date || form.appointment_times.length !== form.pet_ids.length || submitting"
+                                                :disabled="form.pet_ids.length === 0 || form.appointment_type_ids.length === 0 || !form.appointment_date || form.appointment_times.length === 0 || submitting"
                                             >
                                                 <span v-if="submitting">Booking...</span>
                                                 <span v-else>Book Appointment</span>

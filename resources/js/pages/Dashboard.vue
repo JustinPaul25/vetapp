@@ -54,12 +54,20 @@ interface Appointment {
     pet_name: string;
 }
 
+interface DisabledDate {
+    id: number;
+    date: string;
+    reason?: string | null;
+}
+
 interface Props {
     appointments?: Appointment[];
+    disabledDates?: DisabledDate[];
 }
 
 const props = withDefaults(defineProps<Props>(), {
     appointments: () => [],
+    disabledDates: () => [],
 });
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -354,7 +362,11 @@ const chartOptions = {
                 </div>
                 <Card>
                     <CardContent class="p-6">
-                        <AppointmentCalendar :appointments="props.appointments || []" />
+                        <AppointmentCalendar 
+                            :appointments="props.appointments || []" 
+                            :disabled-dates="props.disabledDates || []"
+                            :can-manage-disabled-dates="true"
+                        />
                     </CardContent>
                 </Card>
             </div>

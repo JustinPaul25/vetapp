@@ -70,10 +70,14 @@ const toggleNeuralNetworkPrediction = (checked: boolean) => {
 };
 
 const saveVeterinarianInfo = () => {
-    // Save veterinarian name
-    updateSetting('veterinarian_name', form.veterinarian_name);
-    // Save license number
-    updateSetting('veterinarian_license_number', form.veterinarian_license_number);
+    // Save both veterinarian settings using the same pattern as updateSetting
+    // Make two separate PATCH requests like the toggles do
+    updateSetting('veterinarian_name', form.veterinarian_name || '');
+    
+    // Use a small delay to ensure both requests are processed
+    setTimeout(() => {
+        updateSetting('veterinarian_license_number', form.veterinarian_license_number || '');
+    }, 100);
 };
 </script>
 
@@ -136,7 +140,7 @@ const saveVeterinarianInfo = () => {
                         </div>
 
                         <div class="flex justify-end pt-4">
-                            <Button @click="saveVeterinarianInfo" :disabled="form.processing">
+                            <Button @click="saveVeterinarianInfo">
                                 Save Veterinarian Information
                             </Button>
                         </div>

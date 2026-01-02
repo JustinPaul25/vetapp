@@ -56,11 +56,10 @@ Route::middleware(['auth', 'verified', \App\Http\Middleware\EnsureUserIsAdmin::c
         });
         
         // Settings routes
-        Route::prefix('settings')->name('settings.')->group(function () {
-            Route::get('/', [\App\Http\Controllers\Admin\SettingsController::class, 'index'])->name('index');
-            Route::patch('/', [\App\Http\Controllers\Admin\SettingsController::class, 'update'])->name('update');
-            Route::get('/api', [\App\Http\Controllers\Admin\SettingsController::class, 'getSettings'])->name('api');
-        });
+        Route::get('settings', [\App\Http\Controllers\Admin\SettingsController::class, 'index'])->name('settings.index');
+        Route::post('settings', [\App\Http\Controllers\Admin\SettingsController::class, 'update'])->name('settings.update');
+        Route::patch('settings', [\App\Http\Controllers\Admin\SettingsController::class, 'update'])->name('settings.update.patch');
+        Route::get('settings/api', [\App\Http\Controllers\Admin\SettingsController::class, 'getSettings'])->name('settings.api');
     });
 
 // Ably token endpoint for client-side authentication
@@ -105,8 +104,8 @@ Route::middleware(['auth', 'verified', \App\Http\Middleware\EnsureUserIsAdminOrS
         Route::get('patients/export', [\App\Http\Controllers\Admin\PatientController::class, 'export'])->name('patients.export');
         Route::get('patients/{patient}/weight-history', [\App\Http\Controllers\Admin\PatientController::class, 'getWeightHistory'])->name('patients.weight-history');
         Route::post('patients/{patient}/weight-history', [\App\Http\Controllers\Admin\PatientController::class, 'storeWeightHistory'])->name('patients.weight-history.store');
-        Route::resource('medicines', \App\Http\Controllers\Admin\MedicineController::class);
         Route::get('medicines/export', [\App\Http\Controllers\Admin\MedicineController::class, 'export'])->name('medicines.export');
+        Route::resource('medicines', \App\Http\Controllers\Admin\MedicineController::class);
         
         // Reference Data - accessible to both admin and staff
         Route::resource('pet_types', \App\Http\Controllers\Admin\PetTypeController::class);
@@ -132,10 +131,14 @@ Route::middleware(['auth', 'verified', \App\Http\Middleware\EnsureUserIsAdminOrS
             // Removed create and store routes - only clients can create appointments
             Route::get('/{id}', [\App\Http\Controllers\Admin\AppointmentController::class, 'show'])->name('show');
             Route::patch('/{id}/approve', [\App\Http\Controllers\Admin\AppointmentController::class, 'approve'])->name('approve');
-            Route::patch('/{id}/reschedule', [\App\Http\Controllers\Admin\AppointmentController::class, 'reschedule'])->name('reschedule');
             // Prescription viewing routes (admin and staff can view/download prescriptions)
             Route::get('/{id}/prescription', [\App\Http\Controllers\Admin\AppointmentController::class, 'downloadPrescription'])->name('prescription');
             Route::get('/{id}/prescription/debug', [\App\Http\Controllers\Admin\AppointmentController::class, 'debugPrescription'])->name('prescription.debug');
+            
+            // Disabled dates management routes
+            Route::get('/disabled-dates', [\App\Http\Controllers\Admin\AppointmentController::class, 'getDisabledDates'])->name('disabled-dates.index');
+            Route::post('/disabled-dates', [\App\Http\Controllers\Admin\AppointmentController::class, 'disableDate'])->name('disabled-dates.store');
+            Route::delete('/disabled-dates/{id}', [\App\Http\Controllers\Admin\AppointmentController::class, 'enableDate'])->name('disabled-dates.destroy');
         });
         
         // Disease routes - specific routes must come before resource routes

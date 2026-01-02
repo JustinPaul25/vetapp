@@ -41,21 +41,37 @@
                                 Thank you for registering with Panabo City ANIMED! Please click the button below to verify your email address and complete your registration.
                             </p>
                             
-                            <!-- Button -->
+                            <!-- Verification Link - Prominent Display -->
+                            <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="margin-bottom: 30px;">
+                                <tr>
+                                    <td align="center" style="padding: 20px; background-color: #eff6ff; border: 2px solid #2563eb; border-radius: 6px;">
+                                        <p style="margin: 0 0 15px 0; color: #1f2937; font-size: 16px; font-weight: 600;">
+                                            Click the link below to verify your email:
+                                        </p>
+                                        <p style="margin: 0; word-break: break-all;">
+                                            <a href="{{ $verificationUrl }}" style="color: #2563eb; text-decoration: underline; font-size: 14px; font-weight: 600; word-break: break-all;">{{ $verificationUrl }}</a>
+                                        </p>
+                                    </td>
+                                </tr>
+                            </table>
+                            
+                            <!-- Button Alternative -->
                             <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%">
                                 <tr>
                                     <td align="center" style="padding-bottom: 30px;">
-                                        <a href="{{ $verificationUrl }}" style="display: inline-block; background-color: #2563eb; color: #ffffff; text-decoration: none; padding: 14px 32px; border-radius: 6px; font-weight: 600; font-size: 16px; line-height: 1.5;">Verify Email Address</a>
+                                        <table role="presentation" cellspacing="0" cellpadding="0" border="0">
+                                            <tr>
+                                                <td align="center" bgcolor="#2563eb" style="border-radius: 6px;">
+                                                    <a href="{{ $verificationUrl }}" target="_blank" style="display: inline-block; padding: 14px 32px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; font-size: 16px; font-weight: 600; color: #ffffff; text-decoration: none; border-radius: 6px;">Verify Email Address</a>
+                                                </td>
+                                            </tr>
+                                        </table>
                                     </td>
                                 </tr>
                             </table>
                             
                             <p style="margin: 0 0 20px 0; color: #6b7280; font-size: 14px; line-height: 1.6;">
-                                If the button doesn't work, you can copy and paste the following link into your browser:
-                            </p>
-                            
-                            <p style="margin: 0 0 30px 0; color: #2563eb; font-size: 14px; line-height: 1.6; word-break: break-all;">
-                                <a href="{{ $verificationUrl }}" style="color: #2563eb; text-decoration: underline;">{{ $verificationUrl }}</a>
+                                <strong>Alternative:</strong> If the button above doesn't work, copy and paste the verification link shown above into your browser's address bar.
                             </p>
                             
                             <p style="margin: 0; color: #6b7280; font-size: 14px; line-height: 1.6;">

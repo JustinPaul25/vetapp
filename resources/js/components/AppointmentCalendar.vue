@@ -5,7 +5,14 @@ import FullCalendar from '@fullcalendar/vue3';
 import dayGridPlugin from '@fullcalendar/daygrid';
 import timeGridPlugin from '@fullcalendar/timegrid';
 import interactionPlugin from '@fullcalendar/interaction';
-import type { EventInput, DateSelectArg, EventClickArg } from '@fullcalendar/core';
+import type { EventInput, DateSelectArg, EventClickArg, DateClickArg } from '@fullcalendar/core';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
+import axios from 'axios';
+import { useToast } from '@/composables/useToast';
 
 interface Appointment {
     id: number;
@@ -17,19 +24,36 @@ interface Appointment {
     pet_name: string;
 }
 
+interface DisabledDate {
+    id: number;
+    date: string;
+    reason?: string | null;
+}
+
 interface Props {
     appointments?: Appointment[];
+    disabledDates?: DisabledDate[];
     routePrefix?: string;
+    canManageDisabledDates?: boolean;
 }
 
 const props = withDefaults(defineProps<Props>(), {
     appointments: () => [],
+    disabledDates: () => [],
     routePrefix: '/admin/appointments',
+    canManageDisabledDates: false,
 });
 
 const calendarRef = ref<InstanceType<typeof FullCalendar>>();
 const showNext30Days = ref(true);
 const currentView = ref('dayGridMonth');
+
+// Disabled date management
+const disableDateDialogOpen = ref(false);
+const selectedDateForDisable = ref('');
+const disableReason = ref('');
+const isDisabling = ref(false);
+const { success: showSuccess, error: showError } = useToast();
 
 // Calculate date range for next 30 days
 const dateRange = computed(() => {
@@ -163,6 +187,26 @@ const upcomingCount = computed(() => {
 
 // FullCalendar event handlers
 const handleEventClick = (clickInfo: EventClickArg) => {
+    // Check if this is a disabled date event
+    if (clickInfo.event.extendedProps.isDisabledDate && props.canManageDisabledDates) {
+        const disabledDateId = clickInfo.event.extendedProps.disabledDateId;
+        const disabledDate = props.disabledDates?.find(d => d.id === disabledDateId);
+        console.log('Disabled date clicked - ID:', disabledDateId, 'found:', disabledDate);
+        if (disabledDate) {
+            showDisableDateDialog(disabledDate.date);
+        } else {
+            // Fallback: extract date from event start
+            const eventDate = clickInfo.event.start;
+            if (eventDate) {
+                const dateStr = eventDate.toISOString().split('T')[0];
+                console.log('Fallback: using event start date:', dateStr);
+                showDisableDateDialog(dateStr);
+            }
+        }
+        return;
+    }
+    
+    // Otherwise, handle as appointment click
     const appointmentId = clickInfo.event.extendedProps.appointmentId;
     if (appointmentId) {
         router.visit(`${props.routePrefix}/${appointmentId}`);
@@ -170,9 +214,154 @@ const handleEventClick = (clickInfo: EventClickArg) => {
 };
 
 const handleDateSelect = (selectInfo: DateSelectArg) => {
-    // Optional: Handle date selection for creating new appointments
-    console.log('Date selected:', selectInfo.startStr);
+    // This is for date range selection (click and drag)
+    if (props.canManageDisabledDates) {
+        const selectedDate = selectInfo.startStr.split('T')[0];
+        showDisableDateDialog(selectedDate);
+        selectInfo.view.calendar.unselect();
+    }
 };
+
+const handleDateClick = (clickInfo: DateClickArg) => {
+    // This is for single date clicks
+    if (props.canManageDisabledDates) {
+        // Extract date part (YYYY-MM-DD) from the dateStr
+        // dateStr can be in format "2026-01-15" or "2026-01-15T00:00:00"
+        const selectedDate = clickInfo.dateStr.includes('T') 
+            ? clickInfo.dateStr.split('T')[0] 
+            : clickInfo.dateStr;
+        console.log('Date clicked:', selectedDate, 'Full dateStr:', clickInfo.dateStr);
+        showDisableDateDialog(selectedDate);
+    } else {
+        console.log('Date clicked but canManageDisabledDates is false');
+    }
+};
+
+const formatSelectedDate = (dateStr: string): string => {
+    if (!dateStr) return '';
+    try {
+        // Parse the date string (format: YYYY-MM-DD)
+        const [year, month, day] = dateStr.split('-').map(Number);
+        const date = new Date(year, month - 1, day);
+        
+        // Check if date is valid
+        if (isNaN(date.getTime())) {
+            return dateStr; // Return original string if invalid
+        }
+        
+        return date.toLocaleDateString('en-US', { 
+            weekday: 'long', 
+            year: 'numeric', 
+            month: 'long', 
+            day: 'numeric' 
+        });
+    } catch (error) {
+        return dateStr; // Return original string on error
+    }
+};
+
+const showDisableDateDialog = (date: string) => {
+    console.log('showDisableDateDialog called with date:', date);
+    selectedDateForDisable.value = date;
+    disableReason.value = '';
+    disableDateDialogOpen.value = true;
+    console.log('selectedDateForDisable.value is now:', selectedDateForDisable.value);
+};
+
+const checkIfDateIsDisabled = (date: string): DisabledDate | null => {
+    if (!date || !props.disabledDates) return null;
+    const found = props.disabledDates.find(d => d.date === date);
+    console.log('checkIfDateIsDisabled - date:', date, 'found:', found, 'all disabled dates:', props.disabledDates);
+    return found || null;
+};
+
+const getCurrentReason = (): string => {
+    const disabledDate = checkIfDateIsDisabled(selectedDateForDisable.value);
+    const reason = disabledDate?.reason;
+    console.log('getCurrentReason - disabledDate:', disabledDate, 'reason:', reason, 'type:', typeof reason);
+    if (!reason || (typeof reason === 'string' && !reason.trim())) {
+        return 'No reason provided';
+    }
+    return reason;
+};
+
+const currentReasonDisplay = computed(() => {
+    return getCurrentReason();
+});
+
+const handleDisableDate = async () => {
+    if (!selectedDateForDisable.value) return;
+
+    const existing = checkIfDateIsDisabled(selectedDateForDisable.value);
+    
+    if (existing) {
+        // Enable the date (remove from disabled dates)
+        try {
+            isDisabling.value = true;
+            await axios.delete(`/admin/appointments/disabled-dates/${existing.id}`);
+            showSuccess('Date enabled successfully', 'Clients can now book appointments on this date.');
+            disableDateDialogOpen.value = false;
+            router.reload({ only: ['disabledDates'] });
+        } catch (error: any) {
+            showError('Failed to enable date', error.response?.data?.message || 'An error occurred');
+        } finally {
+            isDisabling.value = false;
+        }
+    } else {
+        // Disable the date
+        try {
+            isDisabling.value = true;
+            await axios.post('/admin/appointments/disabled-dates', {
+                date: selectedDateForDisable.value,
+                reason: disableReason.value || null,
+            });
+            showSuccess('Date disabled successfully', 'Clients will not be able to book appointments on this date.');
+            disableDateDialogOpen.value = false;
+            router.reload({ only: ['disabledDates'] });
+        } catch (error: any) {
+            showError('Failed to disable date', error.response?.data?.message || 'An error occurred');
+        } finally {
+            isDisabling.value = false;
+        }
+    }
+};
+
+// Convert disabled dates to FullCalendar events format
+const disabledDateEvents = computed<EventInput[]>(() => {
+    if (!props.disabledDates || !Array.isArray(props.disabledDates)) {
+        return [];
+    }
+
+    return props.disabledDates.map((disabledDate) => {
+        const date = new Date(disabledDate.date);
+        date.setHours(0, 0, 0, 0);
+        const nextDay = new Date(date);
+        nextDay.setDate(nextDay.getDate() + 1);
+
+        return {
+            id: `disabled-${disabledDate.id}`,
+            title: 'Unavailable - Click to enable',
+            start: date.toISOString(),
+            end: nextDay.toISOString(),
+            allDay: true,
+            backgroundColor: '#dc3545',
+            borderColor: '#dc3545',
+            textColor: '#ffffff',
+            display: 'background',
+            interactive: true,
+            extendedProps: {
+                isDisabledDate: true,
+                disabledDateId: disabledDate.id,
+                reason: disabledDate.reason,
+            },
+        };
+    });
+});
+
+// Combine appointment events and disabled date events
+const allEvents = computed<EventInput[]>(() => {
+    return [...events.value, ...disabledDateEvents.value];
+});
 
 // Calendar options
 const calendarOptions = computed(() => ({
@@ -183,10 +372,12 @@ const calendarOptions = computed(() => ({
         center: 'title',
         right: 'dayGridMonth,timeGridWeek,timeGridDay',
     },
-    events: events.value,
+    events: allEvents.value,
     eventClick: handleEventClick,
+    dateClick: handleDateClick,
     select: handleDateSelect,
-    selectable: false,
+    selectable: props.canManageDisabledDates,
+    selectMirror: false,
     editable: false,
     height: 'auto',
     contentHeight: 'auto',
@@ -261,6 +452,64 @@ onMounted(() => {
             </div>
         </div>
     </div>
+
+    <!-- Disable/Enable Date Dialog -->
+    <Dialog v-model:open="disableDateDialogOpen">
+        <DialogContent class="max-w-md">
+            <DialogHeader>
+                <DialogTitle>
+                    {{ checkIfDateIsDisabled(selectedDateForDisable) ? 'Enable Date' : 'Disable Date' }}
+                </DialogTitle>
+                <DialogDescription>
+                    {{ checkIfDateIsDisabled(selectedDateForDisable) 
+                        ? 'This date is currently disabled. Enable it to allow clients to book appointments.' 
+                        : 'Disable this date to prevent clients from booking appointments. The veterinarian will not be available on this date.' }}
+                </DialogDescription>
+            </DialogHeader>
+
+            <div class="space-y-4 py-4">
+                <div v-if="!checkIfDateIsDisabled(selectedDateForDisable)" class="space-y-2">
+                    <Label for="reason">Reason (Optional)</Label>
+                    <Textarea
+                        id="reason"
+                        v-model="disableReason"
+                        placeholder="Enter reason for disabling this date..."
+                        rows="3"
+                        class="w-full"
+                    />
+                </div>
+
+                <div v-else class="space-y-2">
+                    <Label>Current Reason</Label>
+                    <div class="flex h-10 w-full rounded-md border border-input bg-muted px-3 py-2 text-sm text-foreground">
+                        {{ currentReasonDisplay }}
+                    </div>
+                    <p v-if="!currentReasonDisplay || currentReasonDisplay === 'No reason provided'" class="text-sm text-muted-foreground mt-1">
+                        No reason was provided when this date was disabled.
+                    </p>
+                </div>
+            </div>
+
+            <DialogFooter>
+                <Button
+                    variant="outline"
+                    @click="disableDateDialogOpen = false"
+                    :disabled="isDisabling"
+                >
+                    Cancel
+                </Button>
+                <Button
+                    :variant="checkIfDateIsDisabled(selectedDateForDisable) ? 'default' : 'destructive'"
+                    @click="handleDisableDate"
+                    :disabled="isDisabling"
+                >
+                    {{ isDisabling 
+                        ? (checkIfDateIsDisabled(selectedDateForDisable) ? 'Enabling...' : 'Disabling...') 
+                        : (checkIfDateIsDisabled(selectedDateForDisable) ? 'Enable Date' : 'Disable Date') }}
+                </Button>
+            </DialogFooter>
+        </DialogContent>
+    </Dialog>
 </template>
 
 <style scoped>

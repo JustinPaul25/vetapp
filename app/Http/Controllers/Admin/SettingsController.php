@@ -28,30 +28,79 @@ class SettingsController extends Controller
     }
 
     /**
-     * Update the specified setting.
+     * Update the specified setting(s).
      */
     public function update(Request $request)
     {
-        $validated = $request->validate([
-            'key' => 'required|string',
-            'value' => 'present', // Changed from 'required' to allow false values
-        ]);
+        // Support both single setting update and bulk update
+        if ($request->has('settings') && is_array($request->settings)) {
+            // Bulk update mode
+            $validated = $request->validate([
+                'settings' => 'required|array',
+                'settings.*.key' => 'required|string',
+                'settings.*.value' => 'present',
+            ]);
 
-        $setting = Setting::where('key', $validated['key'])->firstOrFail();
-        
-        // Handle boolean values properly
-        $value = $validated['value'];
-        if (is_bool($value)) {
-            $value = $value ? '1' : '0';
-        } elseif ($value === 'true' || $value === 'false') {
-            $value = $value === 'true' ? '1' : '0';
+            foreach ($validated['settings'] as $settingData) {
+                $setting = Setting::where('key', $settingData['key'])->first();
+                
+                if (!$setting) {
+                    // Create the setting if it doesn't exist
+                    $setting = Setting::create([
+                        'key' => $settingData['key'],
+                        'value' => '',
+                        'type' => 'string',
+                        'description' => '',
+                    ]);
+                }
+                
+                // Handle boolean values properly
+                $value = $settingData['value'];
+                if (is_bool($value)) {
+                    $value = $value ? '1' : '0';
+                } elseif ($value === 'true' || $value === 'false') {
+                    $value = $value === 'true' ? '1' : '0';
+                }
+                
+                $setting->update([
+                    'value' => $value,
+                ]);
+            }
+
+            return redirect()->back()->with('success', 'Settings updated successfully');
+        } else {
+            // Single setting update mode (backward compatibility)
+            $validated = $request->validate([
+                'key' => 'required|string',
+                'value' => 'present', // Changed from 'required' to allow false values
+            ]);
+
+            $setting = Setting::where('key', $validated['key'])->first();
+            
+            if (!$setting) {
+                // Create the setting if it doesn't exist
+                $setting = Setting::create([
+                    'key' => $validated['key'],
+                    'value' => '',
+                    'type' => 'string',
+                    'description' => '',
+                ]);
+            }
+            
+            // Handle boolean values properly
+            $value = $validated['value'];
+            if (is_bool($value)) {
+                $value = $value ? '1' : '0';
+            } elseif ($value === 'true' || $value === 'false') {
+                $value = $value === 'true' ? '1' : '0';
+            }
+            
+            $setting->update([
+                'value' => $value,
+            ]);
+
+            return redirect()->back()->with('success', 'Setting updated successfully');
         }
-        
-        $setting->update([
-            'value' => $value,
-        ]);
-
-        return redirect()->back()->with('success', 'Setting updated successfully');
     }
 
     /**

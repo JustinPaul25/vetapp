@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\Appointment;
 use App\Models\AppointmentType;
+use App\Models\DisabledDate;
 use App\Models\Disease;
 use App\Models\Medicine;
 use App\Models\Patient;
@@ -314,6 +315,7 @@ class AppointmentController extends Controller
                 'symptoms' => $appointment->symptoms,
                 'is_approved' => $appointment->is_approved,
                 'is_completed' => $appointment->is_completed,
+                'is_canceled' => $appointment->is_canceled ?? false,
                 'remarks' => $appointment->remarks,
                 'summary' => $appointment->summary,
                 'created_at' => $appointment->created_at->toISOString(),
@@ -489,13 +491,7 @@ class AppointmentController extends Controller
 
         $appointment = Appointment::with('patient.user', 'appointment_type')->findOrFail($id);
         
-        // Only allow rescheduling appointments that are approved but not completed
-        if (!$appointment->is_approved) {
-            return back()->withErrors([
-                'appointment_date' => 'Only approved appointments can be rescheduled.',
-            ]);
-        }
-
+        // Only allow rescheduling appointments that are pending (not approved, not completed, not canceled)
         if ($appointment->is_completed) {
             return back()->withErrors([
                 'appointment_date' => 'Completed appointments cannot be rescheduled.',
@@ -507,7 +503,21 @@ class AppointmentController extends Controller
                 'appointment_date' => 'Canceled appointments cannot be rescheduled.',
             ]);
         }
+
+        if ($appointment->is_approved) {
+            return back()->withErrors([
+                'appointment_date' => 'Only pending appointments can be rescheduled.',
+            ]);
+        }
         
+        // Check if date is disabled
+        $isDisabled = DisabledDate::where('date', $request->appointment_date)->exists();
+        if ($isDisabled) {
+            return back()->withErrors([
+                'appointment_date' => 'This date is not available for booking. The veterinarian is not available on this date.',
+            ]);
+        }
+
         // Store old date and time for notification
         $oldDate = $appointment->appointment_date->format('Y-m-d');
         $oldTime = $appointment->appointment_time;
@@ -738,7 +748,7 @@ class AppointmentController extends Controller
                 }
             }
             
-            // Create prescription medicines
+            // Create prescription medicines and deduct stock
             foreach ($request->medicines as $medicine) {
                 PrescriptionMedicine::create([
                     'prescription_id' => $prescription->id,
@@ -747,6 +757,18 @@ class AppointmentController extends Controller
                     'instructions' => $medicine['instructions'],
                     'quantity' => $medicine['quantity'],
                 ]);
+
+                // Deduct stock from inventory
+                $medicineModel = Medicine::findOrFail($medicine['id']);
+                
+                // Parse quantity string to extract numeric value (e.g., "1 Pcs." -> 1, "2 Bottles" -> 2)
+                $quantityString = $medicine['quantity'];
+                preg_match('/(\d+(?:\.\d+)?)/', $quantityString, $matches);
+                $quantityToDeduct = isset($matches[1]) ? (int)floatval($matches[1]) : 1;
+                
+                // Deduct stock (ensure it doesn't go below 0)
+                $newStock = max(0, $medicineModel->stock - $quantityToDeduct);
+                $medicineModel->update(['stock' => $newStock]);
             }
 
             // Generate appointment summary
@@ -915,5 +937,79 @@ class AppointmentController extends Controller
             'veterinarianName',
             'veterinarianLicense'
         ));
+    }
+
+    /**
+     * Get all disabled dates.
+     */
+    public function getDisabledDates()
+    {
+        $disabledDates = DisabledDate::with('disabledBy:id,name,first_name,last_name')
+            ->orderBy('date', 'asc')
+            ->get()
+            ->map(function ($date) {
+                return [
+                    'id' => $date->id,
+                    'date' => $date->date->format('Y-m-d'),
+                    'reason' => $date->reason,
+                    'disabled_by' => $date->disabledBy ? ($date->disabledBy->name ?? ($date->disabledBy->first_name . ' ' . $date->disabledBy->last_name)) : null,
+                    'created_at' => $date->created_at->toDateTimeString(),
+                ];
+            });
+
+        return response()->json($disabledDates);
+    }
+
+    /**
+     * Disable a date.
+     */
+    public function disableDate(Request $request)
+    {
+        $request->validate([
+            'date' => 'required|date|after_or_equal:today',
+            'reason' => 'nullable|string|max:500',
+        ]);
+
+        $date = $request->input('date');
+
+        // Check if date is already disabled
+        $existing = DisabledDate::where('date', $date)->first();
+        if ($existing) {
+            return response()->json([
+                'message' => 'This date is already disabled.',
+            ], 422);
+        }
+
+        $disabledDate = DisabledDate::create([
+            'date' => $date,
+            'reason' => $request->input('reason'),
+            'disabled_by' => auth()->id(),
+        ]);
+
+        $disabledDate->load('disabledBy:id,name,first_name,last_name');
+
+        return response()->json([
+            'message' => 'Date disabled successfully.',
+            'disabled_date' => [
+                'id' => $disabledDate->id,
+                'date' => $disabledDate->date->format('Y-m-d'),
+                'reason' => $disabledDate->reason,
+                'disabled_by' => $disabledDate->disabledBy ? ($disabledDate->disabledBy->name ?? ($disabledDate->disabledBy->first_name . ' ' . $disabledDate->disabledBy->last_name)) : null,
+                'created_at' => $disabledDate->created_at->toDateTimeString(),
+            ],
+        ]);
+    }
+
+    /**
+     * Enable a date (remove from disabled dates).
+     */
+    public function enableDate($id)
+    {
+        $disabledDate = DisabledDate::findOrFail($id);
+        $disabledDate->delete();
+
+        return response()->json([
+            'message' => 'Date enabled successfully.',
+        ]);
     }
 }

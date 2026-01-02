@@ -6,7 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { Calendar, ArrowLeft, CheckCircle, FileText, Download, CalendarClock } from 'lucide-vue-next';
+import { Calendar, ArrowLeft, CheckCircle, FileText, Download } from 'lucide-vue-next';
 import { dashboard } from '@/routes';
 import { ref, computed } from 'vue';
 
@@ -58,6 +58,7 @@ interface Appointment {
     symptoms: string;
     is_approved: boolean;
     is_completed: boolean;
+    is_canceled: boolean;
     remarks: string | null;
     summary: string | null;
     created_at: string;
@@ -134,7 +135,6 @@ const calculateAge = (birthDate: string | null) => {
 };
 
 const approveDialogOpen = ref(false);
-const rescheduleDialogOpen = ref(false);
 
 const approveForm = useForm({
     appointment_date: props.appointment.appointment_date,
@@ -143,23 +143,10 @@ const approveForm = useForm({
     pet_allergies: props.patient?.pet_allergies || '',
 });
 
-const rescheduleForm = useForm({
-    appointment_date: props.appointment.appointment_date,
-    appointment_time: props.appointment.appointment_time,
-});
-
 const approveAppointment = () => {
     approveForm.patch(`/admin/appointments/${props.appointment.id}/approve`, {
         onSuccess: () => {
             approveDialogOpen.value = false;
-        },
-    });
-};
-
-const rescheduleAppointment = () => {
-    rescheduleForm.patch(`/admin/appointments/${props.appointment.id}/reschedule`, {
-        onSuccess: () => {
-            rescheduleDialogOpen.value = false;
         },
     });
 };
@@ -203,7 +190,7 @@ const downloadPrescription = () => {
                                 </DialogTrigger>
                                 <DialogContent class="max-w-2xl">
                                     <DialogHeader>
-                                        <DialogTitle>Approve/Reschedule Appointment</DialogTitle>
+                                        <DialogTitle>Approve Appointment</DialogTitle>
                                         <DialogDescription>
                                             Update appointment details and approve the appointment
                                         </DialogDescription>
@@ -257,59 +244,6 @@ const downloadPrescription = () => {
                                             </Button>
                                             <Button type="submit" :disabled="approveForm.processing">
                                                 Approve Appointment
-                                            </Button>
-                                        </DialogFooter>
-                                    </form>
-                                </DialogContent>
-                            </Dialog>
-                            <Dialog v-if="appointment.is_approved && !appointment.is_completed" v-model:open="rescheduleDialogOpen">
-                                <DialogTrigger as-child>
-                                    <Button variant="outline">
-                                        <CalendarClock class="h-4 w-4 mr-2" />
-                                        Reschedule
-                                    </Button>
-                                </DialogTrigger>
-                                <DialogContent class="max-w-2xl">
-                                    <DialogHeader>
-                                        <DialogTitle>Reschedule Appointment</DialogTitle>
-                                        <DialogDescription>
-                                            Update the appointment date and time
-                                        </DialogDescription>
-                                    </DialogHeader>
-                                    <form @submit.prevent="rescheduleAppointment" class="space-y-4">
-                                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                            <div class="space-y-2">
-                                                <Label for="reschedule_appointment_date">Appointment Date <span class="text-destructive">*</span></Label>
-                                                <Input
-                                                    id="reschedule_appointment_date"
-                                                    v-model="rescheduleForm.appointment_date"
-                                                    type="date"
-                                                    :min="new Date().toISOString().split('T')[0]"
-                                                    required
-                                                />
-                                                <div v-if="rescheduleForm.errors.appointment_date" class="text-sm text-destructive">
-                                                    {{ rescheduleForm.errors.appointment_date }}
-                                                </div>
-                                            </div>
-                                            <div class="space-y-2">
-                                                <Label for="reschedule_appointment_time">Appointment Time <span class="text-destructive">*</span></Label>
-                                                <Input
-                                                    id="reschedule_appointment_time"
-                                                    v-model="rescheduleForm.appointment_time"
-                                                    type="time"
-                                                    required
-                                                />
-                                                <div v-if="rescheduleForm.errors.appointment_time" class="text-sm text-destructive">
-                                                    {{ rescheduleForm.errors.appointment_time }}
-                                                </div>
-                                            </div>
-                                        </div>
-                                        <DialogFooter>
-                                            <Button type="button" variant="outline" @click="rescheduleDialogOpen = false">
-                                                Cancel
-                                            </Button>
-                                            <Button type="submit" :disabled="rescheduleForm.processing">
-                                                Reschedule Appointment
                                             </Button>
                                         </DialogFooter>
                                     </form>

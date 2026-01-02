@@ -101,6 +101,10 @@ const isDateDisabled = (date: Date): boolean => {
     // Disable past dates (before today)
     if (dateOnly < today.value) return true;
     
+    // Disable Saturday (6) and Sunday (0)
+    const dayOfWeek = date.getDay();
+    if (dayOfWeek === 0 || dayOfWeek === 6) return true;
+    
     return false;
 };
 

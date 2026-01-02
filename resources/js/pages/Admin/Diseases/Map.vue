@@ -82,7 +82,12 @@ onMounted(() => {
             .addTo(map.value!)
             .bindPopup(
                 `<strong>Hotspot</strong><br/>${zone.address}<br/>Cases: ${zone.count}`
-            );
+            )
+            .bindTooltip(`Hotspot: ${zone.address}`, {
+                permanent: false,
+                direction: 'top',
+                offset: [0, -6]
+            });
     });
 
     // Add disease case markers
@@ -107,7 +112,12 @@ onMounted(() => {
 
         L.marker([caseItem.lat, caseItem.lng], { icon: customIcon })
             .addTo(map.value!)
-            .bindPopup(popupContent);
+            .bindPopup(popupContent)
+            .bindTooltip(caseItem.disease_name, {
+                permanent: false,
+                direction: 'top',
+                offset: [0, -6]
+            });
     });
 });
 </script>

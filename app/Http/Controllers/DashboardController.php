@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Appointment;
+use App\Models\DisabledDate;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
@@ -80,8 +81,24 @@ class DashboardController extends Controller
             })->toArray();
         }
 
+        // Fetch disabled dates for admin and staff
+        $disabledDates = [];
+        if ($isAdmin || $isStaff) {
+            $disabledDates = DisabledDate::orderBy('date', 'asc')
+                ->get()
+                ->map(function ($date) {
+                    return [
+                        'id' => $date->id,
+                        'date' => $date->date->format('Y-m-d'),
+                        'reason' => $date->reason,
+                    ];
+                })
+                ->toArray();
+        }
+
         return Inertia::render('Dashboard', [
             'appointments' => $appointments,
+            'disabledDates' => $disabledDates,
         ]);
     }
 }
