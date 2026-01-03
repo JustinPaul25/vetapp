@@ -507,15 +507,34 @@ class DiseaseController extends Controller
             ->select('diseases.id', 'diseases.name', DB::raw('COUNT(*) as count'))
             ->groupBy('diseases.id', 'diseases.name')
             ->orderByDesc('count')
-            ->limit(10)
-            ->get()
-            ->map(function ($item) {
-                return [
-                    'id' => $item->id,
-                    'name' => $item->name,
-                    'count' => $item->count,
-                ];
-            });
+            ->get();
+
+        // Get total cases for the month to calculate "Others"
+        $totalMonthCases = PrescriptionDiagnosis::join('appointments', 'prescription_diagnoses.appointment_id', '=', 'appointments.id')
+            ->whereYear('appointments.appointment_date', $year)
+            ->whereMonth('appointments.appointment_date', $month)
+            ->count();
+
+        // Get top 10 and calculate "Others"
+        $top10Diseases = $topDiseases->take(10);
+        $top10Count = $top10Diseases->sum('count');
+        $othersCount = $totalMonthCases - $top10Count;
+        
+        $top10Diseases = $top10Diseases->map(function ($item) {
+            return [
+                'id' => $item->id,
+                'name' => $item->name,
+                'count' => $item->count,
+            ];
+        });
+        
+        if ($othersCount > 0) {
+            $top10Diseases->push([
+                'id' => 0,
+                'name' => 'Others',
+                'count' => $othersCount,
+            ]);
+        }
 
         // Get total number of diseases for the month
         $totalDiseases = PrescriptionDiagnosis::join('appointments', 'prescription_diagnoses.appointment_id', '=', 'appointments.id')
@@ -525,17 +544,89 @@ class DiseaseController extends Controller
             ->count('prescription_diagnoses.disease_id');
 
         // Get total disease cases for the month
-        $totalCases = PrescriptionDiagnosis::join('appointments', 'prescription_diagnoses.appointment_id', '=', 'appointments.id')
+        $totalCases = $totalMonthCases;
+
+        // Get top diseases by year (grouped by month)
+        $yearDiseases = PrescriptionDiagnosis::join('diseases', 'prescription_diagnoses.disease_id', '=', 'diseases.id')
+            ->join('appointments', 'prescription_diagnoses.appointment_id', '=', 'appointments.id')
             ->whereYear('appointments.appointment_date', $year)
-            ->whereMonth('appointments.appointment_date', $month)
-            ->count();
+            ->select(
+                'diseases.id',
+                'diseases.name',
+                DB::raw('MONTH(appointments.appointment_date) as month'),
+                DB::raw('COUNT(*) as count')
+            )
+            ->groupBy('diseases.id', 'diseases.name', DB::raw('MONTH(appointments.appointment_date)'))
+            ->get();
+
+        // Get top 10 diseases by total count for the year
+        $topDiseasesByYear = PrescriptionDiagnosis::join('diseases', 'prescription_diagnoses.disease_id', '=', 'diseases.id')
+            ->join('appointments', 'prescription_diagnoses.appointment_id', '=', 'appointments.id')
+            ->whereYear('appointments.appointment_date', $year)
+            ->select('diseases.id', 'diseases.name', DB::raw('COUNT(*) as total_count'))
+            ->groupBy('diseases.id', 'diseases.name')
+            ->orderByDesc('total_count')
+            ->limit(10)
+            ->pluck('id')
+            ->toArray();
+
+        // Build monthly data for top 10 diseases
+        $monthlyData = [];
+        $monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+        
+        for ($m = 1; $m <= 12; $m++) {
+            $monthData = [];
+            $othersCount = 0;
+            $totalMonthCases = 0;
+
+            foreach ($topDiseasesByYear as $diseaseId) {
+                $diseaseData = $yearDiseases->where('id', $diseaseId)->where('month', $m)->first();
+                $count = $diseaseData ? $diseaseData->count : 0;
+                $monthData[] = $count;
+                $totalMonthCases += $count;
+            }
+
+            // Calculate "Others" for this month
+            $monthTotal = PrescriptionDiagnosis::join('appointments', 'prescription_diagnoses.appointment_id', '=', 'appointments.id')
+                ->whereYear('appointments.appointment_date', $year)
+                ->whereMonth('appointments.appointment_date', $m)
+                ->count();
+            
+            $othersCount = $monthTotal - $totalMonthCases;
+            $monthData[] = $othersCount;
+
+            $monthlyData[] = [
+                'month' => $monthNames[$m - 1],
+                'data' => $monthData,
+            ];
+        }
+
+        // Get disease names for top 10 + Others (in order)
+        $diseaseNames = PrescriptionDiagnosis::join('diseases', 'prescription_diagnoses.disease_id', '=', 'diseases.id')
+            ->whereIn('diseases.id', $topDiseasesByYear)
+            ->select('diseases.id', 'diseases.name')
+            ->distinct()
+            ->get()
+            ->sortBy(function ($item) use ($topDiseasesByYear) {
+                return array_search($item->id, $topDiseasesByYear);
+            })
+            ->map(function ($item) {
+                return $item->name;
+            })
+            ->values()
+            ->toArray();
+        $diseaseNames[] = 'Others';
 
         return response()->json([
-            'top_diseases' => $topDiseases,
+            'top_diseases' => $top10Diseases->values(),
             'total_diseases' => $totalDiseases,
             'total_cases' => $totalCases,
             'month' => $month,
             'year' => $year,
+            'year_statistics' => [
+                'disease_names' => $diseaseNames,
+                'monthly_data' => $monthlyData,
+            ],
         ]);
     }
 

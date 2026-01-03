@@ -65,6 +65,18 @@ Route::middleware(['auth', 'verified', \App\Http\Middleware\EnsureUserIsAdmin::c
 // Ably token endpoint for client-side authentication
 Route::middleware(['auth', 'verified'])->get('/api/ably/token', [\App\Http\Controllers\AblyController::class, 'getToken'])->name('ably.token');
 
+// Notification routes (for admin and staff)
+Route::middleware(['auth', 'verified', \App\Http\Middleware\EnsureUserIsAdminOrStaff::class])
+    ->prefix('notifications')
+    ->name('notifications.')
+    ->group(function () {
+        Route::get('/', [\App\Http\Controllers\NotificationController::class, 'index'])->name('index');
+        Route::post('/{id}/read', [\App\Http\Controllers\NotificationController::class, 'markAsRead'])->name('markAsRead');
+        Route::post('/read-all', [\App\Http\Controllers\NotificationController::class, 'markAllAsRead'])->name('markAllAsRead');
+        Route::get('/api/unread-count', [\App\Http\Controllers\NotificationController::class, 'unreadCount'])->name('api.unreadCount');
+        Route::get('/api/list', [\App\Http\Controllers\NotificationController::class, 'getNotifications'])->name('api.list');
+    });
+
 // Test route for Ably (remove in production)
 Route::middleware(['auth', 'verified'])->get('/test/ably', function () {
     $ablyService = app(\App\Services\AblyService::class);
@@ -100,8 +112,9 @@ Route::middleware(['auth', 'verified', \App\Http\Middleware\EnsureUserIsAdminOrS
     ->prefix('admin')
     ->name('admin.')
     ->group(function () {
-        Route::resource('patients', \App\Http\Controllers\Admin\PatientController::class);
+        // Export routes must come before resource routes to avoid route conflicts
         Route::get('patients/export', [\App\Http\Controllers\Admin\PatientController::class, 'export'])->name('patients.export');
+        Route::resource('patients', \App\Http\Controllers\Admin\PatientController::class);
         Route::get('patients/{patient}/weight-history', [\App\Http\Controllers\Admin\PatientController::class, 'getWeightHistory'])->name('patients.weight-history');
         Route::post('patients/{patient}/weight-history', [\App\Http\Controllers\Admin\PatientController::class, 'storeWeightHistory'])->name('patients.weight-history.store');
         Route::get('medicines/export', [\App\Http\Controllers\Admin\MedicineController::class, 'export'])->name('medicines.export');
@@ -131,6 +144,7 @@ Route::middleware(['auth', 'verified', \App\Http\Middleware\EnsureUserIsAdminOrS
             // Removed create and store routes - only clients can create appointments
             Route::get('/{id}', [\App\Http\Controllers\Admin\AppointmentController::class, 'show'])->name('show');
             Route::patch('/{id}/approve', [\App\Http\Controllers\Admin\AppointmentController::class, 'approve'])->name('approve');
+            Route::patch('/{id}/reschedule', [\App\Http\Controllers\Admin\AppointmentController::class, 'reschedule'])->name('reschedule');
             // Prescription viewing routes (admin and staff can view/download prescriptions)
             Route::get('/{id}/prescription', [\App\Http\Controllers\Admin\AppointmentController::class, 'downloadPrescription'])->name('prescription');
             Route::get('/{id}/prescription/debug', [\App\Http\Controllers\Admin\AppointmentController::class, 'debugPrescription'])->name('prescription.debug');

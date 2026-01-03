@@ -23,10 +23,55 @@ export function useAbly() {
     const page = usePage();
     const user = page.props.auth?.user;
 
+    const loadDatabaseNotifications = async () => {
+        if (!user || !(user.roles?.includes('admin') || user.roles?.includes('staff'))) {
+            return;
+        }
+
+        try {
+            const response = await fetch('/notifications/api/list?limit=20', {
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'Accept': 'application/json',
+                },
+                credentials: 'same-origin',
+            });
+
+            if (response.ok) {
+                const data = await response.json();
+                const dbNotifications = data.notifications || [];
+                
+                // Add database notifications to the list (avoid duplicates)
+                dbNotifications.forEach((dbNotif: any) => {
+                    // Check if notification already exists (by checking if we have a notification with similar timestamp)
+                    const exists = notifications.value.some(
+                        (n) => n.id === dbNotif.id || (n.subject === dbNotif.subject && Math.abs(new Date(n.timestamp).getTime() - new Date(dbNotif.created_at).getTime()) < 5000)
+                    );
+                    
+                    if (!exists) {
+                        const notification: Notification = {
+                            id: dbNotif.id,
+                            subject: dbNotif.subject,
+                            message: dbNotif.subject, // Use subject as message for database notifications
+                            link: dbNotif.link || undefined,
+                            timestamp: new Date(dbNotif.created_at),
+                        };
+                        notifications.value.unshift(notification);
+                    }
+                });
+            }
+        } catch (error) {
+            console.error('Failed to load database notifications:', error);
+        }
+    };
+
     const connect = async () => {
         if (!user || ablyClient) {
             return;
         }
+
+        // Load database notifications first
+        await loadDatabaseNotifications();
 
         try {
             // Get Ably token from backend

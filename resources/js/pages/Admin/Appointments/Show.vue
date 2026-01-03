@@ -6,9 +6,12 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { Calendar, ArrowLeft, CheckCircle, FileText, Download } from 'lucide-vue-next';
+import { Calendar, ArrowLeft, CheckCircle, FileText, Download, CalendarClock } from 'lucide-vue-next';
 import { dashboard } from '@/routes';
-import { ref, computed } from 'vue';
+import { ref, computed, watch } from 'vue';
+import { CalendarDatePicker } from '@/components/ui/calendar-date-picker';
+import axios from 'axios';
+import { useToast } from '@/composables/useToast';
 
 interface Owner {
     id: number;
@@ -154,6 +157,117 @@ const approveAppointment = () => {
 const downloadPrescription = () => {
     window.open(`/admin/appointments/${props.appointment.id}/prescription`, '_blank');
 };
+
+// Reschedule functionality
+const { showError, showSuccess } = useToast();
+const rescheduleDialogOpen = ref(false);
+const rescheduling = ref(false);
+const rescheduleForm = ref({
+    appointment_date: '',
+    appointment_time: '',
+});
+const availableTimes = ref<string[]>([]);
+const loadingTimes = ref(false);
+const rescheduleErrors = ref<Record<string, string[]>>({});
+
+// Get tomorrow's date as minimum date
+const minDate = computed(() => {
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    return tomorrow.toISOString().split('T')[0];
+});
+
+// Watch for date changes to fetch available times
+watch(() => rescheduleForm.value.appointment_date, (newDate) => {
+    if (newDate) {
+        fetchAvailableTimes(newDate);
+    } else {
+        availableTimes.value = [];
+        rescheduleForm.value.appointment_time = '';
+    }
+});
+
+// Watch for dialog open to initialize form
+watch(() => rescheduleDialogOpen.value, (isOpen) => {
+    if (isOpen) {
+        // Initialize with current appointment date/time, but ensure it's not in the past
+        const currentDate = props.appointment.appointment_date || '';
+        const today = new Date().toISOString().split('T')[0];
+        const appointmentDate = currentDate > today ? currentDate : minDate.value;
+        
+        rescheduleForm.value = {
+            appointment_date: appointmentDate,
+            appointment_time: formatTime(props.appointment.appointment_time) || '',
+        };
+        rescheduleErrors.value = {};
+        if (rescheduleForm.value.appointment_date) {
+            fetchAvailableTimes(rescheduleForm.value.appointment_date);
+        }
+    }
+});
+
+const fetchAvailableTimes = async (date: string) => {
+    loadingTimes.value = true;
+    rescheduleForm.value.appointment_time = '';
+    try {
+        const response = await axios.get('/appointments/times/available', {
+            params: { selectedDate: date },
+        });
+        availableTimes.value = response.data.availableTimes || [];
+    } catch (error) {
+        console.error('Error fetching available times:', error);
+        availableTimes.value = [];
+    } finally {
+        loadingTimes.value = false;
+    }
+};
+
+// Convert 12-hour format (h:mm AM/PM) to 24-hour format (HH:mm)
+const convertTo24Hour = (time12h: string): string => {
+    if (!time12h) return '';
+    const [time, period] = time12h.split(' ');
+    const [hours, minutes] = time.split(':');
+    let hour24 = parseInt(hours);
+    if (period === 'PM' && hour24 !== 12) {
+        hour24 += 12;
+    } else if (period === 'AM' && hour24 === 12) {
+        hour24 = 0;
+    }
+    return `${hour24.toString().padStart(2, '0')}:${minutes}`;
+};
+
+const handleReschedule = () => {
+    rescheduleErrors.value = {};
+    rescheduling.value = true;
+    
+    // Convert time from 12-hour format to 24-hour format for the backend
+    const time24h = convertTo24Hour(rescheduleForm.value.appointment_time);
+    
+    router.patch(
+        `/admin/appointments/${props.appointment.id}/reschedule`,
+        {
+            appointment_date: rescheduleForm.value.appointment_date,
+            appointment_time: time24h,
+        },
+        {
+            preserveScroll: false,
+            onSuccess: () => {
+                rescheduleDialogOpen.value = false;
+                rescheduling.value = false;
+                showSuccess('Appointment rescheduled successfully.');
+            },
+            onError: (err: any) => {
+                rescheduleErrors.value = (err.errors as Record<string, string[]>) || {};
+                rescheduling.value = false;
+                const errorMessage = err.message || 'Failed to reschedule appointment. Please check the form for errors.';
+                showError(errorMessage);
+            },
+            onFinish: () => {
+                rescheduling.value = false;
+            },
+        }
+    );
+};
 </script>
 
 <template>
@@ -181,6 +295,78 @@ const downloadPrescription = () => {
                             </div>
                         </div>
                         <div class="flex gap-2">
+                            <Dialog v-if="!appointment.is_approved && !appointment.is_completed && !appointment.is_canceled" v-model:open="rescheduleDialogOpen">
+                                <DialogTrigger as-child>
+                                    <Button variant="outline" type="button">
+                                        <CalendarClock class="h-4 w-4 mr-2" />
+                                        Reschedule
+                                    </Button>
+                                </DialogTrigger>
+                                <DialogContent class="sm:max-w-[500px]">
+                                    <DialogHeader>
+                                        <DialogTitle>Reschedule Appointment</DialogTitle>
+                                        <DialogDescription>
+                                            Choose a new date and time for this appointment
+                                        </DialogDescription>
+                                    </DialogHeader>
+                                    <div class="space-y-4 py-4">
+                                        <div class="space-y-2">
+                                            <Label for="reschedule_date">Appointment Date</Label>
+                                            <CalendarDatePicker
+                                                id="reschedule_date"
+                                                v-model="rescheduleForm.appointment_date"
+                                                :min-date="minDate"
+                                                :disabled="rescheduling"
+                                            />
+                                            <p v-if="rescheduleErrors.appointment_date" class="text-sm text-destructive">
+                                                {{ rescheduleErrors.appointment_date[0] }}
+                                            </p>
+                                        </div>
+                                        <div class="space-y-2">
+                                            <Label for="reschedule_time">Appointment Time</Label>
+                                            <select
+                                                id="reschedule_time"
+                                                v-model="rescheduleForm.appointment_time"
+                                                :disabled="!rescheduleForm.appointment_date || loadingTimes || rescheduling"
+                                                class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                                            >
+                                                <option value="">Select a time</option>
+                                                <option
+                                                    v-for="time in availableTimes"
+                                                    :key="time"
+                                                    :value="time"
+                                                >
+                                                    {{ time }}
+                                                </option>
+                                            </select>
+                                            <p v-if="loadingTimes" class="text-sm text-muted-foreground">
+                                                Loading available times...
+                                            </p>
+                                            <p v-if="rescheduleErrors.appointment_time" class="text-sm text-destructive">
+                                                {{ rescheduleErrors.appointment_time[0] }}
+                                            </p>
+                                        </div>
+                                    </div>
+                                    <DialogFooter>
+                                        <Button
+                                            type="button"
+                                            variant="outline"
+                                            @click="rescheduleDialogOpen = false"
+                                            :disabled="rescheduling"
+                                        >
+                                            Cancel
+                                        </Button>
+                                        <Button
+                                            type="button"
+                                            @click="handleReschedule"
+                                            :disabled="rescheduling || !rescheduleForm.appointment_date || !rescheduleForm.appointment_time"
+                                        >
+                                            <span v-if="rescheduling">Rescheduling...</span>
+                                            <span v-else>Reschedule Appointment</span>
+                                        </Button>
+                                    </DialogFooter>
+                                </DialogContent>
+                            </Dialog>
                             <Dialog v-if="!appointment.is_approved" v-model:open="approveDialogOpen">
                                 <DialogTrigger as-child>
                                     <Button>

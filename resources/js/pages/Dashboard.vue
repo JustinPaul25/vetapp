@@ -8,7 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { Users, Shield, Dog, Heart, Pill, FileText, LayoutGrid, UserCheck, MapPin, Calendar, Stethoscope } from 'lucide-vue-next';
 import { usePage } from '@inertiajs/vue3';
 import { computed, ref, onMounted } from 'vue';
-import { Bar } from 'vue-chartjs';
+import { Bar, Pie, Line } from 'vue-chartjs';
 import axios from 'axios';
 import AppointmentCalendar from '@/components/AppointmentCalendar.vue';
 import {
@@ -16,6 +16,9 @@ import {
     CategoryScale,
     LinearScale,
     BarElement,
+    ArcElement,
+    PointElement,
+    LineElement,
     Title,
     Tooltip,
     Legend,
@@ -25,6 +28,9 @@ ChartJS.register(
     CategoryScale,
     LinearScale,
     BarElement,
+    ArcElement,
+    PointElement,
+    LineElement,
     Title,
     Tooltip,
     Legend
@@ -42,6 +48,13 @@ interface DiseaseStatistics {
     total_cases: number;
     month: number;
     year: number;
+    year_statistics?: {
+        disease_names: string[];
+        monthly_data: Array<{
+            month: string;
+            data: number[];
+        }>;
+    };
 }
 
 interface Appointment {
@@ -253,7 +266,7 @@ onMounted(() => {
     fetchDiseaseStatistics();
 });
 
-const chartData = computed(() => {
+const pieChartData = computed(() => {
     if (!diseaseStats.value || !diseaseStats.value.top_diseases.length) {
         return {
             labels: [],
@@ -261,16 +274,14 @@ const chartData = computed(() => {
         };
     }
 
-    const top10 = diseaseStats.value.top_diseases.slice(0, 10);
-    
     return {
-        labels: top10.map(d => d.name),
+        labels: diseaseStats.value.top_diseases.map(d => d.name),
         datasets: [
             {
                 label: 'Number of Cases',
-                data: top10.map(d => d.count),
+                data: diseaseStats.value.top_diseases.map(d => d.count),
                 backgroundColor: [
-                    'rgba(59, 130, 246, 0.8)',  // blue-500
+                    'rgba(59, 130, 246, 0.8)',   // blue-500
                     'rgba(16, 185, 129, 0.8)',  // emerald-500
                     'rgba(245, 158, 11, 0.8)',  // amber-500
                     'rgba(239, 68, 68, 0.8)',   // red-500
@@ -280,6 +291,7 @@ const chartData = computed(() => {
                     'rgba(34, 197, 94, 0.8)',   // green-500
                     'rgba(251, 146, 60, 0.8)',  // orange-500
                     'rgba(168, 85, 247, 0.8)',  // purple-500
+                    'rgba(107, 114, 128, 0.8)',  // gray-500 for Others
                 ],
                 borderColor: [
                     'rgba(59, 130, 246, 1)',
@@ -292,6 +304,7 @@ const chartData = computed(() => {
                     'rgba(34, 197, 94, 1)',
                     'rgba(251, 146, 60, 1)',
                     'rgba(168, 85, 247, 1)',
+                    'rgba(107, 114, 128, 1)',
                 ],
                 borderWidth: 1,
             },
@@ -299,12 +312,95 @@ const chartData = computed(() => {
     };
 });
 
-const chartOptions = {
+const pieChartOptions = {
     responsive: true,
     maintainAspectRatio: false,
     plugins: {
         legend: {
-            display: false,
+            position: 'right' as const,
+            labels: {
+                boxWidth: 12,
+                padding: 10,
+                font: {
+                    size: 11,
+                },
+            },
+        },
+        tooltip: {
+            backgroundColor: 'rgba(0, 0, 0, 0.8)',
+            padding: 12,
+            titleFont: {
+                size: 14,
+                weight: 'bold' as const,
+            },
+            bodyFont: {
+                size: 13,
+            },
+            callbacks: {
+                label: function(context: any) {
+                    const label = context.label || '';
+                    const value = context.parsed || 0;
+                    const total = context.dataset.data.reduce((a: number, b: number) => a + b, 0);
+                    const percentage = ((value / total) * 100).toFixed(1);
+                    return `${label}: ${value} (${percentage}%)`;
+                },
+            },
+        },
+    },
+};
+
+const lineChartData = computed(() => {
+    if (!diseaseStats.value?.year_statistics) {
+        return {
+            labels: [],
+            datasets: [],
+        };
+    }
+
+    const { disease_names, monthly_data } = diseaseStats.value.year_statistics;
+    const colors = [
+        'rgba(59, 130, 246, 0.8)',   // blue-500
+        'rgba(16, 185, 129, 0.8)',  // emerald-500
+        'rgba(245, 158, 11, 0.8)',  // amber-500
+        'rgba(239, 68, 68, 0.8)',   // red-500
+        'rgba(139, 92, 246, 0.8)',  // violet-500
+        'rgba(236, 72, 153, 0.8)',  // pink-500
+        'rgba(14, 165, 233, 0.8)',  // sky-500
+        'rgba(34, 197, 94, 0.8)',   // green-500
+        'rgba(251, 146, 60, 0.8)',  // orange-500
+        'rgba(168, 85, 247, 0.8)',  // purple-500
+        'rgba(107, 114, 128, 0.8)',  // gray-500 for Others
+    ];
+
+    const datasets = disease_names.map((name, index) => ({
+        label: name,
+        data: monthly_data.map(month => month.data[index] || 0),
+        borderColor: colors[index % colors.length],
+        backgroundColor: colors[index % colors.length].replace('0.8', '0.1'),
+        borderWidth: 2,
+        fill: false,
+        tension: 0.4,
+    }));
+
+    return {
+        labels: monthly_data.map(m => m.month),
+        datasets,
+    };
+});
+
+const lineChartOptions = {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+        legend: {
+            position: 'top' as const,
+            labels: {
+                boxWidth: 12,
+                padding: 8,
+                font: {
+                    size: 11,
+                },
+            },
         },
         tooltip: {
             backgroundColor: 'rgba(0, 0, 0, 0.8)',
@@ -331,13 +427,6 @@ const chartOptions = {
         x: {
             grid: {
                 display: false,
-            },
-            ticks: {
-                maxRotation: 45,
-                minRotation: 45,
-                font: {
-                    size: 11,
-                },
             },
         },
     },
@@ -397,12 +486,12 @@ const chartOptions = {
                     </div>
                 </div>
 
-                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                    <!-- Top Diseases by Month Chart -->
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+                    <!-- Top Diseases by Month Chart (Pie Chart) -->
                     <Card>
                         <CardHeader>
                             <CardTitle class="text-lg font-semibold text-blue-600 dark:text-blue-400">
-                                Top Diseases by Month
+                                Top 10 Diseases by Month
                             </CardTitle>
                             <CardDescription>
                                 Most common diseases in {{ monthNames[selectedMonth - 1] }} {{ selectedYear }}
@@ -413,7 +502,7 @@ const chartOptions = {
                                 <div class="text-muted-foreground">Loading...</div>
                             </div>
                             <div v-else-if="diseaseStats && diseaseStats.top_diseases.length > 0" class="h-64">
-                                <Bar :data="chartData" :options="chartOptions" />
+                                <Pie :data="pieChartData" :options="pieChartOptions" />
                             </div>
                             <div v-else class="flex items-center justify-center h-64 text-muted-foreground">
                                 No disease data available for this month
@@ -452,30 +541,6 @@ const chartOptions = {
                                         Total Cases
                                     </div>
                                 </div>
-                                <div v-if="diseaseStats.top_diseases.length > 0" class="mt-4">
-                                    <div class="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
-                                        Top 3 Diseases:
-                                    </div>
-                                    <div class="space-y-2">
-                                        <div
-                                            v-for="(disease, index) in diseaseStats.top_diseases.slice(0, 3)"
-                                            :key="disease.id"
-                                            class="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-800 rounded-lg"
-                                        >
-                                            <div class="flex items-center gap-2">
-                                                <span class="flex items-center justify-center w-6 h-6 rounded-full bg-blue-500 text-white text-xs font-semibold">
-                                                    {{ index + 1 }}
-                                                </span>
-                                                <span class="text-sm font-medium text-gray-900 dark:text-gray-100">
-                                                    {{ disease.name }}
-                                                </span>
-                                            </div>
-                                            <span class="text-sm font-semibold text-blue-600 dark:text-blue-400">
-                                                {{ disease.count }}
-                                            </span>
-                                        </div>
-                                    </div>
-                                </div>
                             </div>
                             <div v-else class="flex items-center justify-center h-64 text-muted-foreground">
                                 No disease data available for this month
@@ -483,6 +548,29 @@ const chartOptions = {
                         </CardContent>
                     </Card>
                 </div>
+
+                <!-- Top Diseases by Year Chart (Line Graph) -->
+                <Card>
+                    <CardHeader>
+                        <CardTitle class="text-lg font-semibold text-blue-600 dark:text-blue-400">
+                            Top 10 Diseases by Year
+                        </CardTitle>
+                        <CardDescription>
+                            Disease trends throughout {{ selectedYear }}
+                        </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        <div v-if="loading" class="flex items-center justify-center h-96">
+                            <div class="text-muted-foreground">Loading...</div>
+                        </div>
+                        <div v-else-if="diseaseStats?.year_statistics" class="h-96">
+                            <Line :data="lineChartData" :options="lineChartOptions" />
+                        </div>
+                        <div v-else class="flex items-center justify-center h-96 text-muted-foreground">
+                            No disease data available for this year
+                        </div>
+                    </CardContent>
+                </Card>
             </div>
         </div>
     </AppLayout>

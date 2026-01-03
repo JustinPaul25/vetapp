@@ -43,6 +43,7 @@ interface MedicineRow {
     dosage: string;
     instructions: string;
     quantity: string;
+    disease_ids: number[]; // Track which diseases need this medicine
 }
 
 interface Props {
@@ -87,6 +88,9 @@ const diseaseSearchQuery = ref('');
 const searchedDiseases = ref<Disease[]>([]);
 const medicineRows = ref<MedicineRow[]>([]);
 const medicineRowCounter = ref(0);
+const newlyAddedRowIds = ref<Set<number>>(new Set());
+// Track which medicines are needed by which diseases
+const diseaseMedicinesMap = ref<Map<number, Set<number>>>(new Map());
 const isSearchingDiseases = ref(false);
 const isSymptomsModalOpen = ref(false);
 const symptomSearchQuery = ref('');
@@ -144,13 +148,17 @@ const openSymptomsModal = () => {
 
 // Add initial medicine row
 const addMedicineRow = () => {
+    const newId = medicineRowCounter.value++;
     medicineRows.value.push({
-        id: medicineRowCounter.value++,
+        id: newId,
         medicine_id: null,
         dosage: '',
         instructions: '',
         quantity: '',
+        disease_ids: [], // No disease_ids for manually added medicines
     });
+    // Mark as newly added so it shows even if empty
+    newlyAddedRowIds.value.add(newId);
 };
 
 // Remove medicine row
@@ -158,6 +166,7 @@ const removeMedicineRow = (rowId: number) => {
     const index = medicineRows.value.findIndex(r => r.id === rowId);
     if (index > -1) {
         medicineRows.value.splice(index, 1);
+        newlyAddedRowIds.value.delete(rowId);
     }
 };
 
@@ -200,6 +209,34 @@ const addDisease = (disease: Disease) => {
 const removeDisease = (diseaseId: number) => {
     selectedDiseases.value = selectedDiseases.value.filter(d => d.id !== diseaseId);
     form.disease_ids = selectedDiseases.value.map(d => d.id);
+    
+    // Get medicines that were added for this disease
+    const medicinesForDisease = diseaseMedicinesMap.value.get(diseaseId) || new Set<number>();
+    
+    // Remove disease from medicine rows' disease_ids
+    medicineRows.value.forEach(row => {
+        const index = row.disease_ids.indexOf(diseaseId);
+        if (index > -1) {
+            row.disease_ids.splice(index, 1);
+        }
+    });
+    
+    // Remove medicines that are no longer needed by any disease
+    // Only remove medicines that were added by diseases (have disease_ids) and now have none left
+    const rowsToRemove: number[] = [];
+    medicineRows.value.forEach(row => {
+        // If medicine was added by a disease and has no disease_ids left, remove it
+        if (row.disease_ids.length === 0 && row.medicine_id !== null && medicinesForDisease.has(row.medicine_id)) {
+            rowsToRemove.push(row.id);
+        }
+    });
+    
+    rowsToRemove.forEach(rowId => {
+        removeMedicineRow(rowId);
+    });
+    
+    // Clean up the disease from the map
+    diseaseMedicinesMap.value.delete(diseaseId);
 };
 
 // Manual disease search
@@ -234,17 +271,35 @@ const loadMedicinesForDisease = async (diseaseId: number) => {
         const response = await axios.get(`/admin/diseases/${diseaseId}/medicines`);
         const medicines = response.data;
         
-        // Add medicines that aren't already in the rows
+        // Track medicines for this disease
+        if (!diseaseMedicinesMap.value.has(diseaseId)) {
+            diseaseMedicinesMap.value.set(diseaseId, new Set());
+        }
+        const diseaseMedicines = diseaseMedicinesMap.value.get(diseaseId)!;
+        
         medicines.forEach((medicine: Medicine) => {
-            const exists = medicineRows.value.some(r => r.medicine_id === medicine.id);
-            if (!exists) {
+            diseaseMedicines.add(medicine.id);
+            
+            // Find existing row with this medicine
+            const existingRow = medicineRows.value.find(r => r.medicine_id === medicine.id);
+            
+            if (existingRow) {
+                // Medicine already exists, just add this disease to its disease_ids
+                if (!existingRow.disease_ids.includes(diseaseId)) {
+                    existingRow.disease_ids.push(diseaseId);
+                }
+            } else {
+                // Add new medicine row
+                const newId = medicineRowCounter.value++;
                 medicineRows.value.push({
-                    id: medicineRowCounter.value++,
+                    id: newId,
                     medicine_id: medicine.id,
                     dosage: calculateDosage(medicine.dosage, form.pet_current_weight),
                     instructions: '',
                     quantity: '1 Pcs.',
+                    disease_ids: [diseaseId], // Track which disease added this medicine
                 });
+                // Don't mark auto-added medicines as newly added since they already have medicine_id
             }
         });
     } catch (error) {
@@ -288,6 +343,8 @@ const onMedicineChange = (rowId: number, medicineId: number) => {
     const row = medicineRows.value.find(r => r.id === rowId);
     if (row) {
         row.medicine_id = medicineId;
+        // Remove from newly added set once medicine is selected
+        newlyAddedRowIds.value.delete(rowId);
         const medicine = props.medicines.find(m => m.id === medicineId);
         if (medicine && form.pet_current_weight) {
             row.dosage = calculateDosage(medicine.dosage, form.pet_current_weight);
@@ -295,23 +352,44 @@ const onMedicineChange = (rowId: number, medicineId: number) => {
     }
 };
 
-// Initialize with one medicine row
-addMedicineRow();
+// Handle blur on medicine select - remove empty newly added rows
+const onMedicineBlur = (rowId: number) => {
+    const row = medicineRows.value.find(r => r.id === rowId);
+    // If row is newly added but still empty, remove it after a short delay
+    // This allows the change event to fire first if user selected something
+    setTimeout(() => {
+        if (row && row.medicine_id === null && newlyAddedRowIds.value.has(rowId)) {
+            removeMedicineRow(rowId);
+        }
+    }, 100);
+};
+
+// Computed property to filter out empty medicine rows (rows without medicine_id)
+// But keep newly added rows visible so user can fill them
+const filledMedicineRows = computed(() => {
+    return medicineRows.value.filter(row => 
+        row.medicine_id !== null || newlyAddedRowIds.value.has(row.id)
+    );
+});
 
 // Submit form
 const submit = () => {
     // Sync disease_ids from selectedDiseases before submission
     form.disease_ids = selectedDiseases.value.map(d => d.id);
     
-    // Prepare medicines data
-    form.medicines = medicineRows.value
-        .filter(row => row.medicine_id && row.dosage && row.instructions && row.quantity)
-        .map(row => ({
-            id: row.medicine_id!,
-            dosage: row.dosage,
-            instructions: row.instructions,
-            quantity: row.quantity,
-        }));
+    // Prepare medicines data - filter out empty rows and newly added rows without medicine
+    const validMedicineRows = medicineRows.value.filter(row => 
+        row.medicine_id !== null && row.dosage && row.instructions && row.quantity
+    );
+    
+    // Map to the structure expected by the backend
+    form.medicines = validMedicineRows.map(row => ({
+        id: row.id,
+        medicine_id: row.medicine_id!,
+        dosage: row.dosage,
+        instructions: row.instructions,
+        quantity: row.quantity,
+    })) as any;
 
     form.post(`/admin/appointments/${props.appointment.id}/prescribe`, {
         onError: (errors) => {
@@ -631,7 +709,7 @@ const submit = () => {
                                     </thead>
                                     <tbody>
                                         <tr
-                                            v-for="row in medicineRows"
+                                            v-for="row in filledMedicineRows"
                                             :key="row.id"
                                             class="border-b"
                                         >
@@ -639,6 +717,7 @@ const submit = () => {
                                                 <select
                                                     :value="row.medicine_id?.toString() || ''"
                                                     @change="(e) => onMedicineChange(row.id, parseInt((e.target as HTMLSelectElement).value))"
+                                                    @blur="onMedicineBlur(row.id)"
                                                     class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
                                                 >
                                                     <option

@@ -172,8 +172,7 @@ class MedicineController extends Controller
             $query->where('name', 'LIKE', $request->search . '%');
         }
 
-        $this->applyDateFilter($query, $request, 'created_at');
-
+        // No date filtering for medicines report - print all records
         $medicines = $query->orderBy('created_at', 'desc')->get();
 
         $format = $request->get('format', 'pdf');
@@ -240,22 +239,7 @@ class MedicineController extends Controller
 
     private function getFilterInfo($request)
     {
-        $filterType = $request->get('filter_type');
-        
-        switch ($filterType) {
-            case 'date':
-                return 'Date: ' . $request->get('date');
-            case 'month':
-                $month = $request->get('month');
-                $year = $request->get('year');
-                $monthName = date('F', mktime(0, 0, 0, (int)$month, 1));
-                return "Month: {$monthName} {$year}";
-            case 'year':
-                return 'Year: ' . $request->get('year');
-            case 'range':
-                return 'Range: ' . $request->get('date_from') . ' to ' . $request->get('date_to');
-            default:
-                return 'All Records';
-        }
+        // Medicines report always shows all records without date filtering
+        return 'All Records';
     }
 }

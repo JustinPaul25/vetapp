@@ -59,6 +59,7 @@ interface Props {
     pet_types: PetType[];
     pet_breeds: Record<string, string[]>;
     has_location_pin: boolean;
+    philippine_holidays?: string[];
 }
 
 const props = defineProps<Props>();
@@ -618,6 +619,7 @@ fetchAppointments();
                                                 id="appointment_date"
                                                 v-model="form.appointment_date"
                                                 :min-date="minDate"
+                                                :disabled-dates="props.philippine_holidays || []"
                                                 required
                                             />
                                             <p

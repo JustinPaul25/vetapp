@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Constants\Components\PhilippineHolidays;
 use App\Models\Appointment;
 use App\Models\AppointmentType;
 use App\Models\DisabledDate;
@@ -136,6 +137,9 @@ class ClientController extends Controller
             $pet_breeds[$pet_type['name']] = $breeds;
         }
 
+        // Get Philippine holidays for current year and next year
+        $holidays = PhilippineHolidays::getCurrentAndNextYearHolidays();
+
         return Inertia::render('Client/Appointments/Index', [
             'pets' => $pets->map(function ($pet) {
                 return [
@@ -153,6 +157,7 @@ class ClientController extends Controller
             'pet_types' => $pet_types,
             'pet_breeds' => $pet_breeds,
             'has_location_pin' => $hasLocationPin,
+            'philippine_holidays' => $holidays,
         ]);
     }
 
@@ -228,23 +233,24 @@ class ClientController extends Controller
         $symptoms = $request->symptoms ?? '';
         $createdAppointments = [];
 
+        // All pets use the first (and only) selected time slot
+        $appointmentTime = $appointmentTimes[0];
+
+        // Convert time from 12-hour format (h:i A) to 24-hour format (H:i)
+        $time = Carbon::createFromFormat('h:i A', $appointmentTime);
+
+        // Validate timeslot restrictions once before creating appointments for all pets
+        // Multiple pets can share the same time slot, so validation should happen before the loop
+        try {
+            $this->validateTimeslotRestrictions($appointmentDate, $time->format('H:i'));
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return back()->withErrors($e->errors())->withInput();
+        }
+
         // Create appointments for each pet - all pets share the same time slot
         foreach ($petIds as $index => $petId) {
             $pet = $pets->firstWhere('id', $petId);
             if (!$pet) continue;
-
-            // All pets use the first (and only) selected time slot
-            $appointmentTime = $appointmentTimes[0];
-
-            // Convert time from 12-hour format (h:i A) to 24-hour format (H:i)
-            $time = Carbon::createFromFormat('h:i A', $appointmentTime);
-
-            // Validate timeslot restrictions
-            try {
-                $this->validateTimeslotRestrictions($appointmentDate, $time->format('H:i'));
-            } catch (\Illuminate\Validation\ValidationException $e) {
-                return back()->withErrors($e->errors())->withInput();
-            }
 
             // Create appointment for each appointment type
             foreach ($appointmentTypeIds as $appointmentTypeId) {
@@ -254,6 +260,7 @@ class ClientController extends Controller
                     'appointment_date' => $appointmentDate,
                     'symptoms' => $symptoms,
                     'is_approved' => false, // Client appointments start as pending
+                    'is_completed' => false, // Explicitly set to false for pending status
                     'appointment_time' => $time->format('H:i'), // Store in 24-hour format
                     'user_id' => Auth::id(),
                 ]);
@@ -324,8 +331,11 @@ class ClientController extends Controller
                 ]);
             }
 
-            // Send real-time notifications via Ably to staff
+            // Send notifications via database and Ably to staff
             foreach ($staffUsers as $staffUser) {
+                $staffUser->notify(new \App\Notifications\DefaultNotification($subject, $message, $link));
+                
+                // Send real-time notification via Ably
                 $ablyService->publishToUser($staffUser->id, 'appointment.created', [
                     'appointment_id' => $appointment->id,
                     'subject' => $subject,
@@ -888,12 +898,20 @@ class ClientController extends Controller
         $timeCarbon = Carbon::createFromFormat('H:i', $time);
         $time12Hour = $timeCarbon->format('h:i A');
 
-        // Check if date is disabled
+        // Check if date is disabled (from database)
         $isDisabled = DisabledDate::where('date', $date)->exists();
         if ($isDisabled) {
             throw new \Illuminate\Validation\ValidationException(
                 validator([], []),
                 ['appointment_date' => ['This date is not available for booking. The veterinarian is not available on this date.']]
+            );
+        }
+
+        // Check if date is a Philippine holiday
+        if (PhilippineHolidays::isHoliday($date)) {
+            throw new \Illuminate\Validation\ValidationException(
+                validator([], []),
+                ['appointment_date' => ['This date is not available for booking. The clinic is closed on this holiday.']]
             );
         }
 
@@ -974,7 +992,7 @@ class ClientController extends Controller
         $selectedDate = $request->input('selectedDate');
         $restrictions = $this->getTimeslotRestrictions();
 
-        // Check if date is disabled
+        // Check if date is disabled (from database)
         $isDisabled = DisabledDate::where('date', $selectedDate)->exists();
         if ($isDisabled) {
             return response()->json([
@@ -982,6 +1000,16 @@ class ClientController extends Controller
                 'disabledTimes' => [],
                 'isDateDisabled' => true,
                 'message' => 'This date is not available for booking. The veterinarian is not available on this date.',
+            ]);
+        }
+
+        // Check if date is a Philippine holiday
+        if (PhilippineHolidays::isHoliday($selectedDate)) {
+            return response()->json([
+                'availableTimes' => [],
+                'disabledTimes' => [],
+                'isDateDisabled' => true,
+                'message' => 'This date is not available for booking. The clinic is closed on this holiday.',
             ]);
         }
 
@@ -1043,12 +1071,20 @@ class ClientController extends Controller
         $timeCarbon = Carbon::createFromFormat('H:i', $time);
         $time12Hour = $timeCarbon->format('h:i A');
 
-        // Check if date is disabled
+        // Check if date is disabled (from database)
         $isDisabled = DisabledDate::where('date', $date)->exists();
         if ($isDisabled) {
             throw new \Illuminate\Validation\ValidationException(
                 validator([], []),
                 ['appointment_date' => ['This date is not available for booking. The veterinarian is not available on this date.']]
+            );
+        }
+
+        // Check if date is a Philippine holiday
+        if (PhilippineHolidays::isHoliday($date)) {
+            throw new \Illuminate\Validation\ValidationException(
+                validator([], []),
+                ['appointment_date' => ['This date is not available for booking. The clinic is closed on this holiday.']]
             );
         }
 

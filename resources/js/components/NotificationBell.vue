@@ -143,6 +143,14 @@ const formatTime = (date: Date) => {
                     </div>
                 </div>
             </div>
+            <div class="border-t border-gray-100 p-2">
+                <Link
+                    href="/notifications"
+                    class="block w-full rounded-md px-3 py-2 text-center text-sm font-medium text-blue-600 hover:bg-blue-50"
+                >
+                    See all notifications
+                </Link>
+            </div>
         </DropdownMenuContent>
     </DropdownMenu>
 </template>

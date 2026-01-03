@@ -9,6 +9,7 @@ interface Props {
     maxDate?: string;
     disabled?: boolean;
     class?: string;
+    disabledDates?: string[]; // Array of date strings in 'Y-m-d' format
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -17,6 +18,7 @@ const props = withDefaults(defineProps<Props>(), {
     maxDate: '',
     disabled: false,
     class: '',
+    disabledDates: () => [],
 });
 
 const emit = defineEmits<{
@@ -104,6 +106,12 @@ const isDateDisabled = (date: Date): boolean => {
     // Disable Saturday (6) and Sunday (0)
     const dayOfWeek = date.getDay();
     if (dayOfWeek === 0 || dayOfWeek === 6) return true;
+    
+    // Check if date is in disabledDates array (e.g., holidays)
+    if (props.disabledDates && props.disabledDates.length > 0) {
+        const dateString = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+        if (props.disabledDates.includes(dateString)) return true;
+    }
     
     return false;
 };

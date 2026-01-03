@@ -13,6 +13,7 @@ interface Props {
     exportUrl: string;
     reportTitle: string;
     filters?: Record<string, any>;
+    disableDateFilter?: boolean;
 }
 
 const props = defineProps<Props>();
@@ -45,6 +46,11 @@ const months = [
 ];
 
 const canGenerate = computed(() => {
+    // If date filter is disabled, always allow generation
+    if (props.disableDateFilter) {
+        return true;
+    }
+    
     switch (filterType.value) {
         case 'date':
             return !!selectedDate.value;
@@ -99,7 +105,7 @@ const generateReport = async (format: 'pdf' | 'csv') => {
         return;
     }
 
-    const params = buildFilterParams();
+    const params = props.disableDateFilter ? { ...props.filters } : buildFilterParams();
     params.format = format;
 
     try {
@@ -120,14 +126,16 @@ const generateReport = async (format: 'pdf' | 'csv') => {
         const timestamp = new Date().toISOString().split('T')[0];
         let filename = `${props.reportTitle.replace(/\s+/g, '_')}_${timestamp}`;
         
-        if (filterType.value === 'date' && selectedDate.value) {
-            filename += `_${selectedDate.value}`;
-        } else if (filterType.value === 'month' && selectedMonth.value && selectedYear.value) {
-            filename += `_${selectedYear.value}-${selectedMonth.value}`;
-        } else if (filterType.value === 'year' && selectedYear.value) {
-            filename += `_${selectedYear.value}`;
-        } else if (filterType.value === 'range' && dateFrom.value && dateTo.value) {
-            filename += `_${dateFrom.value}_to_${dateTo.value}`;
+        if (!props.disableDateFilter) {
+            if (filterType.value === 'date' && selectedDate.value) {
+                filename += `_${selectedDate.value}`;
+            } else if (filterType.value === 'month' && selectedMonth.value && selectedYear.value) {
+                filename += `_${selectedYear.value}-${selectedMonth.value}`;
+            } else if (filterType.value === 'year' && selectedYear.value) {
+                filename += `_${selectedYear.value}`;
+            } else if (filterType.value === 'range' && dateFrom.value && dateTo.value) {
+                filename += `_${dateFrom.value}_to_${dateTo.value}`;
+            }
         }
 
         filename += `.${format}`;
@@ -165,93 +173,101 @@ const handleFilterTypeChange = () => {
             </DialogHeader>
 
             <div class="space-y-4 py-4">
-                <!-- Filter Type Selection -->
-                <div class="space-y-2">
-                    <Label>Filter By</Label>
-                    <select
-                        v-model="filterType"
-                        @change="handleFilterTypeChange"
-                        class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                    >
-                        <option value="date">Single Date</option>
-                        <option value="month">Month</option>
-                        <option value="year">Year</option>
-                        <option value="range">Date Range</option>
-                    </select>
-                </div>
-
-                <!-- Single Date Filter -->
-                <div v-if="filterType === 'date'" class="space-y-2">
-                    <Label>Select Date</Label>
-                    <Input
-                        v-model="selectedDate"
-                        type="date"
-                        class="w-full"
-                    />
-                </div>
-
-                <!-- Month Filter -->
-                <div v-if="filterType === 'month'" class="space-y-2">
-                    <div class="grid grid-cols-2 gap-2">
-                        <div class="space-y-2">
-                            <Label>Month</Label>
-                            <select
-                                v-model="selectedMonth"
-                                class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                            >
-                                <option value="">Select Month</option>
-                                <option v-for="month in months" :key="month.value" :value="month.value">
-                                    {{ month.label }}
-                                </option>
-                            </select>
-                        </div>
-                        <div class="space-y-2">
-                            <Label>Year</Label>
-                            <select
-                                v-model="selectedYear"
-                                class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                            >
-                                <option value="">Select Year</option>
-                                <option v-for="year in years" :key="year" :value="year">
-                                    {{ year }}
-                                </option>
-                            </select>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Year Filter -->
-                <div v-if="filterType === 'year'" class="space-y-2">
-                    <Label>Select Year</Label>
-                    <select
-                        v-model="selectedYear"
-                        class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                    >
-                        <option value="">Select Year</option>
-                        <option v-for="year in years" :key="year" :value="year">
-                            {{ year }}
-                        </option>
-                    </select>
-                </div>
-
-                <!-- Date Range Filter -->
-                <div v-if="filterType === 'range'" class="space-y-2">
+                <!-- Date Filter Options (only shown if not disabled) -->
+                <template v-if="!disableDateFilter">
+                    <!-- Filter Type Selection -->
                     <div class="space-y-2">
-                        <Label>From Date</Label>
+                        <Label>Filter By</Label>
+                        <select
+                            v-model="filterType"
+                            @change="handleFilterTypeChange"
+                            class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                        >
+                            <option value="date">Single Date</option>
+                            <option value="month">Month</option>
+                            <option value="year">Year</option>
+                            <option value="range">Date Range</option>
+                        </select>
+                    </div>
+
+                    <!-- Single Date Filter -->
+                    <div v-if="filterType === 'date'" class="space-y-2">
+                        <Label>Select Date</Label>
                         <Input
-                            v-model="dateFrom"
+                            v-model="selectedDate"
                             type="date"
                             class="w-full"
                         />
                     </div>
-                    <div class="space-y-2">
-                        <Label>To Date</Label>
-                        <Input
-                            v-model="dateTo"
-                            type="date"
-                            class="w-full"
-                        />
+
+                    <!-- Month Filter -->
+                    <div v-if="filterType === 'month'" class="space-y-2">
+                        <div class="grid grid-cols-2 gap-2">
+                            <div class="space-y-2">
+                                <Label>Month</Label>
+                                <select
+                                    v-model="selectedMonth"
+                                    class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                                >
+                                    <option value="">Select Month</option>
+                                    <option v-for="month in months" :key="month.value" :value="month.value">
+                                        {{ month.label }}
+                                    </option>
+                                </select>
+                            </div>
+                            <div class="space-y-2">
+                                <Label>Year</Label>
+                                <select
+                                    v-model="selectedYear"
+                                    class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                                >
+                                    <option value="">Select Year</option>
+                                    <option v-for="year in years" :key="year" :value="year">
+                                        {{ year }}
+                                    </option>
+                                </select>
+                            </div>
+                        </div>
                     </div>
+
+                    <!-- Year Filter -->
+                    <div v-if="filterType === 'year'" class="space-y-2">
+                        <Label>Select Year</Label>
+                        <select
+                            v-model="selectedYear"
+                            class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                        >
+                            <option value="">Select Year</option>
+                            <option v-for="year in years" :key="year" :value="year">
+                                {{ year }}
+                            </option>
+                        </select>
+                    </div>
+
+                    <!-- Date Range Filter -->
+                    <div v-if="filterType === 'range'" class="space-y-2">
+                        <div class="space-y-2">
+                            <Label>From Date</Label>
+                            <Input
+                                v-model="dateFrom"
+                                type="date"
+                                class="w-full"
+                            />
+                        </div>
+                        <div class="space-y-2">
+                            <Label>To Date</Label>
+                            <Input
+                                v-model="dateTo"
+                                type="date"
+                                class="w-full"
+                            />
+                        </div>
+                    </div>
+                </template>
+
+                <!-- Info message when date filter is disabled -->
+                <div v-if="disableDateFilter" class="text-sm text-muted-foreground">
+                    This report will include all records without date filtering.
                 </div>
 
                 <!-- Action Buttons -->
@@ -278,6 +294,8 @@ const handleFilterTypeChange = () => {
         </DialogContent>
     </Dialog>
 </template>
+
+
 
 
 

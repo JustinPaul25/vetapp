@@ -48,7 +48,9 @@ class AppointmentController extends Controller
             switch ($status) {
                 case 'pending':
                     $query->where('is_approved', false)
-                          ->where('is_completed', false)
+                          ->where(function ($q) {
+                              $q->whereNull('is_completed')->orWhere('is_completed', false);
+                          })
                           ->where(function ($q) {
                               $q->whereNull('is_canceled')->orWhere('is_canceled', false);
                           });
