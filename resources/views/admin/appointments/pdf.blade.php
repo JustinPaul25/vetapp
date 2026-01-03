@@ -13,15 +13,15 @@
         
         @page {
             size: A4;
-            margin: 0.5in;
+            margin: 0.75in;
         }
         
         body {
-            font-family: 'DejaVu Sans', sans-serif;
-            font-size: 10px;
+            font-family: Arial, sans-serif;
+            font-size: 14px;
             color: #000;
             line-height: 1.4;
-            padding: 0;
+            padding: 20px;
             width: 100%;
             max-width: 100%;
         }
@@ -61,7 +61,7 @@
         .header-table td {
             vertical-align: top;
             border: none;
-            padding: 5px 8px;
+            padding: 8px 12px;
         }
         
         .header-left {
@@ -86,17 +86,17 @@
         }
         
         .header-org-name {
-            font-size: 16px;
+            font-size: 20px;
             font-weight: bold;
             margin: 0;
         }
 
         .header-address {
-            font-size: 10px;
+            font-size: 14px;
         }
         
         .header-section-name {
-            font-size: 8px;
+            font-size: 12px;
             font-weight: bold;
             margin: 0;
         }
@@ -123,7 +123,7 @@
         
         .patient-info-table td {
             border: none;
-            padding: 2px 8px;
+            padding: 6px 12px;
         }
         
         .patient-info-label {
@@ -148,7 +148,7 @@
             border: none;
             text-align: left;
             vertical-align: top;
-            padding: 4px 8px;
+            padding: 8px 12px;
         }
 
         .medicines-table tbody tr + tr td {
@@ -164,7 +164,7 @@
         
         .medicines-table th .sub-header {
             font-weight: normal;
-            font-size: 9px;
+            font-size: 13px;
             font-style: normal;
             display: block;
             margin-top: 4px;
@@ -188,7 +188,7 @@
         }
         
         .medicine-route {
-            font-size: 9px;
+            font-size: 13px;
             color: #000;
         }
         
@@ -197,7 +197,7 @@
         }
         
         .dosage-frequency {
-            font-size: 9px;
+            font-size: 13px;
             color: #000;
         }
         
@@ -206,7 +206,7 @@
         }
         
         .quantity-time {
-            font-size: 9px;
+            font-size: 13px;
             color: #000;
         }
         
@@ -218,20 +218,20 @@
         .notes-table td {
             border: none;
             line-height: 1.6;
-            padding: 8px 12px;
+            padding: 12px 16px;
         }
         
         /* Footer Section */
         .footer-table {
             margin-top: 15px;
-            font-size: 10px;
+            font-size: 14px;
         }
         
         .footer-table td {
             border: none;
             vertical-align: top;
             line-height: 1.6;
-            padding: 6px 8px;
+            padding: 10px 12px;
         }
         
         .footer-left {
