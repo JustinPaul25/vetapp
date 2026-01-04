@@ -17,6 +17,7 @@ use App\Models\Setting;
 use App\Models\Symptom;
 use App\Models\User;
 use App\Notifications\ClientEmailNotification;
+use App\Notifications\DatabaseNotification;
 use App\Notifications\PrescriptionEmailNotification;
 use App\Services\AblyService;
 use App\Services\AppointmentLimitService;
@@ -458,6 +459,15 @@ class AppointmentController extends Controller
                 ->notify(new ClientEmailNotification($details));
         }
 
+        // Send database notification (in-app notification) to client
+        if ($patient->user) {
+            $link = config('app.url') . '/appointments/' . $appointment->id;
+            $subject = 'Your appointment has been approved!';
+            $message = "Your {$appointmentTypeName} appointment scheduled for {$request->appointment_date} at {$request->appointment_time} has been approved.";
+            
+            $patient->user->notify(new DatabaseNotification($subject, $message, $link));
+        }
+
         // Send real-time notification to client via Ably
         if ($patient->user) {
             $ablyService = app(AblyService::class);
@@ -577,6 +587,15 @@ class AppointmentController extends Controller
 
             Notification::route('mail', $patient->user->email)
                 ->notify(new ClientEmailNotification($details));
+        }
+
+        // Send database notification (in-app notification) to client
+        if ($patient && $patient->user) {
+            $link = config('app.url') . '/appointments/' . $appointment->id;
+            $subject = 'Your appointment has been rescheduled';
+            $message = "Your {$appointmentTypeName} appointment has been rescheduled from {$oldDate} at {$oldTime} to {$request->appointment_date} at {$request->appointment_time}.";
+            
+            $patient->user->notify(new DatabaseNotification($subject, $message, $link));
         }
 
         // Send real-time notification to client via Ably
