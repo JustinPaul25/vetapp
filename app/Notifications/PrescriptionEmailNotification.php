@@ -4,14 +4,11 @@ namespace App\Notifications;
 
 use App\Models\Prescription;
 use Barryvdh\DomPDF\Facade\Pdf;
-use Illuminate\Bus\Queueable;
-use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Notifications\Notification;
 
-class PrescriptionEmailNotification extends Notification implements ShouldQueue
+class PrescriptionEmailNotification extends Notification
 {
-    use Queueable;
 
     public $prescription;
 

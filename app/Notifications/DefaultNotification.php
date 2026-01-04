@@ -2,14 +2,11 @@
 
 namespace App\Notifications;
 
-use Illuminate\Bus\Queueable;
-use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Notifications\Notification;
 
-class DefaultNotification extends Notification implements ShouldQueue
+class DefaultNotification extends Notification
 {
-    use Queueable;
 
     private $link;
     private $subject;

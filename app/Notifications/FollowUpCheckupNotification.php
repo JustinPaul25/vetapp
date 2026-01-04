@@ -3,14 +3,11 @@
 namespace App\Notifications;
 
 use App\Models\Prescription;
-use Illuminate\Bus\Queueable;
-use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Notifications\Notification;
 
-class FollowUpCheckupNotification extends Notification implements ShouldQueue
+class FollowUpCheckupNotification extends Notification
 {
-    use Queueable;
 
     public $prescription;
 
