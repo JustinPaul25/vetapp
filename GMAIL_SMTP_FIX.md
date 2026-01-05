@@ -103,3 +103,4 @@ MAIL_FROM_NAME="${APP_NAME}"
 
 ⚠️ **Never commit your `.env` file to version control!** It contains sensitive credentials. The `.env` file should already be in `.gitignore`.
 
+

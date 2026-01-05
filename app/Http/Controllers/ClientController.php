@@ -166,94 +166,77 @@ class ClientController extends Controller
      */
     public function bookAppointment(Request $request)
     {
-        // Support both singular (legacy) and plural (new) field names
-        $petIds = $request->has('pet_ids') && is_array($request->pet_ids) ? $request->pet_ids : 
-                  ($request->has('pet_id') ? [$request->pet_id] : []);
-        $appointmentTypeIds = $request->has('appointment_type_ids') && is_array($request->appointment_type_ids) ? $request->appointment_type_ids : 
-                              ($request->has('appointment_type_id') ? [$request->appointment_type_id] : []);
         $appointmentTimes = $request->has('appointment_times') && is_array($request->appointment_times) ? $request->appointment_times : 
                            ($request->has('appointment_time') ? [$request->appointment_time] : []);
 
-        // Validate that we have at least one of each required field
-        $errors = [];
-        if (empty($petIds)) {
-            $errors['pet_ids'] = ['At least one pet must be selected.'];
-        }
-        if (empty($appointmentTypeIds)) {
-            $errors['appointment_type_ids'] = ['At least one appointment type must be selected.'];
-        }
-        if (empty($appointmentTimes)) {
-            $errors['appointment_times'] = ['At least one appointment time must be selected.'];
-        }
-        if (!empty($errors)) {
-            return back()->withErrors($errors)->withInput();
-        }
+        // Check if using new format (pet_appointments) or legacy format (pet_ids + appointment_type_ids)
+        $petAppointments = $request->has('pet_appointments') && is_array($request->pet_appointments) ? $request->pet_appointments : null;
+        
+        if ($petAppointments) {
+            // New format: pet_appointments array with pet_id and appointment_type_id pairs
+            $request->validate([
+                'pet_appointments' => 'required|array|min:1',
+                'pet_appointments.*.pet_id' => 'required|exists:patients,id',
+                'pet_appointments.*.appointment_type_id' => 'required|exists:appointment_types,id',
+                'appointment_date' => 'required|date|after:today',
+                'appointment_times' => 'sometimes|array|min:1',
+                'appointment_times.*' => 'required_with:appointment_times|string',
+                'appointment_time' => 'sometimes|required_without:appointment_times|string',
+                'symptoms' => 'nullable|string|max:1825',
+            ]);
 
-        $request->validate([
-            'pet_ids' => 'sometimes|array|min:1',
-            'pet_ids.*' => 'required_with:pet_ids|exists:patients,id',
-            'pet_id' => 'sometimes|required_without:pet_ids|exists:patients,id', // Legacy support
-            'appointment_type_ids' => 'sometimes|array|min:1',
-            'appointment_type_ids.*' => 'required_with:appointment_type_ids|exists:appointment_types,id',
-            'appointment_type_id' => 'sometimes|required_without:appointment_type_ids|exists:appointment_types,id', // Legacy support
-            'appointment_date' => 'required|date|after:today',
-            'appointment_times' => 'sometimes|array|min:1',
-            'appointment_times.*' => 'required_with:appointment_times|string',
-            'appointment_time' => 'sometimes|required_without:appointment_times|string', // Legacy support
-            'symptoms' => 'nullable|string|max:1825',
-        ]);
+            if (empty($appointmentTimes)) {
+                return back()->withErrors([
+                    'appointment_times' => ['At least one appointment time must be selected.'],
+                ])->withInput();
+            }
 
-        // Multiple pets can share the same time slot - only require at least one time slot
-        if (empty($appointmentTimes)) {
-            return back()->withErrors([
-                'appointment_times' => ['At least one appointment time must be selected.'],
-            ])->withInput();
-        }
+            // Check if user has location pin set
+            $user = Auth::user();
+            if (!$user->lat || !$user->long) {
+                return back()->withErrors([
+                    'location_pin' => 'Please set your home address location pin in settings before booking an appointment.',
+                ])->withInput();
+            }
 
-        // Check if user has location pin set
-        $user = Auth::user();
-        if (!$user->lat || !$user->long) {
-            return back()->withErrors([
-                'location_pin' => 'Please set your home address location pin in settings before booking an appointment.',
-            ])->withInput();
-        }
+            // Extract unique pet IDs and verify all pets belong to the authenticated user
+            $petIds = array_unique(array_column($petAppointments, 'pet_id'));
+            $pets = Patient::whereIn('id', $petIds)
+                ->where('user_id', auth()->id())
+                ->get();
 
-        // Verify all pets belong to the authenticated user
-        $pets = Patient::whereIn('id', $petIds)
-            ->where('user_id', auth()->id())
-            ->get();
+            if ($pets->count() !== count($petIds)) {
+                return back()->withErrors([
+                    'pet_appointments' => ['One or more selected pets do not belong to you.'],
+                ])->withInput();
+            }
 
-        if ($pets->count() !== count($petIds)) {
-            return back()->withErrors([
-                'pet_ids' => ['One or more selected pets do not belong to you.'],
-            ])->withInput();
-        }
+            $appointmentDate = $request->appointment_date;
+            $symptoms = $request->symptoms ?? '';
+            $createdAppointments = [];
 
-        $appointmentDate = $request->appointment_date;
-        $symptoms = $request->symptoms ?? '';
-        $createdAppointments = [];
+            // All pets use the first (and only) selected time slot
+            $appointmentTime = $appointmentTimes[0];
 
-        // All pets use the first (and only) selected time slot
-        $appointmentTime = $appointmentTimes[0];
+            // Convert time from 12-hour format (h:i A) to 24-hour format (H:i)
+            $time = Carbon::createFromFormat('h:i A', $appointmentTime);
 
-        // Convert time from 12-hour format (h:i A) to 24-hour format (H:i)
-        $time = Carbon::createFromFormat('h:i A', $appointmentTime);
+            // Validate timeslot restrictions once before creating appointments
+            try {
+                $this->validateTimeslotRestrictions($appointmentDate, $time->format('H:i'));
+            } catch (\Illuminate\Validation\ValidationException $e) {
+                return back()->withErrors($e->errors())->withInput();
+            }
 
-        // Validate timeslot restrictions once before creating appointments for all pets
-        // Multiple pets can share the same time slot, so validation should happen before the loop
-        try {
-            $this->validateTimeslotRestrictions($appointmentDate, $time->format('H:i'));
-        } catch (\Illuminate\Validation\ValidationException $e) {
-            return back()->withErrors($e->errors())->withInput();
-        }
+            // Create appointments for each pet-appointment type pair
+            foreach ($petAppointments as $pair) {
+                $petId = $pair['pet_id'];
+                $appointmentTypeId = $pair['appointment_type_id'];
 
-        // Create appointments for each pet - all pets share the same time slot
-        foreach ($petIds as $index => $petId) {
-            $pet = $pets->firstWhere('id', $petId);
-            if (!$pet) continue;
+                // Verify pet belongs to user
+                $pet = $pets->firstWhere('id', $petId);
+                if (!$pet) continue;
 
-            // Create appointment for each appointment type
-            foreach ($appointmentTypeIds as $appointmentTypeId) {
                 $appointment = Appointment::with('appointment_type')->create([
                     'patient_id' => $petId,
                     'appointment_type_id' => $appointmentTypeId,
@@ -266,6 +249,107 @@ class ClientController extends Controller
                 ]);
 
                 $createdAppointments[] = $appointment;
+            }
+        } else {
+            // Legacy format: separate pet_ids and appointment_type_ids arrays (creates cartesian product)
+            $petIds = $request->has('pet_ids') && is_array($request->pet_ids) ? $request->pet_ids : 
+                      ($request->has('pet_id') ? [$request->pet_id] : []);
+            $appointmentTypeIds = $request->has('appointment_type_ids') && is_array($request->appointment_type_ids) ? $request->appointment_type_ids : 
+                                  ($request->has('appointment_type_id') ? [$request->appointment_type_id] : []);
+
+            // Validate that we have at least one of each required field
+            $errors = [];
+            if (empty($petIds)) {
+                $errors['pet_ids'] = ['At least one pet must be selected.'];
+            }
+            if (empty($appointmentTypeIds)) {
+                $errors['appointment_type_ids'] = ['At least one appointment type must be selected.'];
+            }
+            if (empty($appointmentTimes)) {
+                $errors['appointment_times'] = ['At least one appointment time must be selected.'];
+            }
+            if (!empty($errors)) {
+                return back()->withErrors($errors)->withInput();
+            }
+
+            $request->validate([
+                'pet_ids' => 'sometimes|array|min:1',
+                'pet_ids.*' => 'required_with:pet_ids|exists:patients,id',
+                'pet_id' => 'sometimes|required_without:pet_ids|exists:patients,id', // Legacy support
+                'appointment_type_ids' => 'sometimes|array|min:1',
+                'appointment_type_ids.*' => 'required_with:appointment_type_ids|exists:appointment_types,id',
+                'appointment_type_id' => 'sometimes|required_without:appointment_type_ids|exists:appointment_types,id', // Legacy support
+                'appointment_date' => 'required|date|after:today',
+                'appointment_times' => 'sometimes|array|min:1',
+                'appointment_times.*' => 'required_with:appointment_times|string',
+                'appointment_time' => 'sometimes|required_without:appointment_times|string', // Legacy support
+                'symptoms' => 'nullable|string|max:1825',
+            ]);
+
+            // Multiple pets can share the same time slot - only require at least one time slot
+            if (empty($appointmentTimes)) {
+                return back()->withErrors([
+                    'appointment_times' => ['At least one appointment time must be selected.'],
+                ])->withInput();
+            }
+
+            // Check if user has location pin set
+            $user = Auth::user();
+            if (!$user->lat || !$user->long) {
+                return back()->withErrors([
+                    'location_pin' => 'Please set your home address location pin in settings before booking an appointment.',
+                ])->withInput();
+            }
+
+            // Verify all pets belong to the authenticated user
+            $pets = Patient::whereIn('id', $petIds)
+                ->where('user_id', auth()->id())
+                ->get();
+
+            if ($pets->count() !== count($petIds)) {
+                return back()->withErrors([
+                    'pet_ids' => ['One or more selected pets do not belong to you.'],
+                ])->withInput();
+            }
+
+            $appointmentDate = $request->appointment_date;
+            $symptoms = $request->symptoms ?? '';
+            $createdAppointments = [];
+
+            // All pets use the first (and only) selected time slot
+            $appointmentTime = $appointmentTimes[0];
+
+            // Convert time from 12-hour format (h:i A) to 24-hour format (H:i)
+            $time = Carbon::createFromFormat('h:i A', $appointmentTime);
+
+            // Validate timeslot restrictions once before creating appointments for all pets
+            // Multiple pets can share the same time slot, so validation should happen before the loop
+            try {
+                $this->validateTimeslotRestrictions($appointmentDate, $time->format('H:i'));
+            } catch (\Illuminate\Validation\ValidationException $e) {
+                return back()->withErrors($e->errors())->withInput();
+            }
+
+            // Create appointments for each pet - all pets share the same time slot
+            foreach ($petIds as $index => $petId) {
+                $pet = $pets->firstWhere('id', $petId);
+                if (!$pet) continue;
+
+                // Create appointment for each appointment type
+                foreach ($appointmentTypeIds as $appointmentTypeId) {
+                    $appointment = Appointment::with('appointment_type')->create([
+                        'patient_id' => $petId,
+                        'appointment_type_id' => $appointmentTypeId,
+                        'appointment_date' => $appointmentDate,
+                        'symptoms' => $symptoms,
+                        'is_approved' => false, // Client appointments start as pending
+                        'is_completed' => false, // Explicitly set to false for pending status
+                        'appointment_time' => $time->format('H:i'), // Store in 24-hour format
+                        'user_id' => Auth::id(),
+                    ]);
+
+                    $createdAppointments[] = $appointment;
+                }
             }
         }
 

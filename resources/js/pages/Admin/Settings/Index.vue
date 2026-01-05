@@ -50,6 +50,8 @@ const updateSetting = (key: string, value: any) => {
         },
         {
             preserveScroll: true,
+            preserveState: true,
+            only: [],
         }
     );
 };

@@ -2,6 +2,7 @@
 import InputError from '@/components/InputError.vue';
 import PasswordRequirements from '@/components/PasswordRequirements.vue';
 import TextLink from '@/components/TextLink.vue';
+import AddressMapPicker from '@/components/AddressMapPicker.vue';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -16,6 +17,13 @@ import { ref } from 'vue';
 const password = ref('');
 const showPassword = ref(false);
 const showPasswordConfirmation = ref(false);
+const address = ref('');
+const location = ref<{ lat: number | null; lng: number | null } | null>(null);
+
+// Update location when map picker changes
+const updateLocation = (value: { lat: number | null; lng: number | null }) => {
+    location.value = value;
+};
 </script>
 
 <template>
@@ -117,10 +125,54 @@ const showPasswordConfirmation = ref(false);
                     <InputError :message="errors.password_confirmation" />
                 </div>
 
+                <div class="grid gap-2">
+                    <Label for="mobile_number">Contact Number <span class="text-red-500">*</span></Label>
+                    <Input
+                        id="mobile_number"
+                        type="tel"
+                        required
+                        :tabindex="5"
+                        autocomplete="tel"
+                        name="mobile_number"
+                        placeholder="09123456789 or +639123456789"
+                    />
+                    <p class="text-xs text-muted-foreground">Format: 09XX XXX XXXX or +639XX XXX XXXX</p>
+                    <InputError :message="errors.mobile_number" />
+                </div>
+
+                <div class="grid gap-2">
+                    <Label for="address">Address <span class="text-red-500">*</span></Label>
+                    <AddressMapPicker
+                        v-model="address"
+                        :coordinates="location"
+                        @update:coordinates="updateLocation"
+                        required
+                        height="250px"
+                    />
+                    <input
+                        type="hidden"
+                        name="address"
+                        :value="address"
+                    />
+                    <input
+                        type="hidden"
+                        name="lat"
+                        :value="location?.lat ?? ''"
+                    />
+                    <input
+                        type="hidden"
+                        name="lng"
+                        :value="location?.lng ?? ''"
+                    />
+                    <InputError :message="errors.address" />
+                    <InputError :message="errors.lat" />
+                    <InputError :message="errors.lng" />
+                </div>
+
                 <Button
                     type="submit"
                     class="mt-2 w-full"
-                    tabindex="5"
+                    tabindex="7"
                     :disabled="processing"
                     data-test="register-user-button"
                 >

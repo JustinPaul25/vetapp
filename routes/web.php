@@ -10,6 +10,23 @@ Route::get('/', function () {
     ]);
 })->name('home');
 
+// Multi-step registration routes
+Route::middleware(['guest'])->group(function () {
+    Route::get('/register', [\App\Http\Controllers\Auth\RegistrationController::class, 'create'])->name('register');
+    Route::post('/register/step1', [\App\Http\Controllers\Auth\RegistrationController::class, 'storeStep1'])->name('register.step1');
+});
+
+Route::middleware(['auth'])->group(function () {
+    Route::get('/register/verify-email', [\App\Http\Controllers\Auth\RegistrationController::class, 'showVerifyEmail'])->name('register.verify-email');
+    Route::post('/register/resend-verification', [\App\Http\Controllers\Auth\RegistrationController::class, 'resendVerificationEmail'])->name('register.resend-verification');
+    Route::get('/register/address', [\App\Http\Controllers\Auth\RegistrationController::class, 'showAddress'])->name('register.address');
+    Route::post('/register/address', [\App\Http\Controllers\Auth\RegistrationController::class, 'storeAddress'])->name('register.address.store');
+    Route::get('/register/password', [\App\Http\Controllers\Auth\RegistrationController::class, 'showPassword'])->name('register.password');
+    Route::post('/register/password', [\App\Http\Controllers\Auth\RegistrationController::class, 'storePassword'])->name('register.password.store');
+    Route::get('/register/review', [\App\Http\Controllers\Auth\RegistrationController::class, 'showReview'])->name('register.review');
+    Route::post('/register/finalize', [\App\Http\Controllers\Auth\RegistrationController::class, 'finalize'])->name('register.finalize');
+});
+
 // Public disease search route for landing page
 Route::get('/search-diseases', [\App\Http\Controllers\DiseaseSearchController::class, 'search'])->name('diseases.search');
 
