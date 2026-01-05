@@ -165,7 +165,14 @@ const rescheduling = ref(false);
 const rescheduleForm = ref({
     appointment_date: '',
     appointment_time: '',
+    reschedule_reason: '',
 });
+const rescheduleReasons = [
+    'Scheduling conflict',
+    'Veterinarian unavailable',
+    'No show',
+    'Others',
+];
 const availableTimes = ref<string[]>([]);
 const loadingTimes = ref(false);
 const rescheduleErrors = ref<Record<string, string[]>>({});
@@ -198,6 +205,7 @@ watch(() => rescheduleDialogOpen.value, (isOpen) => {
         rescheduleForm.value = {
             appointment_date: appointmentDate,
             appointment_time: formatTime(props.appointment.appointment_time) || '',
+            reschedule_reason: '',
         };
         rescheduleErrors.value = {};
         if (rescheduleForm.value.appointment_date) {
@@ -248,6 +256,7 @@ const handleReschedule = () => {
         {
             appointment_date: rescheduleForm.value.appointment_date,
             appointment_time: time24h,
+            reschedule_reason: rescheduleForm.value.reschedule_reason,
         },
         {
             preserveScroll: false,
@@ -346,6 +355,28 @@ const handleReschedule = () => {
                                                 {{ rescheduleErrors.appointment_time[0] }}
                                             </p>
                                         </div>
+                                        <div class="space-y-2">
+                                            <Label for="reschedule_reason">Reason for Rescheduling <span class="text-destructive">*</span></Label>
+                                            <select
+                                                id="reschedule_reason"
+                                                v-model="rescheduleForm.reschedule_reason"
+                                                :disabled="rescheduling"
+                                                class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                                                required
+                                            >
+                                                <option value="">Select a reason</option>
+                                                <option
+                                                    v-for="reason in rescheduleReasons"
+                                                    :key="reason"
+                                                    :value="reason"
+                                                >
+                                                    {{ reason }}
+                                                </option>
+                                            </select>
+                                            <p v-if="rescheduleErrors.reschedule_reason" class="text-sm text-destructive">
+                                                {{ rescheduleErrors.reschedule_reason[0] }}
+                                            </p>
+                                        </div>
                                     </div>
                                     <DialogFooter>
                                         <Button
@@ -359,7 +390,7 @@ const handleReschedule = () => {
                                         <Button
                                             type="button"
                                             @click="handleReschedule"
-                                            :disabled="rescheduling || !rescheduleForm.appointment_date || !rescheduleForm.appointment_time"
+                                            :disabled="rescheduling || !rescheduleForm.appointment_date || !rescheduleForm.appointment_time || !rescheduleForm.reschedule_reason"
                                         >
                                             <span v-if="rescheduling">Rescheduling...</span>
                                             <span v-else>Reschedule Appointment</span>

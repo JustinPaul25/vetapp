@@ -5,7 +5,7 @@ import { type BreadcrumbItem } from '@/types';
 import { Head, Link } from '@inertiajs/vue3';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Users, Shield, Dog, Heart, Pill, FileText, LayoutGrid, UserCheck, MapPin, Calendar, Stethoscope } from 'lucide-vue-next';
+import { Users, Shield, Dog, Heart, Pill, FileText, LayoutGrid, UserCheck, MapPin, Calendar, Stethoscope, Activity } from 'lucide-vue-next';
 import { usePage } from '@inertiajs/vue3';
 import { computed, ref, onMounted } from 'vue';
 import { Bar, Pie, Line } from 'vue-chartjs';
@@ -73,14 +73,41 @@ interface DisabledDate {
     reason?: string | null;
 }
 
+interface ClientPet {
+    id: number;
+    pet_name: string | null;
+    pet_breed: string | null;
+    pet_type: string;
+    pet_gender: string | null;
+    created_at: string;
+}
+
+interface AppointmentStats {
+    total: number;
+    pending: number;
+    approved: number;
+    completed: number;
+    canceled: number;
+}
+
 interface Props {
     appointments?: Appointment[];
     disabledDates?: DisabledDate[];
+    clientPets?: ClientPet[];
+    appointmentStats?: AppointmentStats;
 }
 
 const props = withDefaults(defineProps<Props>(), {
     appointments: () => [],
     disabledDates: () => [],
+    clientPets: () => [],
+    appointmentStats: () => ({
+        total: 0,
+        pending: 0,
+        approved: 0,
+        completed: 0,
+        canceled: 0,
+    }),
 });
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -158,6 +185,13 @@ const adminLinks = computed(() => [
         color: 'text-red-600 dark:text-red-400',
     },
     {
+        title: 'Symptoms',
+        href: '/admin/symptoms',
+        icon: Activity,
+        description: 'Manage symptoms',
+        color: 'text-orange-600 dark:text-orange-400',
+    },
+    {
         title: 'Prescriptions',
         href: '/admin/prescriptions',
         icon: FileText,
@@ -211,6 +245,13 @@ const staffLinks = computed(() => [
         icon: Stethoscope,
         description: 'Manage diseases and symptoms',
         color: 'text-red-600 dark:text-red-400',
+    },
+    {
+        title: 'Symptoms',
+        href: '/admin/symptoms',
+        icon: Activity,
+        description: 'Manage symptoms',
+        color: 'text-orange-600 dark:text-orange-400',
     },
 ]);
 
@@ -458,6 +499,133 @@ const lineChartOptions = {
                         />
                     </CardContent>
                 </Card>
+            </div>
+
+            <!-- Client Dashboard Section -->
+            <div v-if="isClient" class="mb-8">
+                <!-- Client Records (Pets) -->
+                <div class="mb-6">
+                    <h2 class="text-xl font-semibold mb-4">My Pet Records</h2>
+                    <div v-if="props.clientPets && props.clientPets.length > 0" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        <Card v-for="pet in props.clientPets" :key="pet.id" class="hover:shadow-lg transition-shadow">
+                            <CardHeader>
+                                <div class="flex items-center justify-between">
+                                    <CardTitle class="text-lg">{{ pet.pet_name || 'Unnamed Pet' }}</CardTitle>
+                                    <Heart class="h-5 w-5 text-pink-500" />
+                                </div>
+                                <CardDescription>{{ pet.pet_type }}</CardDescription>
+                            </CardHeader>
+                            <CardContent>
+                                <div class="space-y-2 text-sm">
+                                    <div v-if="pet.pet_breed" class="flex items-center gap-2">
+                                        <span class="text-muted-foreground">Breed:</span>
+                                        <span class="font-medium">{{ pet.pet_breed }}</span>
+                                    </div>
+                                    <div v-if="pet.pet_gender" class="flex items-center gap-2">
+                                        <span class="text-muted-foreground">Gender:</span>
+                                        <span class="font-medium">{{ pet.pet_gender }}</span>
+                                    </div>
+                                </div>
+                            </CardContent>
+                        </Card>
+                    </div>
+                    <div v-else class="text-center py-8 text-muted-foreground">
+                        <Heart class="h-12 w-12 mx-auto mb-4 opacity-50" />
+                        <p>No pets registered yet.</p>
+                        <Link href="/pets" class="text-blue-600 hover:underline mt-2 inline-block">
+                            Register your first pet
+                        </Link>
+                    </div>
+                </div>
+
+                <!-- Appointment Statistics -->
+                <div class="mb-6">
+                    <h2 class="text-xl font-semibold mb-4">Appointment Statistics</h2>
+                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+                        <!-- Total Appointments -->
+                        <Card>
+                            <CardHeader class="pb-3">
+                                <CardTitle class="text-sm font-medium text-muted-foreground">Total</CardTitle>
+                            </CardHeader>
+                            <CardContent>
+                                <div class="text-3xl font-bold text-blue-600 dark:text-blue-400">
+                                    {{ props.appointmentStats?.total || 0 }}
+                                </div>
+                            </CardContent>
+                        </Card>
+
+                        <!-- Pending Appointments -->
+                        <Card>
+                            <CardHeader class="pb-3">
+                                <CardTitle class="text-sm font-medium text-muted-foreground">Pending</CardTitle>
+                            </CardHeader>
+                            <CardContent>
+                                <div class="text-3xl font-bold text-amber-600 dark:text-amber-400">
+                                    {{ props.appointmentStats?.pending || 0 }}
+                                </div>
+                            </CardContent>
+                        </Card>
+
+                        <!-- Approved Appointments -->
+                        <Card>
+                            <CardHeader class="pb-3">
+                                <CardTitle class="text-sm font-medium text-muted-foreground">Approved</CardTitle>
+                            </CardHeader>
+                            <CardContent>
+                                <div class="text-3xl font-bold text-green-600 dark:text-green-400">
+                                    {{ props.appointmentStats?.approved || 0 }}
+                                </div>
+                            </CardContent>
+                        </Card>
+
+                        <!-- Completed Appointments -->
+                        <Card>
+                            <CardHeader class="pb-3">
+                                <CardTitle class="text-sm font-medium text-muted-foreground">Completed</CardTitle>
+                            </CardHeader>
+                            <CardContent>
+                                <div class="text-3xl font-bold text-emerald-600 dark:text-emerald-400">
+                                    {{ props.appointmentStats?.completed || 0 }}
+                                </div>
+                            </CardContent>
+                        </Card>
+
+                        <!-- Canceled Appointments -->
+                        <Card>
+                            <CardHeader class="pb-3">
+                                <CardTitle class="text-sm font-medium text-muted-foreground">Canceled</CardTitle>
+                            </CardHeader>
+                            <CardContent>
+                                <div class="text-3xl font-bold text-red-600 dark:text-red-400">
+                                    {{ props.appointmentStats?.canceled || 0 }}
+                                </div>
+                            </CardContent>
+                        </Card>
+                    </div>
+                </div>
+
+                <!-- Quick Links -->
+                <div class="mb-6">
+                    <h2 class="text-xl font-semibold mb-4">Quick Actions</h2>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <Link
+                            v-for="link in clientLinks"
+                            :key="link.href"
+                            :href="link.href"
+                            class="block"
+                        >
+                            <Card class="hover:shadow-lg transition-shadow cursor-pointer h-full">
+                                <CardHeader>
+                                    <div class="flex items-center gap-3">
+                                        <component :is="link.icon" :class="link.color" class="h-6 w-6" />
+                                        <CardTitle class="text-lg">{{ link.title }}</CardTitle>
+                                    </div>
+                                    <CardDescription>{{ link.description }}</CardDescription>
+                                </CardHeader>
+                            </Card>
+                        </Link>
+                    </div>
+                </div>
             </div>
 
             <!-- Disease Statistics Section (Admin and Staff only) -->

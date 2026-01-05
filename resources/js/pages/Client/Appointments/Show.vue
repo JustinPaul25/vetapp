@@ -128,6 +128,14 @@ const calculateAge = (birthDate: string | null) => {
 
 const cancelDialogOpen = ref(false);
 const canceling = ref(false);
+const cancelReason = ref('');
+const cancelReasons = [
+    'Personal reason',
+    'Emergency',
+    'Health related',
+    'Booked incorrect date/time',
+    'Other/Prefer not to say',
+];
 const { error: showError } = useToast();
 
 // Reschedule functionality
@@ -136,7 +144,15 @@ const rescheduling = ref(false);
 const rescheduleForm = ref({
     appointment_date: '',
     appointment_time: '',
+    reschedule_reason: '',
 });
+const rescheduleReasons = [
+    'Personal reason',
+    'Emergency',
+    'Health related',
+    'Booked incorrect date/time',
+    'Other/Prefer not to say',
+];
 const availableTimes = ref<string[]>([]);
 const loadingTimes = ref(false);
 const rescheduleErrors = ref<Record<string, string[]>>({});
@@ -169,11 +185,19 @@ watch(() => rescheduleDialogOpen.value, (isOpen) => {
         rescheduleForm.value = {
             appointment_date: appointmentDate,
             appointment_time: formatTime(props.appointment.appointment_time) || '',
+            reschedule_reason: '',
         };
         rescheduleErrors.value = {};
         if (rescheduleForm.value.appointment_date) {
             fetchAvailableTimes(rescheduleForm.value.appointment_date);
         }
+    }
+});
+
+// Watch for cancel dialog open to reset reason
+watch(() => cancelDialogOpen.value, (isOpen) => {
+    if (isOpen) {
+        cancelReason.value = '';
     }
 });
 
@@ -202,6 +226,7 @@ const handleReschedule = () => {
         {
             appointment_date: rescheduleForm.value.appointment_date,
             appointment_time: rescheduleForm.value.appointment_time,
+            reschedule_reason: rescheduleForm.value.reschedule_reason,
         },
         {
             preserveScroll: false,
@@ -245,26 +270,36 @@ const cancelAppointment = () => {
         return;
     }
     
+    if (!cancelReason.value) {
+        showError('Please select a reason for cancellation.');
+        return;
+    }
+    
     canceling.value = true;
     const url = `/appointments/${props.appointment.id}`;
     console.log('Sending DELETE request to:', url);
     
-    router.delete(url, {
-        preserveScroll: false,
-        onSuccess: (page) => {
-            console.log('Appointment canceled successfully');
-            cancelDialogOpen.value = false;
-            // Inertia will handle the redirect automatically
+    // Use POST with method spoofing for DELETE to send data reliably
+    axios.post(url, {
+        _method: 'DELETE',
+        cancel_reason: cancelReason.value,
+    }, {
+        headers: {
+            'X-Requested-With': 'XMLHttpRequest',
         },
-        onError: (errors) => {
-            canceling.value = false;
-            console.error('Error canceling appointment:', errors);
-            const errorMessage = errors.message || 'Failed to cancel appointment. Please try again.';
-            showError(errorMessage);
-        },
-        onFinish: () => {
-            canceling.value = false;
-        },
+    })
+    .then(() => {
+        console.log('Appointment canceled successfully');
+        cancelDialogOpen.value = false;
+        canceling.value = false;
+        // Reload the page to reflect changes
+        router.reload();
+    })
+    .catch((error) => {
+        canceling.value = false;
+        console.error('Error canceling appointment:', error);
+        const errorMessage = error.response?.data?.error || error.response?.data?.message || 'Failed to cancel appointment. Please try again.';
+        showError(errorMessage);
     });
 };
 </script>
@@ -345,6 +380,28 @@ const cancelAppointment = () => {
                                                 {{ rescheduleErrors.appointment_time[0] }}
                                             </p>
                                         </div>
+                                        <div class="space-y-2">
+                                            <Label for="reschedule_reason">Reason for Rescheduling <span class="text-destructive">*</span></Label>
+                                            <select
+                                                id="reschedule_reason"
+                                                v-model="rescheduleForm.reschedule_reason"
+                                                :disabled="rescheduling"
+                                                class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                                                required
+                                            >
+                                                <option value="">Select a reason</option>
+                                                <option
+                                                    v-for="reason in rescheduleReasons"
+                                                    :key="reason"
+                                                    :value="reason"
+                                                >
+                                                    {{ reason }}
+                                                </option>
+                                            </select>
+                                            <p v-if="rescheduleErrors.reschedule_reason" class="text-sm text-destructive">
+                                                {{ rescheduleErrors.reschedule_reason[0] }}
+                                            </p>
+                                        </div>
                                     </div>
                                     <DialogFooter>
                                         <Button
@@ -358,7 +415,7 @@ const cancelAppointment = () => {
                                         <Button
                                             type="button"
                                             @click="handleReschedule"
-                                            :disabled="rescheduling || !rescheduleForm.appointment_date || !rescheduleForm.appointment_time"
+                                            :disabled="rescheduling || !rescheduleForm.appointment_date || !rescheduleForm.appointment_time || !rescheduleForm.reschedule_reason"
                                         >
                                             <span v-if="rescheduling">Rescheduling...</span>
                                             <span v-else>Reschedule Appointment</span>
@@ -380,6 +437,27 @@ const cancelAppointment = () => {
                                             Are you sure you want to cancel this appointment? This action cannot be undone.
                                         </DialogDescription>
                                     </DialogHeader>
+                                    <div class="space-y-4 py-4">
+                                        <div class="space-y-2">
+                                            <Label for="cancel_reason">Reason for Cancellation <span class="text-destructive">*</span></Label>
+                                            <select
+                                                id="cancel_reason"
+                                                v-model="cancelReason"
+                                                :disabled="canceling"
+                                                class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                                                required
+                                            >
+                                                <option value="">Select a reason</option>
+                                                <option
+                                                    v-for="reason in cancelReasons"
+                                                    :key="reason"
+                                                    :value="reason"
+                                                >
+                                                    {{ reason }}
+                                                </option>
+                                            </select>
+                                        </div>
+                                    </div>
                                     <DialogFooter>
                                         <Button
                                             type="button"
@@ -393,7 +471,7 @@ const cancelAppointment = () => {
                                             type="button"
                                             variant="destructive"
                                             @click="cancelAppointment"
-                                            :disabled="canceling"
+                                            :disabled="canceling || !cancelReason"
                                         >
                                             <span v-if="canceling">Canceling...</span>
                                             <span v-else>Yes, Cancel Appointment</span>

@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Appointment;
 use App\Models\DisabledDate;
+use App\Models\Patient;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
@@ -96,9 +97,74 @@ class DashboardController extends Controller
                 ->toArray();
         }
 
+        // Fetch client data (pets and appointment statistics)
+        $clientPets = [];
+        $appointmentStats = [];
+        if (!$isAdmin && !$isStaff && $user) {
+            // Fetch client's pets
+            $clientPets = Patient::where('user_id', $user->id)
+                ->with('petType')
+                ->orderBy('created_at', 'desc')
+                ->get()
+                ->map(function ($pet) {
+                    return [
+                        'id' => $pet->id,
+                        'pet_name' => $pet->pet_name,
+                        'pet_breed' => $pet->pet_breed,
+                        'pet_type' => $pet->petType->name ?? 'N/A',
+                        'pet_gender' => $pet->pet_gender,
+                        'created_at' => $pet->created_at->toISOString(),
+                    ];
+                })
+                ->toArray();
+
+            // Fetch appointment statistics for the client
+            $appointmentsQuery = Appointment::where(function ($query) use ($user) {
+                $query->whereHas('patient', function ($q) use ($user) {
+                    $q->where('user_id', $user->id);
+                })
+                ->orWhere('user_id', $user->id);
+            });
+
+            // Count by status
+            $totalAppointments = (clone $appointmentsQuery)->count();
+            $pendingCount = (clone $appointmentsQuery)
+                ->where('is_approved', false)
+                ->where(function ($q) {
+                    $q->whereNull('is_completed')->orWhere('is_completed', false);
+                })
+                ->where(function ($q) {
+                    $q->whereNull('is_canceled')->orWhere('is_canceled', false);
+                })
+                ->count();
+            $approvedCount = (clone $appointmentsQuery)
+                ->where('is_approved', true)
+                ->where('is_completed', false)
+                ->where(function ($q) {
+                    $q->whereNull('is_canceled')->orWhere('is_canceled', false);
+                })
+                ->count();
+            $completedCount = (clone $appointmentsQuery)
+                ->where('is_completed', true)
+                ->count();
+            $canceledCount = (clone $appointmentsQuery)
+                ->where('is_canceled', true)
+                ->count();
+
+            $appointmentStats = [
+                'total' => $totalAppointments,
+                'pending' => $pendingCount,
+                'approved' => $approvedCount,
+                'completed' => $completedCount,
+                'canceled' => $canceledCount,
+            ];
+        }
+
         return Inertia::render('Dashboard', [
             'appointments' => $appointments,
             'disabledDates' => $disabledDates,
+            'clientPets' => $clientPets,
+            'appointmentStats' => $appointmentStats,
         ]);
     }
 }

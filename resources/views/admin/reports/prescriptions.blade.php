@@ -8,6 +8,7 @@
             font-family: Arial, sans-serif;
             font-size: 12px;
             margin: 20px;
+            padding-right: 40px;
         }
         .header {
             text-align: center;
@@ -65,6 +66,7 @@
                 <th>Breed</th>
                 <th>Owner Name</th>
                 <th>Owner Email</th>
+                <th>Symptoms</th>
                 <th>Issued On</th>
             </tr>
         </thead>
@@ -76,11 +78,12 @@
                     <td>{{ $prescription['pet_breed'] }}</td>
                     <td>{{ $prescription['owner_name'] }}</td>
                     <td>{{ $prescription['owner_email'] }}</td>
+                    <td>{{ $prescription['symptoms'] ?? 'N/A' }}</td>
                     <td>{{ $prescription['issued_on'] }}</td>
                 </tr>
             @empty
                 <tr>
-                    <td colspan="6" style="text-align: center;">No records found</td>
+                    <td colspan="7" style="text-align: center;">No records found</td>
                 </tr>
             @endforelse
         </tbody>

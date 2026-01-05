@@ -101,18 +101,71 @@ class ClientController extends Controller
                 ->orderBy('appointments.appointment_time', 'desc')
                 ->get();
 
-            return response()->json([
-                'data' => $appointments->map(function ($appointment) {
-                    return [
-                        'id' => $appointment->id,
-                        'appointment_type' => $appointment->appointment_type,
-                        'pet_type' => $appointment->pet_type,
-                        'pet_name' => $appointment->pet_name,
+            // Group appointments by date, time, and user_id
+            $groupedAppointments = [];
+            foreach ($appointments as $appointment) {
+                $groupKey = sprintf(
+                    '%s_%s_%s',
+                    $appointment->appointment_date ? $appointment->appointment_date->format('Y-m-d') : 'no-date',
+                    $appointment->appointment_time ?? 'no-time',
+                    $appointment->user_id ?? 'no-user'
+                );
+
+                if (!isset($groupedAppointments[$groupKey])) {
+                    $groupedAppointments[$groupKey] = [
+                        'id' => $groupKey, // Use group key as ID for grouped appointments
+                        'is_grouped' => false,
                         'appointment_date' => $appointment->appointment_date ? $appointment->appointment_date->format('Y-m-d') : null,
                         'appointment_time' => $appointment->appointment_time,
                         'status' => $appointment->status,
+                        'appointments' => [],
                     ];
-                }),
+                }
+
+                $groupedAppointments[$groupKey]['appointments'][] = [
+                    'id' => $appointment->id,
+                    'appointment_type' => $appointment->appointment_type,
+                    'pet_type' => $appointment->pet_type,
+                    'pet_name' => $appointment->pet_name,
+                ];
+            }
+
+            // Convert grouped appointments to final format
+            $result = [];
+            foreach ($groupedAppointments as $groupKey => $group) {
+                if (count($group['appointments']) > 1) {
+                    // Multiple pets - return as grouped
+                    $result[] = [
+                        'id' => $groupKey,
+                        'is_grouped' => true,
+                        'appointment_date' => $group['appointment_date'],
+                        'appointment_time' => $group['appointment_time'],
+                        'status' => $group['status'],
+                        'pet_count' => count($group['appointments']),
+                        'appointments' => $group['appointments'],
+                        // For display purposes, show first pet and first appointment type
+                        'pet_name' => $group['appointments'][0]['pet_name'] . ' (+' . (count($group['appointments']) - 1) . ' more)',
+                        'pet_type' => $group['appointments'][0]['pet_type'],
+                        'appointment_type' => $group['appointments'][0]['appointment_type'],
+                    ];
+                } else {
+                    // Single pet - return as regular appointment
+                    $appointment = $group['appointments'][0];
+                    $result[] = [
+                        'id' => $appointment['id'],
+                        'is_grouped' => false,
+                        'appointment_type' => $appointment['appointment_type'],
+                        'pet_type' => $appointment['pet_type'],
+                        'pet_name' => $appointment['pet_name'],
+                        'appointment_date' => $group['appointment_date'],
+                        'appointment_time' => $group['appointment_time'],
+                        'status' => $group['status'],
+                    ];
+                }
+            }
+
+            return response()->json([
+                'data' => $result,
             ]);
         }
 
@@ -550,6 +603,10 @@ class ClientController extends Controller
         $isApiRequest = ($request->ajax() || $request->wantsJson()) && !$request->header('X-Inertia');
         
         try {
+            $request->validate([
+                'cancel_reason' => 'required|string|in:Personal reason,Emergency,Health related,Booked incorrect date/time,Other/Prefer not to say',
+            ]);
+
             $appointment = Appointment::where('id', $id)
                 ->where(function ($query) {
                     $query->whereHas('patient', function ($q) {
@@ -580,7 +637,10 @@ class ClientController extends Controller
             $appointment->load('appointment_type', 'patient.petType', 'patient.user');
 
             // Mark appointment as canceled instead of deleting
-            $appointment->update(['is_canceled' => true]);
+            $appointment->update([
+                'is_canceled' => true,
+                'cancel_reason' => $request->cancel_reason,
+            ]);
 
             // Prepare notification data
             $pet = $appointment->patient;
@@ -745,6 +805,7 @@ class ClientController extends Controller
             $request->validate([
                 'appointment_date' => 'required|date|after:today',
                 'appointment_time' => 'required|string',
+                'reschedule_reason' => 'required|string|in:Personal reason,Emergency,Health related,Booked incorrect date/time,Other/Prefer not to say',
             ]);
 
             $appointment = Appointment::where('id', $id)
@@ -801,6 +862,7 @@ class ClientController extends Controller
                 'appointment_date' => $request->appointment_date,
                 'appointment_time' => $time->format('H:i'), // Store in 24-hour format
                 'is_approved' => false, // Reset approval status since it's a new time
+                'reschedule_reason' => $request->reschedule_reason,
             ]);
 
             // Reload appointment with relationships

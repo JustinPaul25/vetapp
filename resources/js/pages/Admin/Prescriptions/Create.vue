@@ -18,6 +18,7 @@ import { dashboard } from '@/routes';
 import { ref, computed, watch } from 'vue';
 import axios from 'axios';
 import { cn } from '@/lib/utils';
+import { useToast } from '@/composables/useToast';
 
 interface Symptom {
     id: number;
@@ -66,6 +67,8 @@ interface Props {
 }
 
 const props = defineProps<Props>();
+
+const { success: showSuccess } = useToast();
 
 const breadcrumbs = [
     { title: 'Dashboard', href: dashboard().url },
@@ -392,6 +395,9 @@ const submit = () => {
     })) as any;
 
     form.post(`/admin/appointments/${props.appointment.id}/prescribe`, {
+        onSuccess: () => {
+            showSuccess('Prescription created successfully!', 'The prescription has been saved and the pet owner will be notified.');
+        },
         onError: (errors) => {
             // Error handling - errors will be displayed via form validation
             console.error('Error creating prescription:', errors);

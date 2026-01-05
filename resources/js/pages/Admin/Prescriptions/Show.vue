@@ -4,7 +4,7 @@ import { Head, Link } from '@inertiajs/vue3';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
-import { FileText, ArrowLeft, Download } from 'lucide-vue-next';
+import { FileText, ArrowLeft, Download, Printer } from 'lucide-vue-next';
 import { dashboard } from '@/routes';
 
 interface Diagnosis {
@@ -121,6 +121,10 @@ const calculateAge = (birthDate: string | null) => {
 const downloadPrescription = () => {
     window.open(`/admin/appointments/${props.prescription.appointment_id}/prescription`, '_blank');
 };
+
+const printPrescription = () => {
+    window.open(`/admin/appointments/${props.prescription.appointment_id}/prescription/print`, '_blank');
+};
 </script>
 
 <template>
@@ -147,10 +151,16 @@ const downloadPrescription = () => {
                                 </CardDescription>
                             </div>
                         </div>
-                        <Button @click="downloadPrescription">
-                            <Download class="h-4 w-4 mr-2" />
-                            Download PDF
-                        </Button>
+                        <div class="flex gap-2">
+                            <Button variant="outline" @click="printPrescription">
+                                <Printer class="h-4 w-4 mr-2" />
+                                Print
+                            </Button>
+                            <Button @click="downloadPrescription">
+                                <Download class="h-4 w-4 mr-2" />
+                                Download PDF
+                            </Button>
+                        </div>
                     </div>
                 </CardHeader>
                 <CardContent>

@@ -27,14 +27,24 @@ import { edit as editProfile } from '@/routes/profile';
 import axios from 'axios';
 import { useToast } from '@/composables/useToast';
 
-interface Appointment {
+interface AppointmentItem {
     id: number;
+    appointment_type: string;
+    pet_type: string;
+    pet_name: string;
+}
+
+interface Appointment {
+    id: number | string;
+    is_grouped: boolean;
     appointment_type: string;
     appointment_date: string | null;
     appointment_time: string | null;
     status: string;
     pet_type: string;
     pet_name: string;
+    pet_count?: number;
+    appointments?: AppointmentItem[];
 }
 
 interface Pet {
@@ -78,11 +88,17 @@ const searchQuery = ref('');
 const statusFilter = ref('all');
 const isModalOpen = ref(false);
 const viewMode = ref<'list' | 'calendar'>('list');
+const expandedGroups = ref<Set<string | number>>(new Set());
 
 // Pet-appointment type pair interface
 interface PetAppointmentPair {
     pet_id: string;
     appointment_type_id: string;
+}
+
+// Checkbox selection state: pet_id -> appointment_type_ids[]
+interface PetAppointmentSelections {
+    [petId: string]: string[];
 }
 
 // Booking form
@@ -92,6 +108,9 @@ const form = ref({
     appointment_times: [] as string[],
     symptoms: '',
 });
+
+// Checkbox selections for the table
+const checkboxSelections = ref<PetAppointmentSelections>({});
 
 const availableTimes = ref<string[]>([]);
 const loadingTimes = ref(false);
@@ -136,9 +155,44 @@ const minDate = computed(() => {
 
 // Computed property for step 0 validation (for better reactivity)
 const canProceedStep0 = computed(() => {
-    return form.value.pet_appointments.length > 0 && 
-           form.value.pet_appointments.every(pair => pair.pet_id && pair.appointment_type_id);
+    // Check if at least one checkbox is selected
+    const hasSelection = Object.values(checkboxSelections.value).some(
+        appointmentTypeIds => appointmentTypeIds.length > 0
+    );
+    return hasSelection;
 });
+
+// Convert checkbox selections to pet_appointments format for submission
+const getPetAppointmentsFromCheckboxes = (): PetAppointmentPair[] => {
+    const pairs: PetAppointmentPair[] = [];
+    Object.entries(checkboxSelections.value).forEach(([petId, appointmentTypeIds]) => {
+        appointmentTypeIds.forEach(appointmentTypeId => {
+            pairs.push({
+                pet_id: petId,
+                appointment_type_id: appointmentTypeId,
+            });
+        });
+    });
+    return pairs;
+};
+
+// Handle checkbox toggle
+const toggleCheckbox = (petId: string, appointmentTypeId: string) => {
+    if (!checkboxSelections.value[petId]) {
+        checkboxSelections.value[petId] = [];
+    }
+    const index = checkboxSelections.value[petId].indexOf(appointmentTypeId);
+    if (index > -1) {
+        checkboxSelections.value[petId].splice(index, 1);
+    } else {
+        checkboxSelections.value[petId].push(appointmentTypeId);
+    }
+};
+
+// Check if checkbox is selected
+const isCheckboxSelected = (petId: string, appointmentTypeId: string): boolean => {
+    return checkboxSelections.value[petId]?.includes(appointmentTypeId) || false;
+};
 
 // Watch for date changes to fetch available times
 watch(() => form.value.appointment_date, (newDate) => {
@@ -150,11 +204,9 @@ watch(() => form.value.appointment_date, (newDate) => {
     }
 });
 
-// Watch for pet appointment pairs changes - reset time slots if count changes
-watch(() => form.value.pet_appointments, (newPairs, oldPairs) => {
-    if (newPairs.length !== oldPairs.length) {
-        form.value.appointment_times = [];
-    }
+// Watch for checkbox selections changes - reset time slots if selections change
+watch(() => checkboxSelections.value, () => {
+    form.value.appointment_times = [];
 }, { deep: true });
 
 const fetchAppointments = async () => {
@@ -215,10 +267,14 @@ const handleBookAppointment = () => {
 
     errors.value = {};
     submitting.value = true;
+    
+    // Convert checkbox selections to pet_appointments format
+    const petAppointments = getPetAppointmentsFromCheckboxes();
+    
     router.post(
         '/appointments',
         {
-            pet_appointments: form.value.pet_appointments,
+            pet_appointments: petAppointments,
             appointment_date: form.value.appointment_date,
             appointment_times: form.value.appointment_times,
             symptoms: form.value.symptoms,
@@ -246,26 +302,15 @@ const handleBookAppointment = () => {
     );
 };
 
-// Add a pet-appointment pair
-const addPetAppointmentPair = () => {
-    form.value.pet_appointments.push({
-        pet_id: '',
-        appointment_type_id: '',
-    });
-};
-
-// Remove a pet-appointment pair
-const removePetAppointmentPair = (index: number) => {
-    form.value.pet_appointments.splice(index, 1);
-};
 
 const resetForm = () => {
     form.value = {
-        pet_appointments: [{ pet_id: '', appointment_type_id: '' }], // Initialize with one empty pair
+        pet_appointments: [],
         appointment_date: '',
         appointment_times: [],
         symptoms: '',
     };
+    checkboxSelections.value = {};
     availableTimes.value = [];
     errors.value = {};
     currentStep.value = 0;
@@ -344,6 +389,18 @@ const getStatusBadgeClass = (status: string) => {
         default:
             return 'bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200';
     }
+};
+
+const toggleGroupExpansion = (groupId: string | number) => {
+    if (expandedGroups.value.has(groupId)) {
+        expandedGroups.value.delete(groupId);
+    } else {
+        expandedGroups.value.add(groupId);
+    }
+};
+
+const isGroupExpanded = (groupId: string | number): boolean => {
+    return expandedGroups.value.has(groupId);
 };
 
 // Pet type options for SearchableSelect
@@ -426,22 +483,8 @@ const handleCreatePet = async () => {
         // Get the newly created pet from the response
         if (response.data?.pet) {
             const newPet = response.data.pet;
-            // Add a new pair with the newly created pet if no pairs exist or add to existing pairs
-            if (form.value.pet_appointments.length === 0) {
-                form.value.pet_appointments.push({
-                    pet_id: newPet.id.toString(),
-                    appointment_type_id: '',
-                });
-            } else {
-                // Check if pet is already in any pair
-                const petExists = form.value.pet_appointments.some(pair => pair.pet_id === newPet.id.toString());
-                if (!petExists) {
-                    form.value.pet_appointments.push({
-                        pet_id: newPet.id.toString(),
-                        appointment_type_id: '',
-                    });
-                }
-            }
+            // Initialize checkbox selections for the new pet (empty array)
+            checkboxSelections.value[newPet.id.toString()] = [];
         }
         
         // Reset pet form
@@ -576,96 +619,78 @@ fetchAppointments();
                                     <!-- Step 0: Pet & Appointment Type -->
                                     <div v-if="currentStep === 0" class="space-y-4">
                                         <div class="flex items-center justify-between">
-                                            <Label>Pet Appointments</Label>
-                                            <div class="flex gap-2">
-                                                <Button
-                                                    type="button"
-                                                    variant="outline"
-                                                    size="sm"
-                                                    @click="addPetAppointmentPair"
-                                                >
-                                                    <Plus class="h-4 w-4 mr-2" />
-                                                    Add Pair
-                                                </Button>
-                                                <Button
-                                                    type="button"
-                                                    variant="outline"
-                                                    size="sm"
-                                                    @click="showCreatePetDialog = true"
-                                                >
-                                                    <Plus class="h-4 w-4 mr-2" />
-                                                    Add Pet
-                                                </Button>
-                                            </div>
+                                            <Label>Select Pet(s) and Appointment Type(s)</Label>
+                                            <Button
+                                                type="button"
+                                                variant="outline"
+                                                size="sm"
+                                                @click="showCreatePetDialog = true"
+                                            >
+                                                <Plus class="h-4 w-4 mr-2" />
+                                                Add Pet
+                                            </Button>
                                         </div>
                                         
                                         <div
-                                            v-if="form.pet_appointments.length === 0"
+                                            v-if="!props.pets || props.pets.length === 0"
                                             class="text-center py-8 border-2 border-dashed rounded-lg"
                                         >
                                             <p class="text-sm text-muted-foreground mb-4">
-                                                No pet appointments added yet. Click "Add Pair" to start.
+                                                No pets registered. Click "Add Pet" to create one.
                                             </p>
                                             <Button
                                                 type="button"
                                                 variant="outline"
-                                                @click="addPetAppointmentPair"
+                                                @click="showCreatePetDialog = true"
                                             >
                                                 <Plus class="h-4 w-4 mr-2" />
-                                                Add Your First Pet Appointment
+                                                Add Your First Pet
                                             </Button>
                                         </div>
 
                                         <div
-                                            v-for="(pair, index) in form.pet_appointments"
-                                            :key="index"
-                                            class="p-4 border rounded-lg space-y-3"
+                                            v-else
+                                            class="border rounded-lg overflow-hidden"
                                         >
-                                            <div class="flex items-center justify-between mb-2">
-                                                <Label class="text-sm font-medium">Pet Appointment {{ index + 1 }}</Label>
-                                                <Button
-                                                    type="button"
-                                                    variant="ghost"
-                                                    size="sm"
-                                                    @click="removePetAppointmentPair(index)"
-                                                    :disabled="form.pet_appointments.length === 1"
-                                                >
-                                                    Remove
-                                                </Button>
-                                            </div>
-                                            <div class="grid grid-cols-2 gap-3">
-                                                <div class="grid gap-2">
-                                                    <Label :for="`pet_id_${index}`" class="text-xs">Pet</Label>
-                                                    <SearchableSelect
-                                                        :id="`pet_id_${index}`"
-                                                        v-model="pair.pet_id"
-                                                        :options="(props.pets || []).map(pet => ({ value: pet.id.toString(), label: `${pet.pet_name} (${pet.pet_type})` }))"
-                                                        placeholder="Select a pet"
-                                                        :disabled="!props.pets || props.pets.length === 0"
-                                                    />
-                                                    <p
-                                                        v-if="errors[`pet_appointments.${index}.pet_id`]"
-                                                        class="text-xs text-destructive"
-                                                    >
-                                                        {{ errors[`pet_appointments.${index}.pet_id`][0] }}
-                                                    </p>
-                                                </div>
-                                                <div class="grid gap-2">
-                                                    <Label :for="`appointment_type_id_${index}`" class="text-xs">Appointment Type</Label>
-                                                    <SearchableSelect
-                                                        :id="`appointment_type_id_${index}`"
-                                                        v-model="pair.appointment_type_id"
-                                                        :options="(props.appointment_types || []).map(type => ({ value: type.id.toString(), label: type.name }))"
-                                                        placeholder="Select appointment type"
-                                                        :disabled="!props.appointment_types || props.appointment_types.length === 0"
-                                                    />
-                                                    <p
-                                                        v-if="errors[`pet_appointments.${index}.appointment_type_id`]"
-                                                        class="text-xs text-destructive"
-                                                    >
-                                                        {{ errors[`pet_appointments.${index}.appointment_type_id`][0] }}
-                                                    </p>
-                                                </div>
+                                            <div class="overflow-x-auto">
+                                                <table class="w-full border-collapse">
+                                                    <thead>
+                                                        <tr class="bg-muted/50 border-b">
+                                                            <th class="text-left p-3 font-semibold text-sm">Pet</th>
+                                                            <th
+                                                                v-for="appointmentType in props.appointment_types"
+                                                                :key="appointmentType.id"
+                                                                class="text-center p-3 font-semibold text-sm"
+                                                            >
+                                                                {{ appointmentType.name }}
+                                                            </th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody>
+                                                        <tr
+                                                            v-for="pet in props.pets"
+                                                            :key="pet.id"
+                                                            class="border-b hover:bg-muted/30"
+                                                        >
+                                                            <td class="p-3 font-medium text-sm">
+                                                                {{ pet.pet_name }} ({{ pet.pet_type }})
+                                                            </td>
+                                                            <td
+                                                                v-for="appointmentType in props.appointment_types"
+                                                                :key="appointmentType.id"
+                                                                class="p-3 text-center"
+                                                            >
+                                                                <input
+                                                                    type="checkbox"
+                                                                    :id="`checkbox_${pet.id}_${appointmentType.id}`"
+                                                                    :checked="isCheckboxSelected(pet.id.toString(), appointmentType.id.toString())"
+                                                                    @change="toggleCheckbox(pet.id.toString(), appointmentType.id.toString())"
+                                                                    class="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary cursor-pointer"
+                                                                />
+                                                            </td>
+                                                        </tr>
+                                                    </tbody>
+                                                </table>
                                             </div>
                                         </div>
 
@@ -675,14 +700,8 @@ fetchAppointments();
                                         >
                                             {{ errors.pet_appointments[0] }}
                                         </p>
-                                        <p
-                                            v-if="!props.pets || props.pets.length === 0"
-                                            class="text-sm text-muted-foreground"
-                                        >
-                                            No pets registered. Click "Add Pet" to create one.
-                                        </p>
                                         <p class="text-sm text-muted-foreground">
-                                            Each pet can have its own appointment type. Add multiple pairs to book appointments for different pets with different types.
+                                            Select one or more appointment types for each pet by checking the boxes. You can select multiple pets and multiple appointment types.
                                         </p>
                                     </div>
 
@@ -749,13 +768,14 @@ fetchAppointments();
                                                 No available times for this date. Please select a different date.
                                             </p>
                                             <p
-                                                v-else-if="form.pet_appointments.length > 0"
+                                                v-else-if="canProceedStep0"
                                                 class="text-sm text-muted-foreground"
                                             >
-                                                You have selected {{ form.pet_appointments.length }} pet appointment{{ form.pet_appointments.length !== 1 ? 's' : '' }}. 
-                                                All pets will share the same time slot.
                                                 <span v-if="form.appointment_times.length > 0">
                                                     Selected: {{ form.appointment_times[0] }}
+                                                </span>
+                                                <span v-else>
+                                                    All selected pets will share the same time slot.
                                                 </span>
                                             </p>
                                         </div>
@@ -814,7 +834,7 @@ fetchAppointments();
                                             <Button
                                                 v-if="currentStep === steps.length - 1"
                                                 @click="handleBookAppointment"
-                                                :disabled="form.pet_appointments.length === 0 || !form.pet_appointments.every(pair => pair.pet_id && pair.appointment_type_id) || !form.appointment_date || form.appointment_times.length === 0 || submitting"
+                                                :disabled="!canProceedStep0 || !form.appointment_date || form.appointment_times.length === 0 || submitting"
                                             >
                                                 <span v-if="submitting">Booking...</span>
                                                 <span v-else>Book Appointment</span>
@@ -928,71 +948,110 @@ fetchAppointments();
                     <!-- List View -->
                     <div
                         v-else
-                        class="overflow-x-auto"
+                        class="space-y-3"
                     >
-                        <table class="w-full border-collapse">
-                            <thead>
-                                <tr class="border-b">
-                                    <th class="text-left p-3 font-semibold">Appointment Type</th>
-                                    <th class="text-left p-3 font-semibold">Pet Type</th>
-                                    <th class="text-left p-3 font-semibold">Pet Name</th>
-                                    <th class="text-left p-3 font-semibold">Date</th>
-                                    <th class="text-left p-3 font-semibold">Time</th>
-                                    <th class="text-left p-3 font-semibold">Status</th>
-                                    <th class="text-right p-3 font-semibold">Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                <tr
-                                    v-for="appointment in (appointments || [])"
-                                    :key="appointment.id"
-                                    class="border-b hover:bg-muted/50"
-                                >
-                                    <td class="p-3 text-sm font-medium">
-                                        {{ appointment.appointment_type }}
-                                    </td>
-                                    <td class="p-3 text-sm">
-                                        {{ appointment.pet_type }}
-                                    </td>
-                                    <td class="p-3 text-sm">
-                                        {{ appointment.pet_name }}
-                                    </td>
-                                    <td class="p-3 text-sm">
-                                        {{ formatDate(appointment.appointment_date) }}
-                                    </td>
-                                    <td class="p-3 text-sm">
-                                        {{ formatTime(appointment.appointment_time) }}
-                                    </td>
-                                    <td class="p-3">
-                                        <span
-                                            :class="['px-2 py-1 rounded-full text-xs font-medium', getStatusBadgeClass(appointment.status)]"
-                                        >
-                                            {{ appointment.status }}
+                        <div
+                            v-for="appointment in (appointments || [])"
+                            :key="appointment.id"
+                            class="border rounded-lg overflow-hidden"
+                            :class="appointment.is_grouped ? 'bg-muted/30' : ''"
+                        >
+                            <!-- Single Appointment or Group Header -->
+                            <div
+                                class="grid grid-cols-7 gap-4 p-4 items-center hover:bg-muted/50 transition-colors"
+                                :class="appointment.is_grouped ? 'cursor-pointer' : ''"
+                                @click="appointment.is_grouped ? toggleGroupExpansion(appointment.id) : null"
+                            >
+                                <div class="text-sm font-medium">
+                                    <span v-if="appointment.is_grouped" class="flex items-center gap-2">
+                                        <span class="px-2 py-0.5 rounded-full text-xs font-semibold bg-primary/10 text-primary">
+                                            {{ appointment.pet_count }} Pet{{ appointment.pet_count !== 1 ? 's' : '' }}
                                         </span>
-                                    </td>
-                                    <td class="p-3">
-                                        <div class="flex justify-end gap-2">
-                                            <Link :href="`/appointments/${appointment.id}`">
-                                                <Button
-                                                    variant="outline"
-                                                    size="sm"
-                                                >
-                                                    <Eye class="h-4 w-4" />
-                                                </Button>
-                                            </Link>
-                                        </div>
-                                    </td>
-                                </tr>
-                                <tr v-if="!appointments || appointments.length === 0">
-                                    <td
-                                        colspan="7"
-                                        class="p-8 text-center text-muted-foreground"
+                                        {{ appointment.appointment_type }}
+                                    </span>
+                                    <span v-else>{{ appointment.appointment_type }}</span>
+                                </div>
+                                <div class="text-sm">{{ appointment.pet_type }}</div>
+                                <div class="text-sm">{{ appointment.pet_name }}</div>
+                                <div class="text-sm">{{ formatDate(appointment.appointment_date) }}</div>
+                                <div class="text-sm">{{ formatTime(appointment.appointment_time) }}</div>
+                                <div>
+                                    <span
+                                        :class="['px-2 py-1 rounded-full text-xs font-medium', getStatusBadgeClass(appointment.status)]"
                                     >
-                                        No appointments found
-                                    </td>
-                                </tr>
-                            </tbody>
-                        </table>
+                                        {{ appointment.status }}
+                                    </span>
+                                </div>
+                                <div class="flex justify-end gap-2">
+                                    <Link
+                                        v-if="!appointment.is_grouped"
+                                        :href="`/appointments/${appointment.id}`"
+                                        @click.stop
+                                    >
+                                        <Button
+                                            variant="outline"
+                                            size="sm"
+                                        >
+                                            <Eye class="h-4 w-4" />
+                                        </Button>
+                                    </Link>
+                                    <Button
+                                        v-else
+                                        variant="outline"
+                                        size="sm"
+                                        @click.stop="toggleGroupExpansion(appointment.id)"
+                                    >
+                                        <ChevronRight
+                                            :class="['h-4 w-4 transition-transform', isGroupExpanded(appointment.id) ? 'rotate-90' : '']"
+                                        />
+                                    </Button>
+                                </div>
+                            </div>
+
+                            <!-- Expanded Group Content -->
+                            <div
+                                v-if="appointment.is_grouped && isGroupExpanded(appointment.id)"
+                                class="border-t bg-background"
+                            >
+                                <div class="p-4 space-y-3">
+                                    <div
+                                        v-for="(item, index) in appointment.appointments"
+                                        :key="item.id"
+                                        class="flex items-center justify-between p-3 bg-muted/30 rounded-lg"
+                                    >
+                                        <div class="flex-1 grid grid-cols-3 gap-4">
+                                            <div>
+                                                <span class="text-xs text-muted-foreground">Pet Name</span>
+                                                <p class="text-sm font-medium">{{ item.pet_name }}</p>
+                                            </div>
+                                            <div>
+                                                <span class="text-xs text-muted-foreground">Pet Type</span>
+                                                <p class="text-sm">{{ item.pet_type }}</p>
+                                            </div>
+                                            <div>
+                                                <span class="text-xs text-muted-foreground">Appointment Type</span>
+                                                <p class="text-sm">{{ item.appointment_type }}</p>
+                                            </div>
+                                        </div>
+                                        <Link :href="`/appointments/${item.id}`">
+                                            <Button
+                                                variant="outline"
+                                                size="sm"
+                                            >
+                                                <Eye class="h-4 w-4" />
+                                            </Button>
+                                        </Link>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div
+                            v-if="!appointments || appointments.length === 0"
+                            class="p-8 text-center text-muted-foreground border rounded-lg"
+                        >
+                            No appointments found
+                        </div>
                     </div>
                 </CardContent>
             </Card>

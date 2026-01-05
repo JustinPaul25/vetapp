@@ -1,34 +1,23 @@
 <script setup lang="ts">
 import AppLayout from '@/layouts/AppLayout.vue';
-import { Head, Link } from '@inertiajs/vue3';
+import { Head, Link, router } from '@inertiajs/vue3';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import { FileText, Download, Search, ArrowUpDown, ArrowUp, ArrowDown, CalendarCheck, Mail, Printer } from 'lucide-vue-next';
-import { Badge } from '@/components/ui/badge';
-import { ref } from 'vue';
+import { Activity, Plus, Edit, Trash2, Eye, Search, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-vue-next';
+import { computed, ref } from 'vue';
 import { dashboard } from '@/routes';
-import { router } from '@inertiajs/vue3';
-import ReportGenerator from '@/components/ReportGenerator.vue';
 
-interface Prescription {
+interface Symptom {
     id: number;
-    appointment_id: number;
-    appointment_type: string;
-    pet_type: string;
-    pet_breed: string;
-    owner_name: string;
-    owner_mobile: string;
-    owner_email: string;
-    issued_on: string;
+    name: string;
+    diseases_count: number;
     created_at: string;
-    follow_up_date: string | null;
-    follow_up_notified_at: string | null;
 }
 
 interface Props {
-    prescriptions: {
-        data: Prescription[];
+    symptoms: {
+        data: Symptom[];
         current_page: number;
         last_page: number;
         per_page: number;
@@ -45,12 +34,25 @@ const props = defineProps<Props>();
 
 const breadcrumbs = [
     { title: 'Dashboard', href: dashboard().url },
-    { title: 'Prescriptions', href: '#' },
+    { title: 'Symptoms', href: '#' },
 ];
 
 const searchQuery = ref(props.filters?.search || '');
 const sortBy = ref(props.filters?.sort_by || 'created_at');
 const sortDirection = ref(props.filters?.sort_direction || 'desc');
+
+const deleteSymptom = (symptomId: number, symptomName: string) => {
+    if (confirm(`Are you sure you want to delete the symptom "${symptomName}"?`)) {
+        router.delete(`/admin/symptoms/${symptomId}`);
+    }
+};
+
+const adminSymptomsRoute = (path: string) => {
+    if (path.startsWith('?')) {
+        return `/admin/symptoms${path}`;
+    }
+    return `/admin/symptoms${path}`;
+};
 
 const buildQueryString = (page?: number) => {
     const params = new URLSearchParams();
@@ -62,7 +64,7 @@ const buildQueryString = (page?: number) => {
 };
 
 const handleSearch = () => {
-    router.get('/admin/prescriptions', {
+    router.get('/admin/symptoms', {
         search: searchQuery.value,
         sort_by: sortBy.value,
         sort_direction: sortDirection.value,
@@ -74,7 +76,7 @@ const handleSearch = () => {
 
 const clearSearch = () => {
     searchQuery.value = '';
-    router.get('/admin/prescriptions', {
+    router.get('/admin/symptoms', {
         sort_by: sortBy.value,
         sort_direction: sortDirection.value,
     }, {
@@ -91,7 +93,7 @@ const handleSort = (column: string) => {
         sortDirection.value = 'asc';
     }
     
-    router.get('/admin/prescriptions', {
+    router.get('/admin/symptoms', {
         search: searchQuery.value,
         sort_by: sortBy.value,
         sort_direction: sortDirection.value,
@@ -105,18 +107,10 @@ const getSortIcon = (column: string) => {
     if (sortBy.value !== column) return ArrowUpDown;
     return sortDirection.value === 'asc' ? ArrowUp : ArrowDown;
 };
-
-const downloadPrescription = (appointmentId: number) => {
-    window.open(`/admin/appointments/${appointmentId}/prescription`, '_blank');
-};
-
-const printPrescription = (appointmentId: number) => {
-    window.open(`/admin/appointments/${appointmentId}/prescription/print`, '_blank');
-};
 </script>
 
 <template>
-    <Head title="Prescriptions Management" />
+    <Head title="Symptoms Management" />
 
     <AppLayout :breadcrumbs="breadcrumbs">
         <div class="container mx-auto p-6">
@@ -125,18 +119,19 @@ const printPrescription = (appointmentId: number) => {
                     <div class="flex items-center justify-between">
                         <div>
                             <CardTitle class="flex items-center gap-2">
-                                <FileText class="h-5 w-5" />
-                                Prescriptions Management
+                                <Activity class="h-5 w-5" />
+                                Symptoms Management
                             </CardTitle>
                             <CardDescription>
-                                View and manage all prescriptions in the system
+                                Manage all symptoms in the system
                             </CardDescription>
                         </div>
-                        <ReportGenerator
-                            export-url="/admin/prescriptions/export"
-                            report-title="Prescriptions"
-                            :filters="{ search: searchQuery, sort_by: sortBy, sort_direction: sortDirection }"
-                        />
+                        <Link :href="adminSymptomsRoute('/create')">
+                            <Button>
+                                <Plus class="h-4 w-4 mr-2" />
+                                Add Symptom
+                            </Button>
+                        </Link>
                     </div>
                 </CardHeader>
                 <CardContent>
@@ -147,7 +142,7 @@ const printPrescription = (appointmentId: number) => {
                             <Input
                                 v-model="searchQuery"
                                 type="text"
-                                placeholder="Search by pet type, owner name, or disease..."
+                                placeholder="Search by name..."
                                 class="pl-10"
                                 @keyup.enter="handleSearch"
                             />
@@ -164,82 +159,66 @@ const printPrescription = (appointmentId: number) => {
                         <table class="w-full border-collapse">
                             <thead>
                                 <tr class="border-b">
-                                    <th class="text-left p-3 font-semibold">Appointment Type</th>
-                                    <th class="text-left p-3 font-semibold">Pet Type</th>
-                                    <th class="text-left p-3 font-semibold">Breed</th>
-                                    <th class="text-left p-3 font-semibold">Owner</th>
+                                    <th class="text-left p-3 font-semibold">
+                                        <button
+                                            @click="handleSort('name')"
+                                            class="flex items-center gap-1 hover:text-primary transition-colors"
+                                        >
+                                            Name
+                                            <component :is="getSortIcon('name')" class="h-4 w-4" />
+                                        </button>
+                                    </th>
+                                    <th class="text-left p-3 font-semibold">Associated Diseases</th>
                                     <th class="text-left p-3 font-semibold">
                                         <button
                                             @click="handleSort('created_at')"
                                             class="flex items-center gap-1 hover:text-primary transition-colors"
                                         >
-                                            Issued On
+                                            Created
                                             <component :is="getSortIcon('created_at')" class="h-4 w-4" />
                                         </button>
                                     </th>
-                                    <th class="text-left p-3 font-semibold">Follow-up</th>
                                     <th class="text-right p-3 font-semibold">Actions</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 <tr
-                                    v-for="prescription in prescriptions.data"
-                                    :key="prescription.id"
+                                    v-for="symptom in symptoms.data"
+                                    :key="symptom.id"
                                     class="border-b hover:bg-muted/50"
                                 >
-                                    <td class="p-3">{{ prescription.appointment_type }}</td>
-                                    <td class="p-3 font-medium">{{ prescription.pet_type }}</td>
-                                    <td class="p-3 text-sm text-muted-foreground">{{ prescription.pet_breed }}</td>
-                                    <td class="p-3">
-                                        <div class="text-sm">
-                                            <div class="font-medium">{{ prescription.owner_name }}</div>
-                                            <div class="text-muted-foreground">{{ prescription.owner_email }}</div>
-                                        </div>
+                                    <td class="p-3 font-medium">{{ symptom.name }}</td>
+                                    <td class="p-3 text-sm text-muted-foreground">
+                                        {{ symptom.diseases_count }} {{ symptom.diseases_count === 1 ? 'disease' : 'diseases' }}
                                     </td>
                                     <td class="p-3 text-sm text-muted-foreground">
-                                        {{ prescription.issued_on }}
-                                    </td>
-                                    <td class="p-3">
-                                        <div v-if="prescription.follow_up_date" class="flex flex-col gap-1">
-                                            <div class="flex items-center gap-1 text-sm">
-                                                <CalendarCheck class="h-4 w-4 text-primary" />
-                                                <span class="font-medium">{{ new Date(prescription.follow_up_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) }}</span>
-                                            </div>
-                                            <Badge 
-                                                v-if="prescription.follow_up_notified_at" 
-                                                variant="outline" 
-                                                class="w-fit text-xs"
-                                            >
-                                                <Mail class="h-3 w-3 mr-1" />
-                                                Notified
-                                            </Badge>
-                                        </div>
-                                        <span v-else class="text-sm text-muted-foreground">-</span>
+                                        {{ new Date(symptom.created_at).toLocaleDateString() }}
                                     </td>
                                     <td class="p-3">
                                         <div class="flex justify-end gap-2">
+                                            <Link :href="adminSymptomsRoute(`/${symptom.id}`)">
+                                                <Button variant="outline" size="sm">
+                                                    <Eye class="h-4 w-4" />
+                                                </Button>
+                                            </Link>
+                                            <Link :href="adminSymptomsRoute(`/${symptom.id}/edit`)">
+                                                <Button variant="outline" size="sm">
+                                                    <Edit class="h-4 w-4" />
+                                                </Button>
+                                            </Link>
                                             <Button
                                                 variant="outline"
                                                 size="sm"
-                                                @click="printPrescription(prescription.appointment_id)"
+                                                @click="deleteSymptom(symptom.id, symptom.name)"
                                             >
-                                                <Printer class="h-4 w-4 mr-2" />
-                                                Print
-                                            </Button>
-                                            <Button
-                                                variant="outline"
-                                                size="sm"
-                                                @click="downloadPrescription(prescription.appointment_id)"
-                                            >
-                                                <Download class="h-4 w-4 mr-2" />
-                                                Download
+                                                <Trash2 class="h-4 w-4 text-destructive" />
                                             </Button>
                                         </div>
                                     </td>
                                 </tr>
-                                <tr v-if="prescriptions.data.length === 0">
-                                    <td colspan="7" class="p-8 text-center text-muted-foreground">
-                                        No prescriptions found
+                                <tr v-if="symptoms.data.length === 0">
+                                    <td colspan="4" class="p-8 text-center text-muted-foreground">
+                                        No symptoms found
                                     </td>
                                 </tr>
                             </tbody>
@@ -247,22 +226,22 @@ const printPrescription = (appointmentId: number) => {
                     </div>
 
                     <!-- Pagination -->
-                    <div v-if="prescriptions.last_page > 1" class="mt-4 flex items-center justify-between">
+                    <div v-if="symptoms.last_page > 1" class="mt-4 flex items-center justify-between">
                         <div class="text-sm text-muted-foreground">
-                            Showing {{ (prescriptions.current_page - 1) * prescriptions.per_page + 1 }} to
-                            {{ Math.min(prescriptions.current_page * prescriptions.per_page, prescriptions.total) }} of
-                            {{ prescriptions.total }} prescriptions
+                            Showing {{ (symptoms.current_page - 1) * symptoms.per_page + 1 }} to
+                            {{ Math.min(symptoms.current_page * symptoms.per_page, symptoms.total) }} of
+                            {{ symptoms.total }} symptoms
                         </div>
                         <div class="flex gap-2">
                             <Link
-                                v-if="prescriptions.current_page > 1"
-                                :href="`/admin/prescriptions${buildQueryString(prescriptions.current_page - 1)}`"
+                                v-if="symptoms.current_page > 1"
+                                :href="adminSymptomsRoute(buildQueryString(symptoms.current_page - 1))"
                             >
                                 <Button variant="outline" size="sm">Previous</Button>
                             </Link>
                             <Link
-                                v-if="prescriptions.current_page < prescriptions.last_page"
-                                :href="`/admin/prescriptions${buildQueryString(prescriptions.current_page + 1)}`"
+                                v-if="symptoms.current_page < symptoms.last_page"
+                                :href="adminSymptomsRoute(buildQueryString(symptoms.current_page + 1))"
                             >
                                 <Button variant="outline" size="sm">Next</Button>
                             </Link>

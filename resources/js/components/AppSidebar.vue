@@ -13,7 +13,7 @@ import {
 import { dashboard } from '@/routes';
 import { type NavItem } from '@/types';
 import { Link, usePage } from '@inertiajs/vue3';
-import { LayoutGrid, Users, Shield, Dog, Pill, FileText, Heart, UserCheck, MapPin, Calendar, UserPlus, PawPrint, Settings, Stethoscope } from 'lucide-vue-next';
+import { LayoutGrid, Users, Shield, Dog, Pill, FileText, Heart, UserCheck, MapPin, Calendar, UserPlus, PawPrint, Settings, Stethoscope, Activity } from 'lucide-vue-next';
 import { computed } from 'vue';
 import AppLogo from './AppLogo.vue';
 
@@ -72,6 +72,11 @@ const mainNavItems = computed<NavItem[]>(() => {
                 title: 'Diseases',
                 href: '/admin/diseases',
                 icon: Stethoscope,
+            },
+            {
+                title: 'Symptoms',
+                href: '/admin/symptoms',
+                icon: Activity,
             },
             // Reference Data
             {
@@ -147,6 +152,11 @@ const mainNavItems = computed<NavItem[]>(() => {
                 title: 'Diseases',
                 href: '/admin/diseases',
                 icon: Stethoscope,
+            },
+            {
+                title: 'Symptoms',
+                href: '/admin/symptoms',
+                icon: Activity,
             },
             // Reference Data
             {

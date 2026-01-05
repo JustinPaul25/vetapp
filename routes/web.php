@@ -170,6 +170,7 @@ Route::middleware(['auth', 'verified', \App\Http\Middleware\EnsureUserIsAdminOrS
         Route::resource('pet_types', \App\Http\Controllers\Admin\PetTypeController::class);
         Route::resource('pet_breeds', \App\Http\Controllers\Admin\PetBreedController::class);
         Route::resource('pet_owners', \App\Http\Controllers\Admin\PetOwnerController::class);
+        Route::resource('symptoms', \App\Http\Controllers\Admin\SymptomController::class);
         
         // Prescription routes (view only for staff, admin can also create via appointments route)
         Route::prefix('prescriptions')->name('prescriptions.')->group(function () {
@@ -193,6 +194,7 @@ Route::middleware(['auth', 'verified', \App\Http\Middleware\EnsureUserIsAdminOrS
             Route::patch('/{id}/reschedule', [\App\Http\Controllers\Admin\AppointmentController::class, 'reschedule'])->name('reschedule');
             // Prescription viewing routes (admin and staff can view/download prescriptions)
             Route::get('/{id}/prescription', [\App\Http\Controllers\Admin\AppointmentController::class, 'downloadPrescription'])->name('prescription');
+            Route::get('/{id}/prescription/print', [\App\Http\Controllers\Admin\AppointmentController::class, 'printPrescription'])->name('prescription.print');
             Route::get('/{id}/prescription/debug', [\App\Http\Controllers\Admin\AppointmentController::class, 'debugPrescription'])->name('prescription.debug');
             
             // Disabled dates management routes

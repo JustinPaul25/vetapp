@@ -80,8 +80,18 @@ class AppointmentController extends Controller
                     $q->where('name', 'LIKE', "%{$keyword}%");
                 })
                 ->orWhereHas('patients.user', function ($q) use ($keyword) {
-                    $q->where(DB::raw("CONCAT(COALESCE(first_name, ''), ' ', COALESCE(last_name, ''))"), 'LIKE', "%{$keyword}%")
-                        ->orWhere('name', 'LIKE', "%{$keyword}%");
+                    $q->where(function ($q) use ($keyword) {
+                        $q->where(DB::raw("CONCAT(COALESCE(first_name, ''), ' ', COALESCE(last_name, ''))"), 'LIKE', "%{$keyword}%")
+                            ->orWhere('name', 'LIKE', "%{$keyword}%")
+                            ->orWhere('email', 'LIKE', "%{$keyword}%");
+                    });
+                })
+                ->orWhereHas('patient.user', function ($q) use ($keyword) {
+                    $q->where(function ($q) use ($keyword) {
+                        $q->where(DB::raw("CONCAT(COALESCE(first_name, ''), ' ', COALESCE(last_name, ''))"), 'LIKE', "%{$keyword}%")
+                            ->orWhere('name', 'LIKE', "%{$keyword}%")
+                            ->orWhere('email', 'LIKE', "%{$keyword}%");
+                    });
                 })
                 ->orWhereHas('prescription.diagnoses.disease', function ($q) use ($keyword) {
                     $q->where('name', 'LIKE', "%{$keyword}%");
@@ -499,6 +509,7 @@ class AppointmentController extends Controller
         $request->validate([
             'appointment_date' => 'required|date|after_or_equal:today',
             'appointment_time' => 'required|string',
+            'reschedule_reason' => 'required|string|in:Scheduling conflict,Veterinarian unavailable,No show,Others',
         ]);
 
         $appointment = Appointment::with('patient.user', 'appointment_type')->findOrFail($id);
@@ -566,6 +577,7 @@ class AppointmentController extends Controller
         
         $appointment->appointment_date = $request->appointment_date;
         $appointment->appointment_time = $request->appointment_time;
+        $appointment->reschedule_reason = $request->reschedule_reason;
         $appointment->save();
 
         // Reload appointment with relationships for notification
@@ -894,9 +906,9 @@ class AppointmentController extends Controller
      */
     public function downloadPrescription($id)
     {
-        // Custom paper size: 5.5" × 8.5" (half-letter)
-        // 1 inch = 72 points, so 5.5" = 396pt, 8.5" = 612pt
-        $customPaper = [0, 0, 396, 612];
+        // Custom paper size: 8.5" × 5.5" (half-letter landscape)
+        // 1 inch = 72 points, so 8.5" = 612pt, 5.5" = 396pt
+        $customPaper = [0, 0, 612, 396];
         
         $prescription = Prescription::with(
             'medicines.medicine',
@@ -926,7 +938,7 @@ class AppointmentController extends Controller
             'veterinarianName',
             'veterinarianLicense'
         ))
-        ->setPaper($customPaper, 'portrait')
+        ->setPaper($customPaper, 'landscape')
         ->stream('prescription-' . $prescription->id . '.pdf');
     }
 
@@ -951,6 +963,36 @@ class AppointmentController extends Controller
         $veterinarianLicense = Setting::get('veterinarian_license_number', '');
 
         return view('admin.appointments.pdf-debug', compact(
+            'prescription',
+            'base64Logo',
+            'base64PanaboLogo',
+            'base64PrescriptionLogo',
+            'veterinarianName',
+            'veterinarianLicense'
+        ));
+    }
+
+    /**
+     * Print-friendly HTML view for prescription.
+     */
+    public function printPrescription($id)
+    {
+        $prescription = Prescription::with(
+            'medicines.medicine',
+            'appointment',
+            'patient.petType',
+            'diagnoses.disease'
+        )->where('appointment_id', $id)->firstOrFail();
+
+        $base64Logo = 'data:image/png;base64,' . base64_encode(file_get_contents(public_path('media/logo_for_print.png')));
+        $base64PanaboLogo = 'data:image/png;base64,' . base64_encode(file_get_contents(public_path('media/panabo.png')));
+        $base64PrescriptionLogo = 'data:image/png;base64,' . base64_encode(file_get_contents(public_path('media/prescription.png')));
+
+        // Get veterinarian information from settings
+        $veterinarianName = Setting::get('veterinarian_name', '');
+        $veterinarianLicense = Setting::get('veterinarian_license_number', '');
+
+        return view('admin.appointments.print', compact(
             'prescription',
             'base64Logo',
             'base64PanaboLogo',

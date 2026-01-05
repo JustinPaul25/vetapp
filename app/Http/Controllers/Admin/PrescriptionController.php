@@ -208,6 +208,7 @@ class PrescriptionController extends Controller
                 'pet_breed' => $patient->pet_breed ?? 'N/A',
                 'owner_name' => $user ? (trim(($user->first_name ?? '') . ' ' . ($user->last_name ?? ''))) : 'N/A',
                 'owner_email' => $user->email ?? 'N/A',
+                'symptoms' => $prescription->symptoms ?? 'N/A',
                 'issued_on' => $prescription->created_at->format('Y-m-d H:i'),
             ];
         });
@@ -235,7 +236,7 @@ class PrescriptionController extends Controller
         $callback = function () use ($prescriptions) {
             $file = fopen('php://output', 'w');
             
-            fputcsv($file, ['Appointment Type', 'Pet Type', 'Breed', 'Owner Name', 'Owner Email', 'Issued On']);
+            fputcsv($file, ['Appointment Type', 'Pet Type', 'Breed', 'Owner Name', 'Owner Email', 'Symptoms', 'Issued On']);
 
             foreach ($prescriptions as $prescription) {
                 $appointment = $prescription->appointment;
@@ -248,6 +249,7 @@ class PrescriptionController extends Controller
                     $patient->pet_breed ?? 'N/A',
                     $user ? (trim(($user->first_name ?? '') . ' ' . ($user->last_name ?? ''))) : 'N/A',
                     $user->email ?? 'N/A',
+                    $prescription->symptoms ?? 'N/A',
                     $prescription->created_at->format('Y-m-d H:i'),
                 ]);
             }

@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Veterinary Prescription</title>
+    <title>Veterinary Prescription - Print</title>
     <style>
         * {
             margin: 0;
@@ -21,17 +21,54 @@
             font-size: 11px;
             color: #000;
             line-height: 1.3;
-            padding: 0;
+            padding: 0.3in 0.25in;
             width: 8.27in;
             max-width: 8.27in;
-            margin: 0;
+            margin: 0 auto;
         }
         
-        /* Print color adjustment */
+        /* Print styles */
         @media print {
             body {
+                padding: 0;
+                margin: 0;
+                width: 8.27in;
                 -webkit-print-color-adjust: exact;
                 print-color-adjust: exact;
+            }
+            
+            @page {
+                size: A5 landscape;
+                margin: 0.3in 0.25in;
+            }
+        }
+        
+        /* Screen styles - show print button when not printing */
+        @media screen {
+            .print-button {
+                position: fixed;
+                top: 20px;
+                right: 20px;
+                padding: 12px 24px;
+                background-color: #1a4a75;
+                color: white;
+                border: none;
+                border-radius: 4px;
+                cursor: pointer;
+                font-size: 16px;
+                font-weight: bold;
+                z-index: 1000;
+                box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+            }
+            
+            .print-button:hover {
+                background-color: #0f3557;
+            }
+        }
+        
+        @media print {
+            .print-button {
+                display: none;
             }
         }
         
@@ -52,7 +89,7 @@
         .header-table {
             margin-top: 0;
             width: 100%;
-            margin-bottom: 8px;
+            margin-bottom: 10px;
         }
 
         .header-table tr {
@@ -62,7 +99,7 @@
         .header-table td {
             vertical-align: top;
             border: none;
-            padding: 5px 4px;
+            padding: 8px 6px;
         }
         
         .header-left {
@@ -74,7 +111,7 @@
             width: 70%;
             text-align: center;
             line-height: 1.2;
-            padding: 0 6px;
+            padding: 0 10px;
         }
         
         .header-right {
@@ -83,22 +120,23 @@
         }
         
         .header-logo {
-            width: 50px;
+            width: 65px;
             height: auto;
+            max-width: 100%;
         }
         
         .header-org-name {
-            font-size: 16px;
+            font-size: 20px;
             font-weight: bold;
             margin: 0;
         }
 
         .header-address {
-            font-size: 11px;
+            font-size: 14px;
         }
         
         .header-section-name {
-            font-size: 10px;
+            font-size: 12px;
             font-weight: bold;
             margin: 0;
         }
@@ -106,21 +144,22 @@
         .header-separator {
             border: none;
             border-top: 1px solid #1a4a75;
-            margin: 8px 0 10px 0;
+            margin: 12px 0 15px 0;
         }
         
         .prescription-logo {
-            width: 22px;
+            width: 27px;
             height: auto;
             display: block;
-            margin-left: 10px;
+            margin-left: 15px;
             margin-right: auto;
-            margin-bottom: 8px;
+            margin-bottom: 10px;
         }
         
         /* Patient Information Section */
         .patient-info-table {
             margin-top: 10px;
+            width: 100%;
         }
         
         .patient-info-table td {
@@ -143,6 +182,7 @@
         /* Medicines Section */
         .medicines-table {
             margin-top: 8px;
+            width: 100%;
         }
         
         .medicines-table th,
@@ -216,6 +256,7 @@
         /* Notes Section */
         .notes-table {
             margin-top: 40px;
+            width: 100%;
         }
         
         .notes-table td {
@@ -228,6 +269,7 @@
         .footer-table {
             margin-top: 10px;
             font-size: 11px;
+            width: 100%;
         }
         
         .footer-table td {
@@ -263,6 +305,8 @@
     </style>
 </head>
 <body>
+    <button class="print-button" onclick="window.print()">Print</button>
+    
     <!-- Header Section -->
     <table class="header-table noborder-table">
         <tr>
@@ -290,7 +334,7 @@
     </div>
     
     <!-- Patient Information Section -->
-    <table class="patient-info-table">
+    <table class="patient-info-table noborder-table">
         <tr>
             <td>
                 <span class="patient-info-label">Clients Name:</span>
@@ -314,7 +358,14 @@
     </table>
     
     <!-- Medicines Section -->
-    <table class="medicines-table">
+    <table class="medicines-table noborder-table">
+        <thead>
+            <tr>
+                <th class="col-medicine">Medicine</th>
+                <th class="col-dosage">Dosage</th>
+                <th class="col-quantity">Quantity</th>
+            </tr>
+        </thead>
         <tbody>
             @forelse($prescription->medicines as $index => $prescriptionMedicine)
                 <tr>
@@ -378,7 +429,7 @@
     
     <!-- Notes Section -->
     @if($prescription->notes)
-    <table class="notes-table">
+    <table class="notes-table noborder-table">
         <tr>
             <td><strong>Reminder: </strong>{{ $prescription->notes }}</td>
         </tr>
@@ -412,5 +463,14 @@
             </td>
         </tr>
     </table>
+    
+    <script>
+        // Auto-print when page loads (optional)
+        // window.onload = function() {
+        //     setTimeout(function() {
+        //         window.print();
+        //     }, 250);
+        // };
+    </script>
 </body>
 </html>

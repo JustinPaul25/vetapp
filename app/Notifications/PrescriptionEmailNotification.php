@@ -3,6 +3,7 @@
 namespace App\Notifications;
 
 use App\Models\Prescription;
+use App\Models\Setting;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Notifications\Notification;
@@ -51,12 +52,17 @@ class PrescriptionEmailNotification extends Notification
         $petName = $patient->pet_name ?? 'Your Pet';
         $prescriptionNumber = str_pad($this->prescription->id, 6, '0', STR_PAD_LEFT);
 
-        // Generate PDF
-        $customPaper = [0, 0, 396, 612]; // 5.5in x 8.5in in points
+        // Generate PDF - A5 landscape: 210mm × 148mm (8.27" × 5.83")
+        // 1 inch = 72 points, so 8.27" = 595pt, 5.83" = 420pt
+        $customPaper = [0, 0, 595, 420];
         
         $base64Logo = 'data:image/png;base64,' . base64_encode(file_get_contents(public_path('media/logo_for_print.png')));
         $base64PanaboLogo = 'data:image/png;base64,' . base64_encode(file_get_contents(public_path('media/panabo.png')));
         $base64PrescriptionLogo = 'data:image/png;base64,' . base64_encode(file_get_contents(public_path('media/prescription.png')));
+
+        // Get veterinarian information from settings
+        $veterinarianName = Setting::get('veterinarian_name', '');
+        $veterinarianLicense = Setting::get('veterinarian_license_number', '');
 
         $pdf = Pdf::setOptions([
             'isRemoteEnabled' => true,
@@ -68,8 +74,10 @@ class PrescriptionEmailNotification extends Notification
             'base64Logo' => $base64Logo,
             'base64PanaboLogo' => $base64PanaboLogo,
             'base64PrescriptionLogo' => $base64PrescriptionLogo,
+            'veterinarianName' => $veterinarianName,
+            'veterinarianLicense' => $veterinarianLicense,
         ])
-        ->setPaper($customPaper, 'portrait');
+        ->setPaper($customPaper, 'landscape');
 
         $pdfContent = $pdf->output();
         $fileName = 'prescription-' . $prescriptionNumber . '.pdf';

@@ -91,6 +91,15 @@ const formatDate = (dateString: string | null) => {
     });
 };
 
+const formatTime = (timeString: string | null) => {
+    if (!timeString) return '—';
+    const [hours, minutes] = timeString.split(':');
+    const hour = parseInt(hours);
+    const ampm = hour >= 12 ? 'PM' : 'AM';
+    const hour12 = hour % 12 || 12;
+    return `${hour12}:${minutes} ${ampm}`;
+};
+
 const formatDateTime = (dateString: string) => {
     return new Date(dateString).toLocaleString('en-US', {
         year: 'numeric',
@@ -280,7 +289,7 @@ const getWeightChange = () => {
                                         >
                                             <td class="p-3">{{ appointment.appointment_type || '—' }}</td>
                                             <td class="p-3">{{ formatDate(appointment.appointment_date) }}</td>
-                                            <td class="p-3">{{ appointment.appointment_time || '—' }}</td>
+                                            <td class="p-3">{{ formatTime(appointment.appointment_time) }}</td>
                                             <td class="p-3">
                                                 <div class="flex justify-end">
                                                     <Link :href="`/admin/appointments/${appointment.id}`">
