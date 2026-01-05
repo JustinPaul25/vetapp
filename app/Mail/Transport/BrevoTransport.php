@@ -30,10 +30,11 @@ class BrevoTransport extends AbstractTransport
                 'email' => $from->getAddress(),
             ],
             'to' => array_map(function ($address) {
-                return [
-                    'email' => $address->getAddress(),
-                    'name' => $address->getName() ?: '',
-                ];
+                $to = ['email' => $address->getAddress()];
+                if ($name = $address->getName()) {
+                    $to['name'] = $name;
+                }
+                return $to;
             }, iterator_to_array($email->getTo())),
             'subject' => $email->getSubject() ?: '',
         ];
@@ -41,29 +42,32 @@ class BrevoTransport extends AbstractTransport
         // Handle CC
         if (!empty($email->getCc())) {
             $payload['cc'] = array_map(function ($address) {
-                return [
-                    'email' => $address->getAddress(),
-                    'name' => $address->getName() ?: '',
-                ];
+                $cc = ['email' => $address->getAddress()];
+                if ($name = $address->getName()) {
+                    $cc['name'] = $name;
+                }
+                return $cc;
             }, iterator_to_array($email->getCc()));
         }
 
         // Handle BCC
         if (!empty($email->getBcc())) {
             $payload['bcc'] = array_map(function ($address) {
-                return [
-                    'email' => $address->getAddress(),
-                    'name' => $address->getName() ?: '',
-                ];
+                $bcc = ['email' => $address->getAddress()];
+                if ($name = $address->getName()) {
+                    $bcc['name'] = $name;
+                }
+                return $bcc;
             }, iterator_to_array($email->getBcc()));
         }
 
         // Handle reply-to
         if (!empty($email->getReplyTo())) {
-            $payload['replyTo'] = [
-                'email' => $email->getReplyTo()[0]->getAddress(),
-                'name' => $email->getReplyTo()[0]->getName() ?: '',
-            ];
+            $replyToAddress = $email->getReplyTo()[0];
+            $payload['replyTo'] = ['email' => $replyToAddress->getAddress()];
+            if ($name = $replyToAddress->getName()) {
+                $payload['replyTo']['name'] = $name;
+            }
         }
 
         // Handle HTML and text content
