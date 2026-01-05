@@ -3,8 +3,10 @@
 namespace App\Providers;
 
 use App\Listeners\RedirectVerifiedUserToRegistrationStep;
+use App\Mail\Transport\BrevoTransport;
 use Illuminate\Auth\Events\Verified;
 use Illuminate\Foundation\Support\Providers\EventServiceProvider as ServiceProvider;
+use Illuminate\Support\Facades\Mail;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -32,6 +34,8 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
-        //
+        Mail::extend('brevo', function (array $config) {
+            return new BrevoTransport($config['key']);
+        });
     }
 }

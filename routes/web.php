@@ -124,6 +124,35 @@ Route::middleware(['auth', 'verified'])->get('/test/ably', function () {
     return response()->json($status);
 })->name('test.ably');
 
+// Test route for Brevo Email (remove in production)
+Route::middleware(['auth', 'verified'])->get('/test/brevo', function () {
+    $status = [
+        'mail_mailer' => config('mail.default'),
+        'brevo_api_key_set' => !empty(config('services.brevo.key')),
+        'brevo_api_key_preview' => config('services.brevo.key') ? substr(config('services.brevo.key'), 0, 20) . '...' : 'Not set',
+        'mail_from_address' => config('mail.from.address'),
+        'mail_from_name' => config('mail.from.name'),
+        'queue_connection' => config('queue.default'),
+    ];
+
+    try {
+        \Mail::raw('This is a test email from your Laravel application using Brevo API.', function ($message) {
+            $message->to(auth()->user()->email)
+                    ->subject('Test Email from VetApp (Brevo API)');
+        });
+        
+        $status['email_sent'] = true;
+        $status['message'] = '✅ Email sent successfully! Check your inbox (and spam folder).';
+        $status['note'] = 'If using queue, make sure queue worker is running: php artisan queue:work';
+    } catch (\Exception $e) {
+        $status['email_sent'] = false;
+        $status['error'] = $e->getMessage();
+        $status['message'] = '❌ Error: ' . $e->getMessage();
+    }
+
+    return response()->json($status);
+})->name('test.brevo');
+
 // Admin and Staff routes
 Route::middleware(['auth', 'verified', \App\Http\Middleware\EnsureUserIsAdminOrStaff::class])
     ->prefix('admin')
