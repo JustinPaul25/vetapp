@@ -40,9 +40,6 @@ Route::get('dashboard', [\App\Http\Controllers\DashboardController::class, 'inde
 
 // Client routes (authenticated users)
 Route::middleware(['auth', 'verified'])->group(function () {
-    // Client notification API route
-    Route::get('/notifications/api/list', [\App\Http\Controllers\NotificationController::class, 'getNotifications'])->name('client.notifications.api.list');
-    
     // Appointment routes
     Route::prefix('appointments')->name('client.appointments.')->group(function () {
         Route::get('/', [\App\Http\Controllers\ClientController::class, 'appointments'])->name('index');
@@ -90,8 +87,8 @@ Route::middleware(['auth', 'verified', \App\Http\Middleware\EnsureUserIsAdmin::c
 // Ably token endpoint for client-side authentication
 Route::middleware(['auth', 'verified'])->get('/api/ably/token', [\App\Http\Controllers\AblyController::class, 'getToken'])->name('ably.token');
 
-// Notification routes (for admin and staff)
-Route::middleware(['auth', 'verified', \App\Http\Middleware\EnsureUserIsAdminOrStaff::class])
+// Notification routes (accessible to all authenticated users - controller filters by user)
+Route::middleware(['auth', 'verified'])
     ->prefix('notifications')
     ->name('notifications.')
     ->group(function () {

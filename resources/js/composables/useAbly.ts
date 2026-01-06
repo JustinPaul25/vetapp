@@ -29,12 +29,8 @@ export function useAbly() {
         }
 
         try {
-            // Use appropriate endpoint based on user role
-            let endpoint = '/notifications/api/list?limit=20';
-            if (!user.roles?.includes('admin') && !user.roles?.includes('staff')) {
-                // For clients, use the client notification endpoint
-                endpoint = '/notifications/api/list?limit=20';
-            }
+            // All authenticated users can access their own notifications
+            const endpoint = '/notifications/api/list?limit=20';
 
             const response = await fetch(endpoint, {
                 headers: {
