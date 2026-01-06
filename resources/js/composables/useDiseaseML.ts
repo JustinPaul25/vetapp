@@ -97,6 +97,28 @@ export function useDiseaseML() {
     }
 
     /**
+     * Get the selected ML algorithm from settings
+     */
+    async function getSelectedAlgorithm(): Promise<AlgorithmType> {
+        try {
+            const response = await fetch('/admin/settings/api');
+            const data = await response.json();
+            const selected = data.settings?.selected_ml_algorithm;
+            
+            // Validate the selected algorithm
+            if (selected && ['neural_network', 'logistic_regression', 'knn'].includes(selected)) {
+                return selected as AlgorithmType;
+            }
+            
+            // Default to neural_network if not set or invalid
+            return 'neural_network';
+        } catch (err) {
+            console.warn('Could not fetch selected algorithm, defaulting to neural_network', err);
+            return 'neural_network';
+        }
+    }
+
+    /**
      * Load and train the medicine recommendation model
      */
     async function trainMedicineModel(algorithm: AlgorithmType = 'knn'): Promise<void> {
@@ -174,20 +196,17 @@ export function useDiseaseML() {
 
     /**
      * Get medicine recommendations for a disease using ML
-     * Priority: Neural Network → Logistic Regression → KNN
+     * Uses only the selected algorithm (no fallback)
      */
     async function getMedicineRecommendations(
         diseaseId: number,
         topK: number = 3
     ): Promise<MedicineRecommendation[]> {
-        // Check which algorithms are enabled
-        const nnEnabled = await checkNeuralNetworkEnabled();
-        const lrEnabled = await checkLogisticRegressionEnabled();
-        const knnEnabled = await checkKnnEnabled();
-
-        // Try Neural Network first if enabled
-        if (nnEnabled) {
-            try {
+        // Get the selected algorithm
+        const selectedAlgorithm = await getSelectedAlgorithm();
+        
+        try {
+            if (selectedAlgorithm === 'neural_network') {
                 if (!nnMedicineModel.value) {
                     await trainMedicineModel('neural_network');
                 }
@@ -196,14 +215,7 @@ export function useDiseaseML() {
                     console.info('Using Neural Network for medicine recommendations');
                     return await nnMedicineModel.value.predictMedicines(diseaseId, topK);
                 }
-            } catch (err) {
-                console.warn('Neural Network prediction failed, trying fallback', err);
-            }
-        }
-
-        // Try Logistic Regression if NN failed or disabled
-        if (lrEnabled) {
-            try {
+            } else if (selectedAlgorithm === 'logistic_regression') {
                 if (!lrMedicineModel.value) {
                     await trainMedicineModel('logistic_regression');
                 }
@@ -212,43 +224,38 @@ export function useDiseaseML() {
                     console.info('Using Logistic Regression for medicine recommendations');
                     return await lrMedicineModel.value.predictMedicines(diseaseId, topK);
                 }
-            } catch (err) {
-                console.warn('Logistic Regression prediction failed, trying KNN', err);
+            } else if (selectedAlgorithm === 'knn') {
+                if (!medicineModel.value) {
+                    await trainMedicineModel('knn');
+                }
+
+                if (medicineModel.value) {
+                    console.info('Using KNN for medicine recommendations');
+                    return await medicineModel.value.predictMedicines(diseaseId, topK);
+                }
             }
+        } catch (err) {
+            console.error(`Error using ${selectedAlgorithm} for medicine recommendations:`, err);
+            return [];
         }
 
-        // Fall back to KNN if all else fails
-        if (knnEnabled) {
-            if (!medicineModel.value) {
-                await trainMedicineModel('knn');
-            }
-
-            if (medicineModel.value) {
-                console.info('Using KNN for medicine recommendations');
-                return await medicineModel.value.predictMedicines(diseaseId, topK);
-            }
-        }
-
-        console.info('All prediction algorithms are disabled in settings');
+        console.warn(`Selected algorithm ${selectedAlgorithm} is not available`);
         return [];
     }
 
     /**
      * Predict diseases based on symptoms using ML
-     * Priority: Neural Network → Logistic Regression → KNN
+     * Uses only the selected algorithm (no fallback)
      */
     async function predictDiseasesFromSymptoms(
         symptomIds: number[],
         topK: number = 10
     ): Promise<DiseasePrediction[]> {
-        // Check which algorithms are enabled
-        const nnEnabled = await checkNeuralNetworkEnabled();
-        const lrEnabled = await checkLogisticRegressionEnabled();
-        const knnEnabled = await checkKnnEnabled();
-
-        // Try Neural Network first if enabled
-        if (nnEnabled) {
-            try {
+        // Get the selected algorithm
+        const selectedAlgorithm = await getSelectedAlgorithm();
+        
+        try {
+            if (selectedAlgorithm === 'neural_network') {
                 if (!nnSymptomModel.value) {
                     await trainSymptomModel('neural_network');
                 }
@@ -257,14 +264,7 @@ export function useDiseaseML() {
                     console.info('Using Neural Network for disease prediction');
                     return await nnSymptomModel.value.predictDiseases(symptomIds, topK);
                 }
-            } catch (err) {
-                console.warn('Neural Network prediction failed, trying fallback', err);
-            }
-        }
-
-        // Try Logistic Regression if NN failed or disabled
-        if (lrEnabled) {
-            try {
+            } else if (selectedAlgorithm === 'logistic_regression') {
                 if (!lrSymptomModel.value) {
                     await trainSymptomModel('logistic_regression');
                 }
@@ -273,24 +273,22 @@ export function useDiseaseML() {
                     console.info('Using Logistic Regression for disease prediction');
                     return await lrSymptomModel.value.predictDiseases(symptomIds, topK);
                 }
-            } catch (err) {
-                console.warn('Logistic Regression prediction failed, trying KNN', err);
+            } else if (selectedAlgorithm === 'knn') {
+                if (!symptomModel.value) {
+                    await trainSymptomModel('knn');
+                }
+
+                if (symptomModel.value) {
+                    console.info('Using KNN for disease prediction');
+                    return await symptomModel.value.predictDiseases(symptomIds, topK);
+                }
             }
+        } catch (err) {
+            console.error(`Error using ${selectedAlgorithm} for disease prediction:`, err);
+            return [];
         }
 
-        // Fall back to KNN if all else fails
-        if (knnEnabled) {
-            if (!symptomModel.value) {
-                await trainSymptomModel('knn');
-            }
-
-            if (symptomModel.value) {
-                console.info('Using KNN for disease prediction');
-                return await symptomModel.value.predictDiseases(symptomIds, topK);
-            }
-        }
-
-        console.info('All prediction algorithms are disabled in settings');
+        console.warn(`Selected algorithm ${selectedAlgorithm} is not available`);
         return [];
     }
 
@@ -335,6 +333,7 @@ export function useDiseaseML() {
         checkKnnEnabled,
         checkLogisticRegressionEnabled,
         checkNeuralNetworkEnabled,
+        getSelectedAlgorithm,
         trainMedicineModel,
         trainSymptomModel,
         getMedicineRecommendations,

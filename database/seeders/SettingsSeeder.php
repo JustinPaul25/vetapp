@@ -32,6 +32,12 @@ class SettingsSeeder extends Seeder
                 'description' => 'Enable or disable Neural Network (Deep Learning) machine learning predictions for disease diagnosis and medicine recommendations',
             ],
             [
+                'key' => 'selected_ml_algorithm',
+                'value' => 'neural_network',
+                'type' => 'string',
+                'description' => 'Selected machine learning algorithm to use for predictions. Options: neural_network, logistic_regression, knn',
+            ],
+            [
                 'key' => 'veterinarian_name',
                 'value' => '',
                 'type' => 'string',

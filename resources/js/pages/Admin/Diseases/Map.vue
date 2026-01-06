@@ -46,6 +46,15 @@ const breadcrumbs = [
 const mapContainer = ref<HTMLElement | null>(null);
 const map = ref<L.Map | null>(null);
 
+// Format date string (YYYY-MM-DD) as local date to avoid timezone issues
+const formatDate = (dateString: string | null) => {
+    if (!dateString) return '';
+    // Parse date string (YYYY-MM-DD) as local date to avoid timezone issues
+    const [year, month, day] = dateString.split('-').map(Number);
+    const date = new Date(year, month - 1, day);
+    return date.toLocaleDateString();
+};
+
 // Fix for default marker icons in Leaflet with Vite
 delete (L.Icon.Default.prototype as any)._getIconUrl;
 L.Icon.Default.mergeOptions({
@@ -106,7 +115,7 @@ onMounted(() => {
             <div>
                 <strong>${caseItem.disease_name}</strong><br/>
                 Address: ${caseItem.address}<br/>
-                ${caseItem.appointment_date ? `Date: ${new Date(caseItem.appointment_date).toLocaleDateString()}` : ''}
+                ${caseItem.appointment_date ? `Date: ${formatDate(caseItem.appointment_date)}` : ''}
             </div>
         `;
 

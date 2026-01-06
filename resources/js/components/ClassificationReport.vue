@@ -161,7 +161,7 @@ function formatMetric(value: number): string {
                 <p class="text-sm text-blue-800 dark:text-blue-200">
                     The model correctly predicted the eligibility of
                     <strong>{{ correctPredictions }}</strong> out of
-                    <strong>{{ totalSamples }}</strong> employees in the test set.
+                    <strong>{{ totalSamples }}</strong> cases in the test set.
                 </p>
                 <p class="text-sm text-blue-800 dark:text-blue-200 mt-2">
                     While high accuracy is good, more detailed metrics are needed to understand
@@ -299,7 +299,7 @@ function formatMetric(value: number): string {
                     </div>
                     <div>
                         <strong>Support:</strong> {{ class0Metrics.support }} - "There were
-                        {{ class0Metrics.support }} employees in the test set who were
+                        {{ class0Metrics.support }} cases in the test set that were
                         {{ class0Label.toLowerCase() }}."
                     </div>
                 </div>
@@ -316,7 +316,7 @@ function formatMetric(value: number): string {
                     </div>
                     <div>
                         <strong>Recall:</strong> {{ formatMetric(class1Metrics.recall) }} - "Out of all truly
-                        {{ class1Label.toLowerCase() }} employees, {{ class1RecallPercent }}%
+                        {{ class1Label.toLowerCase() }} cases, {{ class1RecallPercent }}%
                         were correctly identified."
                     </div>
                     <div>
@@ -325,7 +325,7 @@ function formatMetric(value: number): string {
                     </div>
                     <div>
                         <strong>Support:</strong> {{ class1Metrics.support }} - "There were
-                        {{ class1Metrics.support }} {{ class1Label.toLowerCase() }} employees in the test set."
+                        {{ class1Metrics.support }} {{ class1Label.toLowerCase() }} cases in the test set."
                     </div>
                 </div>
             </div>

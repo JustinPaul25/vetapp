@@ -19,6 +19,7 @@ import { ref, computed, watch } from 'vue';
 import axios from 'axios';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/composables/useToast';
+import { useDiseaseML } from '@/composables/useDiseaseML';
 
 interface Symptom {
     id: number;
@@ -69,6 +70,7 @@ interface Props {
 const props = defineProps<Props>();
 
 const { success: showSuccess, error: showError } = useToast();
+const { predictDiseasesFromSymptoms } = useDiseaseML();
 
 const breadcrumbs = [
     { title: 'Dashboard', href: dashboard().url },
@@ -173,7 +175,7 @@ const removeMedicineRow = (rowId: number) => {
     }
 };
 
-// Search diseases by symptoms
+// Search diseases by symptoms using ML
 const searchDiseasesBySymptoms = async () => {
     if (selectedSymptoms.value.length === 0) {
         searchedDiseases.value = [];
@@ -182,12 +184,28 @@ const searchDiseasesBySymptoms = async () => {
 
     isSearchingDiseases.value = true;
     try {
-        const response = await axios.get('/admin/diseases/search-by-symptoms', {
-            params: { symptoms: selectedSymptoms.value },
-        });
-        searchedDiseases.value = response.data;
+        // Convert symptom names to IDs
+        const symptomIds = props.symptoms
+            .filter(symptom => selectedSymptoms.value.includes(symptom.name))
+            .map(symptom => symptom.id);
+
+        if (symptomIds.length === 0) {
+            searchedDiseases.value = [];
+            return;
+        }
+
+        // Use ML composable to predict diseases
+        const predictions = await predictDiseasesFromSymptoms(symptomIds, 10);
+        
+        // Convert predictions to the format expected by the UI
+        searchedDiseases.value = predictions.map(pred => ({
+            id: pred.disease_id,
+            name: pred.disease_name,
+            accuracy: parseFloat(pred.accuracy.replace('%', '')),
+        }));
     } catch (error) {
         console.error('Error searching diseases:', error);
+        searchedDiseases.value = [];
     } finally {
         isSearchingDiseases.value = false;
     }

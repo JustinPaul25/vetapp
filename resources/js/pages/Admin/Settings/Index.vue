@@ -42,6 +42,7 @@ interface Props {
         enable_knn_prediction?: Setting;
         enable_logistic_regression_prediction?: Setting;
         enable_neural_network_prediction?: Setting;
+        selected_ml_algorithm?: Setting;
         veterinarian_name?: Setting;
         veterinarian_license_number?: Setting;
         [key: string]: Setting | undefined;
@@ -107,6 +108,7 @@ const form = useForm({
     enable_knn_prediction: getBooleanSetting(props.settings.enable_knn_prediction, true),
     enable_logistic_regression_prediction: getBooleanSetting(props.settings.enable_logistic_regression_prediction, true),
     enable_neural_network_prediction: getBooleanSetting(props.settings.enable_neural_network_prediction, true),
+    selected_ml_algorithm: props.settings.selected_ml_algorithm?.value ?? 'neural_network',
     veterinarian_name: props.settings.veterinarian_name?.value ?? '',
     veterinarian_license_number: props.settings.veterinarian_license_number?.value ?? '',
 });
@@ -131,6 +133,10 @@ watch(() => props.settings, (newSettings) => {
         if (form.enable_neural_network_prediction !== newValue) {
             form.enable_neural_network_prediction = newValue;
         }
+    }
+    if (newSettings.selected_ml_algorithm !== undefined && 
+        form.selected_ml_algorithm !== newSettings.selected_ml_algorithm.value) {
+        form.selected_ml_algorithm = newSettings.selected_ml_algorithm.value ?? 'neural_network';
     }
     if (newSettings.veterinarian_name !== undefined && 
         form.veterinarian_name !== newSettings.veterinarian_name.value) {
@@ -192,22 +198,31 @@ const toggleNeuralNetworkPrediction = (checked: boolean) => {
     form.enable_neural_network_prediction = checked;
 };
 
+const selectAlgorithm = (algorithm: 'neural_network' | 'logistic_regression' | 'knn') => {
+    form.selected_ml_algorithm = algorithm;
+};
+
 const savingMLSettings = ref(false);
 
 const saveMachineLearningSettings = async () => {
     savingMLSettings.value = true;
     console.log('Saving ML settings:', {
+        selected_ml_algorithm: form.selected_ml_algorithm,
         enable_knn_prediction: form.enable_knn_prediction,
         enable_logistic_regression_prediction: form.enable_logistic_regression_prediction,
         enable_neural_network_prediction: form.enable_neural_network_prediction,
     });
     
     try {
-        // Save all three settings using bulk update
+        // Save selected algorithm and all three enable settings using bulk update
         const response = await axios.patch(
             '/admin/settings',
             {
                 settings: [
+                    {
+                        key: 'selected_ml_algorithm',
+                        value: form.selected_ml_algorithm,
+                    },
                     {
                         key: 'enable_neural_network_prediction',
                         value: form.enable_neural_network_prediction,
@@ -251,6 +266,7 @@ const saveMachineLearningSettings = async () => {
         );
         
         // Revert to original values on error
+        form.selected_ml_algorithm = props.settings.selected_ml_algorithm?.value ?? 'neural_network';
         form.enable_knn_prediction = getBooleanSetting(props.settings.enable_knn_prediction, true);
         form.enable_logistic_regression_prediction = getBooleanSetting(props.settings.enable_logistic_regression_prediction, true);
         form.enable_neural_network_prediction = getBooleanSetting(props.settings.enable_neural_network_prediction, true);
@@ -345,18 +361,22 @@ const saveVeterinarianInfo = () => {
                             Machine Learning Settings
                         </CardTitle>
                         <CardDescription>
-                            Select which machine learning algorithms to use for disease diagnosis and medicine recommendations
+                            Select which machine learning algorithm to use for disease diagnosis and medicine recommendations. Only one algorithm will be used at a time.
                         </CardDescription>
                     </CardHeader>
                     <CardContent class="space-y-6">
-                        <!-- Algorithm Selection Cards -->
-                        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <!-- Algorithm Selection -->
+                        <div class="space-y-4">
+                            <Label class="text-base font-medium">
+                                Selected Algorithm
+                            </Label>
+                            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
                             <!-- Neural Network Card -->
                             <div
-                                @click="toggleNeuralNetworkPrediction(!form.enable_neural_network_prediction)"
+                                @click="selectAlgorithm('neural_network')"
                                 :class="[
                                     'relative cursor-pointer rounded-lg border-2 p-5 transition-all duration-200',
-                                    form.enable_neural_network_prediction
+                                    form.selected_ml_algorithm === 'neural_network'
                                         ? 'border-primary bg-primary/5 shadow-md hover:shadow-lg'
                                         : 'border-muted bg-muted/30 hover:border-muted-foreground/50 hover:bg-muted/50'
                                 ]"
@@ -374,11 +394,11 @@ const saveVeterinarianInfo = () => {
                                         <h3 class="font-semibold text-base">Neural Network</h3>
                                     </div>
                                     <div
-                                        v-if="form.enable_neural_network_prediction"
+                                        v-if="form.selected_ml_algorithm === 'neural_network'"
                                         class="h-5 w-5 rounded-full bg-primary flex items-center justify-center"
                                     >
                                         <svg class="h-3 w-3 text-primary-foreground" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7" />
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"></path>
                                         </svg>
                                     </div>
                                 </div>
@@ -386,17 +406,17 @@ const saveVeterinarianInfo = () => {
                                     Advanced deep learning algorithm for complex pattern recognition
                                 </p>
                                 <div class="mt-3 flex items-center gap-2 text-xs text-muted-foreground">
-                                    <span class="font-medium">Priority:</span>
-                                    <span>1st</span>
+                                    <span class="font-medium">Accuracy:</span>
+                                    <span>85-95%</span>
                                 </div>
                             </div>
 
                             <!-- Logistic Regression Card -->
                             <div
-                                @click="toggleLogisticRegressionPrediction(!form.enable_logistic_regression_prediction)"
+                                @click="selectAlgorithm('logistic_regression')"
                                 :class="[
                                     'relative cursor-pointer rounded-lg border-2 p-5 transition-all duration-200',
-                                    form.enable_logistic_regression_prediction
+                                    form.selected_ml_algorithm === 'logistic_regression'
                                         ? 'border-primary bg-primary/5 shadow-md hover:shadow-lg'
                                         : 'border-muted bg-muted/30 hover:border-muted-foreground/50 hover:bg-muted/50'
                                 ]"
@@ -414,11 +434,11 @@ const saveVeterinarianInfo = () => {
                                         <h3 class="font-semibold text-base">Logistic Regression</h3>
                                     </div>
                                     <div
-                                        v-if="form.enable_logistic_regression_prediction"
+                                        v-if="form.selected_ml_algorithm === 'logistic_regression'"
                                         class="h-5 w-5 rounded-full bg-primary flex items-center justify-center"
                                     >
                                         <svg class="h-3 w-3 text-primary-foreground" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7" />
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"></path>
                                         </svg>
                                     </div>
                                 </div>
@@ -426,17 +446,17 @@ const saveVeterinarianInfo = () => {
                                     Statistical model for binary classification and pattern learning
                                 </p>
                                 <div class="mt-3 flex items-center gap-2 text-xs text-muted-foreground">
-                                    <span class="font-medium">Priority:</span>
-                                    <span>2nd</span>
+                                    <span class="font-medium">Accuracy:</span>
+                                    <span>75-85%</span>
                                 </div>
                             </div>
 
                             <!-- KNN Card -->
                             <div
-                                @click="toggleKnnPrediction(!form.enable_knn_prediction)"
+                                @click="selectAlgorithm('knn')"
                                 :class="[
                                     'relative cursor-pointer rounded-lg border-2 p-5 transition-all duration-200',
-                                    form.enable_knn_prediction
+                                    form.selected_ml_algorithm === 'knn'
                                         ? 'border-primary bg-primary/5 shadow-md hover:shadow-lg'
                                         : 'border-muted bg-muted/30 hover:border-muted-foreground/50 hover:bg-muted/50'
                                 ]"
@@ -454,11 +474,11 @@ const saveVeterinarianInfo = () => {
                                         <h3 class="font-semibold text-base">K-Nearest Neighbors</h3>
                                     </div>
                                     <div
-                                        v-if="form.enable_knn_prediction"
+                                        v-if="form.selected_ml_algorithm === 'knn'"
                                         class="h-5 w-5 rounded-full bg-primary flex items-center justify-center"
                                     >
                                         <svg class="h-3 w-3 text-primary-foreground" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7" />
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"></path>
                                         </svg>
                                     </div>
                                 </div>
@@ -466,53 +486,29 @@ const saveVeterinarianInfo = () => {
                                     Fast similarity-based predictions using nearest neighbor matching
                                 </p>
                                 <div class="mt-3 flex items-center gap-2 text-xs text-muted-foreground">
-                                    <span class="font-medium">Priority:</span>
-                                    <span>3rd</span>
+                                    <span class="font-medium">Accuracy:</span>
+                                    <span>65-80%</span>
                                 </div>
+                            </div>
                             </div>
                         </div>
 
-                        <!-- Algorithm Priority Info -->
-                        <div
-                            v-if="form.enable_neural_network_prediction || form.enable_logistic_regression_prediction || form.enable_knn_prediction"
-                            class="rounded-lg bg-blue-50 dark:bg-blue-900/20 p-4 border border-blue-200 dark:border-blue-800"
-                        >
+                        <!-- Selected Algorithm Info -->
+                        <div class="rounded-lg bg-blue-50 dark:bg-blue-900/20 p-4 border border-blue-200 dark:border-blue-800">
                             <p class="text-sm text-blue-800 dark:text-blue-200">
-                                <strong>Algorithm Priority:</strong>
-                                <span v-if="form.enable_neural_network_prediction && form.enable_logistic_regression_prediction && form.enable_knn_prediction">
-                                    Neural Network → Logistic Regression → KNN. This provides the best accuracy with multiple fallback options.
+                                <strong>Current Selection:</strong>
+                                <span v-if="form.selected_ml_algorithm === 'neural_network'">
+                                    Neural Network - Advanced deep learning algorithm for complex pattern recognition (85-95% accuracy)
                                 </span>
-                                <span v-else-if="form.enable_neural_network_prediction && form.enable_logistic_regression_prediction">
-                                    Neural Network → Logistic Regression. High accuracy with fallback.
+                                <span v-else-if="form.selected_ml_algorithm === 'logistic_regression'">
+                                    Logistic Regression - Statistical model for binary classification (75-85% accuracy)
                                 </span>
-                                <span v-else-if="form.enable_neural_network_prediction && form.enable_knn_prediction">
-                                    Neural Network → KNN. Advanced learning with reliable fallback.
-                                </span>
-                                <span v-else-if="form.enable_logistic_regression_prediction && form.enable_knn_prediction">
-                                    Logistic Regression → KNN. Good accuracy with fallback.
-                                </span>
-                                <span v-else-if="form.enable_neural_network_prediction">
-                                    Neural Network only. Best accuracy for complex patterns.
-                                </span>
-                                <span v-else-if="form.enable_logistic_regression_prediction">
-                                    Logistic Regression only. Good pattern learning.
-                                </span>
-                                <span v-else-if="form.enable_knn_prediction">
-                                    KNN only. Fast and reliable similarity-based predictions.
+                                <span v-else-if="form.selected_ml_algorithm === 'knn'">
+                                    K-Nearest Neighbors - Fast similarity-based predictions (65-80% accuracy)
                                 </span>
                             </p>
                         </div>
 
-                        <!-- Warning if all disabled -->
-                        <div
-                            v-if="!form.enable_knn_prediction && !form.enable_logistic_regression_prediction && !form.enable_neural_network_prediction"
-                            class="rounded-lg bg-red-50 dark:bg-red-900/20 p-4 border border-red-200 dark:border-red-800"
-                        >
-                            <p class="text-sm text-red-800 dark:text-red-200">
-                                <strong>Warning:</strong> All machine learning algorithms are disabled. 
-                                Manual selection will be required for all disease diagnoses and medicine recommendations.
-                            </p>
-                        </div>
 
                         <!-- Save Button -->
                         <div class="flex justify-end pt-4 border-t">

@@ -88,7 +88,9 @@ const events = computed<EventInput[]>(() => {
             
             // Filter to next 30 days only
             if (showNext30Days.value) {
-                const aptDate = new Date(apt.appointment_date);
+                // Parse date string (YYYY-MM-DD) as local date to avoid timezone issues
+                const [year, month, day] = apt.appointment_date.split('-').map(Number);
+                const aptDate = new Date(year, month - 1, day);
                 aptDate.setHours(0, 0, 0, 0);
                 return aptDate >= today && aptDate <= maxDate;
             }

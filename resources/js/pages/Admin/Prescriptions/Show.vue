@@ -76,7 +76,9 @@ const breadcrumbs = [
 
 const formatDate = (dateString: string | null) => {
     if (!dateString) return '—';
-    const date = new Date(dateString);
+    // Parse date string (YYYY-MM-DD) as local date to avoid timezone issues
+    const [year, month, day] = dateString.split('-').map(Number);
+    const date = new Date(year, month - 1, day);
     return date.toLocaleDateString('en-US', {
         year: 'numeric',
         month: 'short',
