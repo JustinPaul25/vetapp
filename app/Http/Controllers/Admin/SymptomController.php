@@ -143,3 +143,4 @@ class SymptomController extends Controller
             ->with('success', 'Symptom deleted successfully.');
     }
 }
+

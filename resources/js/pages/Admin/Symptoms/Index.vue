@@ -252,3 +252,4 @@ const getSortIcon = (column: string) => {
         </div>
     </AppLayout>
 </template>
+
