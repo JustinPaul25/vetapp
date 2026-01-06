@@ -84,6 +84,7 @@ Route::middleware(['auth', 'verified', \App\Http\Middleware\EnsureUserIsAdmin::c
         Route::post('settings', [\App\Http\Controllers\Admin\SettingsController::class, 'update'])->name('settings.update');
         Route::patch('settings', [\App\Http\Controllers\Admin\SettingsController::class, 'update'])->name('settings.update.patch');
         Route::get('settings/api', [\App\Http\Controllers\Admin\SettingsController::class, 'getSettings'])->name('settings.api');
+        Route::get('settings/metrics', [\App\Http\Controllers\Admin\SettingsController::class, 'getMetrics'])->name('settings.metrics');
     });
 
 // Ably token endpoint for client-side authentication

@@ -1,19 +1,38 @@
 <script setup lang="ts">
 import AppLayout from '@/layouts/AppLayout.vue';
 import { Head, router, useForm } from '@inertiajs/vue3';
-import { watch } from 'vue';
+import { watch, ref } from 'vue';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { Settings, BrainCircuit, UserCog } from 'lucide-vue-next';
+import { Settings, BrainCircuit, UserCog, BarChart3 } from 'lucide-vue-next';
 import { dashboard } from '@/routes';
+import axios from 'axios';
+import AlgorithmMetricsChart from '@/components/AlgorithmMetricsChart.vue';
+import ConfusionMatrixChart from '@/components/ConfusionMatrixChart.vue';
+import { useToast } from '@/composables/useToast';
 
 interface Setting {
     value: any;
     type: string;
     description: string;
+}
+
+interface AlgorithmMetrics {
+    algorithm: string;
+    accuracy: number;
+    precision: number;
+    recall: number;
+    f1_score: number;
+    confusion_matrix: {
+        true_positives: number;
+        false_positives: number;
+        false_negatives: number;
+        true_negatives: number;
+    };
+    total_samples: number;
 }
 
 interface Props {
@@ -25,19 +44,37 @@ interface Props {
         veterinarian_license_number?: Setting;
         [key: string]: Setting | undefined;
     };
+    algorithmMetrics?: {
+        neural_network?: AlgorithmMetrics;
+        logistic_regression?: AlgorithmMetrics;
+        knn?: AlgorithmMetrics;
+    };
 }
 
 const props = defineProps<Props>();
+
+const { success: showSuccess, error: showError } = useToast();
 
 const breadcrumbs = [
     { title: 'Dashboard', href: dashboard().url },
     { title: 'Settings', href: '#' },
 ];
 
+// Helper function to safely get boolean setting value
+const getBooleanSetting = (setting: Setting | undefined, defaultValue: boolean = true): boolean => {
+    if (setting === undefined) return defaultValue;
+    const value = setting.value;
+    // Handle various boolean representations
+    if (typeof value === 'boolean') return value;
+    if (value === 'true' || value === '1' || value === 1) return true;
+    if (value === 'false' || value === '0' || value === 0 || value === null || value === '') return false;
+    return defaultValue;
+};
+
 const form = useForm({
-    enable_knn_prediction: props.settings.enable_knn_prediction?.value ?? true,
-    enable_logistic_regression_prediction: props.settings.enable_logistic_regression_prediction?.value ?? true,
-    enable_neural_network_prediction: props.settings.enable_neural_network_prediction?.value ?? true,
+    enable_knn_prediction: getBooleanSetting(props.settings.enable_knn_prediction, true),
+    enable_logistic_regression_prediction: getBooleanSetting(props.settings.enable_logistic_regression_prediction, true),
+    enable_neural_network_prediction: getBooleanSetting(props.settings.enable_neural_network_prediction, true),
     veterinarian_name: props.settings.veterinarian_name?.value ?? '',
     veterinarian_license_number: props.settings.veterinarian_license_number?.value ?? '',
 });
@@ -45,17 +82,23 @@ const form = useForm({
 // Watch for prop changes to sync form state (e.g., after server updates)
 watch(() => props.settings, (newSettings) => {
     // Only update if the value has actually changed to avoid unnecessary updates
-    if (newSettings.enable_knn_prediction !== undefined && 
-        form.enable_knn_prediction !== newSettings.enable_knn_prediction.value) {
-        form.enable_knn_prediction = newSettings.enable_knn_prediction.value ?? true;
+    if (newSettings.enable_knn_prediction !== undefined) {
+        const newValue = getBooleanSetting(newSettings.enable_knn_prediction, true);
+        if (form.enable_knn_prediction !== newValue) {
+            form.enable_knn_prediction = newValue;
+        }
     }
-    if (newSettings.enable_logistic_regression_prediction !== undefined && 
-        form.enable_logistic_regression_prediction !== newSettings.enable_logistic_regression_prediction.value) {
-        form.enable_logistic_regression_prediction = newSettings.enable_logistic_regression_prediction.value ?? true;
+    if (newSettings.enable_logistic_regression_prediction !== undefined) {
+        const newValue = getBooleanSetting(newSettings.enable_logistic_regression_prediction, true);
+        if (form.enable_logistic_regression_prediction !== newValue) {
+            form.enable_logistic_regression_prediction = newValue;
+        }
     }
-    if (newSettings.enable_neural_network_prediction !== undefined && 
-        form.enable_neural_network_prediction !== newSettings.enable_neural_network_prediction.value) {
-        form.enable_neural_network_prediction = newSettings.enable_neural_network_prediction.value ?? true;
+    if (newSettings.enable_neural_network_prediction !== undefined) {
+        const newValue = getBooleanSetting(newSettings.enable_neural_network_prediction, true);
+        if (form.enable_neural_network_prediction !== newValue) {
+            form.enable_neural_network_prediction = newValue;
+        }
     }
     if (newSettings.veterinarian_name !== undefined && 
         form.veterinarian_name !== newSettings.veterinarian_name.value) {
@@ -67,44 +110,121 @@ watch(() => props.settings, (newSettings) => {
     }
 }, { deep: true, immediate: false });
 
-const updateSetting = (key: string, value: any) => {
-    router.patch(
-        '/admin/settings',
-        {
-            key,
-            value,
-        },
-        {
-            preserveScroll: true,
-            preserveState: false,
-            only: ['settings'],
-            onError: () => {
-                // Revert local state on error by reloading from props
-                if (key === 'enable_knn_prediction') {
-                    form.enable_knn_prediction = props.settings.enable_knn_prediction?.value ?? false;
-                } else if (key === 'enable_logistic_regression_prediction') {
-                    form.enable_logistic_regression_prediction = props.settings.enable_logistic_regression_prediction?.value ?? false;
-                } else if (key === 'enable_neural_network_prediction') {
-                    form.enable_neural_network_prediction = props.settings.enable_neural_network_prediction?.value ?? false;
-                }
+const updateSetting = async (key: string, value: any) => {
+    console.log('updateSetting called:', { key, value });
+    
+    try {
+        // Use axios for more reliable requests
+        const response = await axios.patch(
+            '/admin/settings',
+            {
+                key,
+                value,
             },
+            {
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'Accept': 'application/json',
+                    'Content-Type': 'application/json',
+                },
+            }
+        );
+        
+        console.log('Setting updated successfully:', key, value, response.data);
+        
+        // Reload settings using Inertia to update props
+        router.reload({ only: ['settings'] });
+    } catch (error: any) {
+        console.error('Error updating setting:', error);
+        
+        // Revert local state on error by reloading from props
+        if (key === 'enable_knn_prediction') {
+            form.enable_knn_prediction = getBooleanSetting(props.settings.enable_knn_prediction, true);
+        } else if (key === 'enable_logistic_regression_prediction') {
+            form.enable_logistic_regression_prediction = getBooleanSetting(props.settings.enable_logistic_regression_prediction, true);
+        } else if (key === 'enable_neural_network_prediction') {
+            form.enable_neural_network_prediction = getBooleanSetting(props.settings.enable_neural_network_prediction, true);
         }
-    );
+    }
 };
 
 const toggleKnnPrediction = (checked: boolean) => {
     form.enable_knn_prediction = checked;
-    updateSetting('enable_knn_prediction', checked);
 };
 
 const toggleLogisticRegressionPrediction = (checked: boolean) => {
     form.enable_logistic_regression_prediction = checked;
-    updateSetting('enable_logistic_regression_prediction', checked);
 };
 
 const toggleNeuralNetworkPrediction = (checked: boolean) => {
     form.enable_neural_network_prediction = checked;
-    updateSetting('enable_neural_network_prediction', checked);
+};
+
+const savingMLSettings = ref(false);
+
+const saveMachineLearningSettings = async () => {
+    savingMLSettings.value = true;
+    console.log('Saving ML settings:', {
+        enable_knn_prediction: form.enable_knn_prediction,
+        enable_logistic_regression_prediction: form.enable_logistic_regression_prediction,
+        enable_neural_network_prediction: form.enable_neural_network_prediction,
+    });
+    
+    try {
+        // Save all three settings using bulk update
+        const response = await axios.patch(
+            '/admin/settings',
+            {
+                settings: [
+                    {
+                        key: 'enable_neural_network_prediction',
+                        value: form.enable_neural_network_prediction,
+                    },
+                    {
+                        key: 'enable_logistic_regression_prediction',
+                        value: form.enable_logistic_regression_prediction,
+                    },
+                    {
+                        key: 'enable_knn_prediction',
+                        value: form.enable_knn_prediction,
+                    },
+                ],
+            },
+            {
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'Accept': 'application/json',
+                    'Content-Type': 'application/json',
+                },
+            }
+        );
+        
+        console.log('All ML settings saved successfully:', response.data);
+        
+        // Show success toast
+        showSuccess(
+            'Machine Learning Settings Saved',
+            'Your machine learning algorithm preferences have been updated successfully.'
+        );
+        
+        // Reload settings using Inertia to update props
+        router.reload({ only: ['settings'] });
+    } catch (error: any) {
+        console.error('Error saving ML settings:', error);
+        
+        // Show error toast
+        showError(
+            'Failed to Save Settings',
+            error.response?.data?.message || 'An error occurred while saving your settings. Please try again.'
+        );
+        
+        // Revert to original values on error
+        form.enable_knn_prediction = getBooleanSetting(props.settings.enable_knn_prediction, true);
+        form.enable_logistic_regression_prediction = getBooleanSetting(props.settings.enable_logistic_regression_prediction, true);
+        form.enable_neural_network_prediction = getBooleanSetting(props.settings.enable_neural_network_prediction, true);
+    } finally {
+        savingMLSettings.value = false;
+    }
 };
 
 const saveVeterinarianInfo = () => {
@@ -185,7 +305,7 @@ const saveVeterinarianInfo = () => {
                     </CardContent>
                 </Card>
 
-                <!-- KNN Prediction Setting -->
+                <!-- Machine Learning Settings -->
                 <Card>
                     <CardHeader>
                         <CardTitle class="flex items-center gap-2">
@@ -193,103 +313,134 @@ const saveVeterinarianInfo = () => {
                             Machine Learning Settings
                         </CardTitle>
                         <CardDescription>
-                            Configure machine learning and prediction features
+                            Select which machine learning algorithms to use for disease diagnosis and medicine recommendations
                         </CardDescription>
                     </CardHeader>
                     <CardContent class="space-y-6">
-                        <!-- Neural Network Toggle -->
-                        <div class="flex items-center justify-between space-x-4">
-                            <div class="flex-1 space-y-1">
-                                <Label for="enable_neural_network_prediction" class="text-base font-medium">
-                                    Enable Neural Network Prediction
-                                </Label>
-                                <p class="text-sm text-muted-foreground">
-                                    {{ settings.enable_neural_network_prediction?.description }}
+                        <!-- Algorithm Selection Cards -->
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <!-- Neural Network Card -->
+                            <div
+                                @click="toggleNeuralNetworkPrediction(!form.enable_neural_network_prediction)"
+                                :class="[
+                                    'relative cursor-pointer rounded-lg border-2 p-5 transition-all duration-200',
+                                    form.enable_neural_network_prediction
+                                        ? 'border-primary bg-primary/5 shadow-md hover:shadow-lg'
+                                        : 'border-muted bg-muted/30 hover:border-muted-foreground/50 hover:bg-muted/50'
+                                ]"
+                            >
+                                <div class="flex items-start justify-between mb-3">
+                                    <div class="flex items-center gap-2">
+                                        <div
+                                            :class="[
+                                                'h-3 w-3 rounded-full transition-colors',
+                                                form.enable_neural_network_prediction
+                                                    ? 'bg-primary'
+                                                    : 'bg-muted-foreground/30'
+                                            ]"
+                                        />
+                                        <h3 class="font-semibold text-base">Neural Network</h3>
+                                    </div>
+                                    <div
+                                        v-if="form.enable_neural_network_prediction"
+                                        class="h-5 w-5 rounded-full bg-primary flex items-center justify-center"
+                                    >
+                                        <svg class="h-3 w-3 text-primary-foreground" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7" />
+                                        </svg>
+                                    </div>
+                                </div>
+                                <p class="text-sm text-muted-foreground mb-2">
+                                    Advanced deep learning algorithm for complex pattern recognition
                                 </p>
-                            </div>
-                            <Switch
-                                id="enable_neural_network_prediction"
-                                :checked="form.enable_neural_network_prediction"
-                                @update:checked="toggleNeuralNetworkPrediction"
-                            />
-                        </div>
-
-                        <div
-                            v-if="!form.enable_neural_network_prediction"
-                            class="rounded-lg bg-yellow-50 dark:bg-yellow-900/20 p-4 border border-yellow-200 dark:border-yellow-800"
-                        >
-                            <p class="text-sm text-yellow-800 dark:text-yellow-200">
-                                <strong>Note:</strong> When Neural Network is disabled, the system will not use
-                                this advanced deep learning algorithm for predictions.
-                            </p>
-                        </div>
-
-                        <div class="border-t pt-6">
-                            <div class="flex items-center justify-between space-x-4">
-                                <div class="flex-1 space-y-1">
-                                    <Label for="enable_logistic_regression_prediction" class="text-base font-medium">
-                                        Enable Logistic Regression Prediction
-                                    </Label>
-                                    <p class="text-sm text-muted-foreground">
-                                        {{ settings.enable_logistic_regression_prediction?.description }}
-                                    </p>
+                                <div class="mt-3 flex items-center gap-2 text-xs text-muted-foreground">
+                                    <span class="font-medium">Priority:</span>
+                                    <span>1st</span>
                                 </div>
-                                <Switch
-                                    id="enable_logistic_regression_prediction"
-                                    :checked="form.enable_logistic_regression_prediction"
-                                    @update:checked="toggleLogisticRegressionPrediction"
-                                />
                             </div>
-                        </div>
 
-                        <div
-                            v-if="!form.enable_logistic_regression_prediction"
-                            class="rounded-lg bg-yellow-50 dark:bg-yellow-900/20 p-4 border border-yellow-200 dark:border-yellow-800"
-                        >
-                            <p class="text-sm text-yellow-800 dark:text-yellow-200">
-                                <strong>Note:</strong> When Logistic Regression is disabled, the system will not use
-                                this algorithm to recommend medicines or predict diseases based on symptoms.
-                            </p>
-                        </div>
-
-                        <div class="border-t pt-6">
-                            <div class="flex items-center justify-between space-x-4">
-                                <div class="flex-1 space-y-1">
-                                    <Label for="enable_knn_prediction" class="text-base font-medium">
-                                        Enable KNN Prediction
-                                    </Label>
-                                    <p class="text-sm text-muted-foreground">
-                                        {{ settings.enable_knn_prediction?.description }}
-                                    </p>
+                            <!-- Logistic Regression Card -->
+                            <div
+                                @click="toggleLogisticRegressionPrediction(!form.enable_logistic_regression_prediction)"
+                                :class="[
+                                    'relative cursor-pointer rounded-lg border-2 p-5 transition-all duration-200',
+                                    form.enable_logistic_regression_prediction
+                                        ? 'border-primary bg-primary/5 shadow-md hover:shadow-lg'
+                                        : 'border-muted bg-muted/30 hover:border-muted-foreground/50 hover:bg-muted/50'
+                                ]"
+                            >
+                                <div class="flex items-start justify-between mb-3">
+                                    <div class="flex items-center gap-2">
+                                        <div
+                                            :class="[
+                                                'h-3 w-3 rounded-full transition-colors',
+                                                form.enable_logistic_regression_prediction
+                                                    ? 'bg-primary'
+                                                    : 'bg-muted-foreground/30'
+                                            ]"
+                                        />
+                                        <h3 class="font-semibold text-base">Logistic Regression</h3>
+                                    </div>
+                                    <div
+                                        v-if="form.enable_logistic_regression_prediction"
+                                        class="h-5 w-5 rounded-full bg-primary flex items-center justify-center"
+                                    >
+                                        <svg class="h-3 w-3 text-primary-foreground" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7" />
+                                        </svg>
+                                    </div>
                                 </div>
-                                <Switch
-                                    id="enable_knn_prediction"
-                                    :checked="form.enable_knn_prediction"
-                                    @update:checked="toggleKnnPrediction"
-                                />
+                                <p class="text-sm text-muted-foreground mb-2">
+                                    Statistical model for binary classification and pattern learning
+                                </p>
+                                <div class="mt-3 flex items-center gap-2 text-xs text-muted-foreground">
+                                    <span class="font-medium">Priority:</span>
+                                    <span>2nd</span>
+                                </div>
+                            </div>
+
+                            <!-- KNN Card -->
+                            <div
+                                @click="toggleKnnPrediction(!form.enable_knn_prediction)"
+                                :class="[
+                                    'relative cursor-pointer rounded-lg border-2 p-5 transition-all duration-200',
+                                    form.enable_knn_prediction
+                                        ? 'border-primary bg-primary/5 shadow-md hover:shadow-lg'
+                                        : 'border-muted bg-muted/30 hover:border-muted-foreground/50 hover:bg-muted/50'
+                                ]"
+                            >
+                                <div class="flex items-start justify-between mb-3">
+                                    <div class="flex items-center gap-2">
+                                        <div
+                                            :class="[
+                                                'h-3 w-3 rounded-full transition-colors',
+                                                form.enable_knn_prediction
+                                                    ? 'bg-primary'
+                                                    : 'bg-muted-foreground/30'
+                                            ]"
+                                        />
+                                        <h3 class="font-semibold text-base">K-Nearest Neighbors</h3>
+                                    </div>
+                                    <div
+                                        v-if="form.enable_knn_prediction"
+                                        class="h-5 w-5 rounded-full bg-primary flex items-center justify-center"
+                                    >
+                                        <svg class="h-3 w-3 text-primary-foreground" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7" />
+                                        </svg>
+                                    </div>
+                                </div>
+                                <p class="text-sm text-muted-foreground mb-2">
+                                    Fast similarity-based predictions using nearest neighbor matching
+                                </p>
+                                <div class="mt-3 flex items-center gap-2 text-xs text-muted-foreground">
+                                    <span class="font-medium">Priority:</span>
+                                    <span>3rd</span>
+                                </div>
                             </div>
                         </div>
 
-                        <div
-                            v-if="!form.enable_knn_prediction"
-                            class="rounded-lg bg-yellow-50 dark:bg-yellow-900/20 p-4 border border-yellow-200 dark:border-yellow-800"
-                        >
-                            <p class="text-sm text-yellow-800 dark:text-yellow-200">
-                                <strong>Note:</strong> When KNN prediction is disabled, the system will not use
-                                this algorithm to recommend medicines or predict diseases based on symptoms.
-                            </p>
-                        </div>
-
-                        <div
-                            v-if="!form.enable_knn_prediction && !form.enable_logistic_regression_prediction && !form.enable_neural_network_prediction"
-                            class="rounded-lg bg-red-50 dark:bg-red-900/20 p-4 border border-red-200 dark:border-red-800"
-                        >
-                            <p class="text-sm text-red-800 dark:text-red-200">
-                                <strong>Warning:</strong> All machine learning algorithms are disabled. 
-                                Manual selection will be required for all disease diagnoses and medicine recommendations.
-                            </p>
-                        </div>
-
+                        <!-- Algorithm Priority Info -->
                         <div
                             v-if="form.enable_neural_network_prediction || form.enable_logistic_regression_prediction || form.enable_knn_prediction"
                             class="rounded-lg bg-blue-50 dark:bg-blue-900/20 p-4 border border-blue-200 dark:border-blue-800"
@@ -318,6 +469,103 @@ const saveVeterinarianInfo = () => {
                                     KNN only. Fast and reliable similarity-based predictions.
                                 </span>
                             </p>
+                        </div>
+
+                        <!-- Warning if all disabled -->
+                        <div
+                            v-if="!form.enable_knn_prediction && !form.enable_logistic_regression_prediction && !form.enable_neural_network_prediction"
+                            class="rounded-lg bg-red-50 dark:bg-red-900/20 p-4 border border-red-200 dark:border-red-800"
+                        >
+                            <p class="text-sm text-red-800 dark:text-red-200">
+                                <strong>Warning:</strong> All machine learning algorithms are disabled. 
+                                Manual selection will be required for all disease diagnoses and medicine recommendations.
+                            </p>
+                        </div>
+
+                        <!-- Save Button -->
+                        <div class="flex justify-end pt-4 border-t">
+                            <Button 
+                                @click="saveMachineLearningSettings"
+                                :disabled="savingMLSettings"
+                                size="lg"
+                            >
+                                <span v-if="savingMLSettings">Saving...</span>
+                                <span v-else>Save Machine Learning Settings</span>
+                            </Button>
+                        </div>
+                    </CardContent>
+                </Card>
+
+                <!-- Algorithm Performance Metrics -->
+                <Card v-if="props.algorithmMetrics">
+                    <CardHeader>
+                        <CardTitle class="flex items-center gap-2">
+                            <BarChart3 class="h-5 w-5" />
+                            Algorithm Performance Metrics
+                        </CardTitle>
+                        <CardDescription>
+                            View detailed performance metrics for each machine learning algorithm including confusion matrix, precision, recall, F1-score, and accuracy
+                        </CardDescription>
+                    </CardHeader>
+                    <CardContent class="space-y-8">
+                        <!-- Neural Network Metrics -->
+                        <div v-if="props.algorithmMetrics.neural_network" class="space-y-4">
+                            <div class="border rounded-lg p-4">
+                                <h3 class="text-lg font-semibold mb-4">Neural Network</h3>
+                                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                                    <div>
+                                        <AlgorithmMetricsChart :metrics="props.algorithmMetrics.neural_network" />
+                                    </div>
+                                    <div>
+                                        <ConfusionMatrixChart 
+                                            :confusion-matrix="props.algorithmMetrics.neural_network.confusion_matrix"
+                                            algorithm="neural_network"
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Logistic Regression Metrics -->
+                        <div v-if="props.algorithmMetrics.logistic_regression" class="space-y-4">
+                            <div class="border rounded-lg p-4">
+                                <h3 class="text-lg font-semibold mb-4">Logistic Regression</h3>
+                                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                                    <div>
+                                        <AlgorithmMetricsChart :metrics="props.algorithmMetrics.logistic_regression" />
+                                    </div>
+                                    <div>
+                                        <ConfusionMatrixChart 
+                                            :confusion-matrix="props.algorithmMetrics.logistic_regression.confusion_matrix"
+                                            algorithm="logistic_regression"
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- KNN Metrics -->
+                        <div v-if="props.algorithmMetrics.knn" class="space-y-4">
+                            <div class="border rounded-lg p-4">
+                                <h3 class="text-lg font-semibold mb-4">K-Nearest Neighbors (KNN)</h3>
+                                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                                    <div>
+                                        <AlgorithmMetricsChart :metrics="props.algorithmMetrics.knn" />
+                                    </div>
+                                    <div>
+                                        <ConfusionMatrixChart 
+                                            :confusion-matrix="props.algorithmMetrics.knn.confusion_matrix"
+                                            algorithm="knn"
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- No Metrics Available -->
+                        <div v-if="!props.algorithmMetrics || (!props.algorithmMetrics.neural_network && !props.algorithmMetrics.logistic_regression && !props.algorithmMetrics.knn)" 
+                             class="text-center py-8 text-gray-500 dark:text-gray-400">
+                            <p>No algorithm metrics available. Metrics are calculated based on training data.</p>
                         </div>
                     </CardContent>
                 </Card>

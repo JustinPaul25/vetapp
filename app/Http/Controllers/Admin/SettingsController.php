@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\Setting;
+use App\Services\AlgorithmMetricsService;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 
@@ -22,8 +23,13 @@ class SettingsController extends Controller
             ]];
         });
 
+        // Calculate algorithm metrics
+        $metricsService = new AlgorithmMetricsService();
+        $metrics = $metricsService->calculateAllMetrics();
+
         return Inertia::render('Admin/Settings/Index', [
             'settings' => $settings,
+            'algorithmMetrics' => $metrics,
         ]);
     }
 
@@ -67,7 +73,28 @@ class SettingsController extends Controller
                 ]);
             }
 
-            return redirect()->back()->with('success', 'Settings updated successfully');
+            // Get updated settings to return in response
+            $settings = Setting::all()->mapWithKeys(function ($s) {
+                return [$s->key => [
+                    'value' => $this->castValue($s->value, $s->type),
+                    'type' => $s->type,
+                    'description' => $s->description,
+                ]];
+            });
+
+            // Return JSON for AJAX requests, redirect for regular requests
+            if ($request->wantsJson() || $request->ajax()) {
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Settings updated successfully',
+                    'settings' => $settings,
+                ]);
+            }
+
+            return redirect()->back()->with([
+                'success' => 'Settings updated successfully',
+                'settings' => $settings,
+            ]);
         } else {
             // Single setting update mode (backward compatibility)
             $validated = $request->validate([
@@ -132,8 +159,20 @@ class SettingsController extends Controller
                 ]];
             });
 
-            // Use Inertia::back() to properly refresh props, or redirect with Inertia
-            return back()->with('success', 'Setting updated successfully');
+            // Return JSON for AJAX requests, redirect for regular requests
+            if ($request->wantsJson() || $request->ajax()) {
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Setting updated successfully',
+                    'settings' => $settings,
+                ]);
+            }
+
+            // Return back with updated settings so Inertia can refresh the props
+            return back()->with([
+                'success' => 'Setting updated successfully',
+                'settings' => $settings,
+            ]);
         }
     }
 
@@ -149,6 +188,20 @@ class SettingsController extends Controller
         return response()->json([
             'success' => true,
             'settings' => $settings,
+        ]);
+    }
+
+    /**
+     * Get algorithm metrics for API access.
+     */
+    public function getMetrics()
+    {
+        $metricsService = new AlgorithmMetricsService();
+        $metrics = $metricsService->calculateAllMetrics();
+
+        return response()->json([
+            'success' => true,
+            'metrics' => $metrics,
         ]);
     }
 
