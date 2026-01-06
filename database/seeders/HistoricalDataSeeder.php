@@ -263,12 +263,16 @@ class HistoricalDataSeeder extends Seeder
 
     /**
      * Create historical appointments
+     * Updated to support multiple pets per appointment
      */
     private function createHistoricalAppointments($patients, $appointmentTypes, $users): \Illuminate\Database\Eloquent\Collection
     {
         $appointments = collect();
         $startDate = Carbon::now()->subYears(1);
         $endDate = Carbon::now();
+
+        // Group patients by user_id for multi-pet appointments
+        $patientsByUser = $patients->groupBy('user_id');
 
         // Generate appointments over the past year
         $appointmentCount = 0;
@@ -279,25 +283,48 @@ class HistoricalDataSeeder extends Seeder
             $appointmentsPerWeek = rand(2, 5);
             
             for ($i = 0; $i < $appointmentsPerWeek; $i++) {
-                $patient = $patients->random();
+                // 40% chance to create multi-pet appointment (2-4 pets from same user)
+                $isMultiPet = rand(0, 100) < 40;
                 
-                // 25% chance to have multiple appointment types, otherwise single type
-                $hasMultipleTypes = rand(0, 100) < 25 && $appointmentTypes->count() > 1;
+                if ($isMultiPet) {
+                    // Get users who have multiple pets
+                    $usersWithMultiplePets = $patientsByUser->filter(function ($userPatients) {
+                        return $userPatients->count() >= 2;
+                    });
+                    
+                    if ($usersWithMultiplePets->isNotEmpty()) {
+                        $userWithMultiplePets = $usersWithMultiplePets->random();
+                        $userPets = $userWithMultiplePets->values();
+                        // Select 2-4 pets (or all if user has fewer)
+                        $numPets = min(rand(2, 4), $userPets->count());
+                        $selectedPets = $userPets->random($numPets);
+                        $user = $users->where('id', $userPets->first()->user_id)->first();
+                    } else {
+                        // Fallback to single pet if no user has multiple pets
+                        $selectedPets = collect([$patients->random()]);
+                        $user = $users->where('id', $selectedPets->first()->user_id)->first() ?? $users->random();
+                    }
+                } else {
+                    // Single pet appointment
+                    $selectedPets = collect([$patients->random()]);
+                    $user = $users->where('id', $selectedPets->first()->user_id)->first() ?? $users->random();
+                }
+                
+                // Select appointment type - ONE appointment per type
+                // 20% chance to have multiple appointment types (creates separate appointments)
+                $hasMultipleTypes = rand(0, 100) < 20 && $appointmentTypes->count() > 1;
                 
                 if ($hasMultipleTypes) {
-                    // Select 2-3 random appointment types
-                    $numTypes = min(rand(2, 3), $appointmentTypes->count());
+                    // Select 2 random appointment types (creates 2 separate appointments)
+                    $numTypes = min(2, $appointmentTypes->count());
                     $selectedTypes = $appointmentTypes->random($numTypes);
-                    $primaryType = $selectedTypes->first();
                     $appointmentTypeIds = $selectedTypes->pluck('id')->toArray();
                 } else {
-                    // Single appointment type
+                    // Single appointment type - creates ONE appointment
                     $primaryType = $appointmentTypes->random();
                     $appointmentTypeIds = [$primaryType->id];
                 }
                 
-                $user = $users->where('id', $patient->user_id)->first() ?? $users->random();
-
                 $appointmentDate = $currentDate->copy()->addDays(rand(0, 6));
                 $appointmentTime = sprintf('%02d:00', rand(8, 17)); // 8 AM to 5 PM
 
@@ -305,35 +332,140 @@ class HistoricalDataSeeder extends Seeder
                 $isApproved = $appointmentDate->isPast() ? (rand(0, 10) > 1) : (rand(0, 10) > 3);
                 $isCompleted = $appointmentDate->isPast() && $isApproved ? (rand(0, 10) > 2) : false;
 
-                $appointment = Appointment::create([
-                    'appointment_type_id' => $primaryType->id, // Keep for backward compatibility
-                    'patient_id' => $patient->id,
-                    'user_id' => $user->id,
-                    'appointment_date' => $appointmentDate,
-                    'appointment_time' => $appointmentTime,
-                    'symptoms' => rand(0, 1) ? $this->generateSymptoms() : null,
-                    'is_approved' => $isApproved,
-                    'is_completed' => $isCompleted,
-                    'remarks' => rand(0, 1) ? $this->generateRemarks() : null,
-                    'created_at' => $appointmentDate->copy()->subDays(rand(1, 7)),
-                    'updated_at' => $isCompleted ? $appointmentDate->copy()->addHours(rand(1, 3)) : $appointmentDate->copy()->subDays(rand(1, 7)),
-                ]);
+                // Create ONE appointment per appointment type with all selected pets attached
+                foreach ($appointmentTypeIds as $appointmentTypeId) {
+                    $primaryType = $appointmentTypes->firstWhere('id', $appointmentTypeId);
+                    $firstPet = $selectedPets->first();
+                    
+                    if (!$firstPet || !$user) {
+                        continue;
+                    }
+                    
+                    $appointment = Appointment::create([
+                        'appointment_type_id' => $appointmentTypeId,
+                        'patient_id' => $firstPet->id, // Keep for backward compatibility
+                        'user_id' => $user->id,
+                        'appointment_date' => $appointmentDate,
+                        'appointment_time' => $appointmentTime,
+                        'symptoms' => rand(0, 1) ? $this->generateSymptoms() : null,
+                        'is_approved' => $isApproved,
+                        'is_completed' => $isCompleted,
+                        'remarks' => rand(0, 1) ? $this->generateRemarks() : null,
+                        'created_at' => $appointmentDate->copy()->subDays(rand(1, 7)),
+                        'updated_at' => $isCompleted ? $appointmentDate->copy()->addHours(rand(1, 3)) : $appointmentDate->copy()->subDays(rand(1, 7)),
+                    ]);
 
-                // Sync many-to-many relationship for appointment types
-                $appointment->appointment_types()->sync($appointmentTypeIds);
-                
-                // Sync many-to-many relationship for patients
-                $appointment->patients()->sync([$patient->id]);
+                    // Sync many-to-many relationship for appointment types
+                    $appointment->appointment_types()->sync([$appointmentTypeId]);
+                    
+                    // Attach ALL selected pets to this ONE appointment via pivot table
+                    $appointment->patients()->sync($selectedPets->pluck('id')->toArray());
 
-                $appointments->push($appointment);
-                $appointmentCount++;
+                    $appointments->push($appointment);
+                    $appointmentCount++;
+                }
             }
 
             $currentDate->addWeek();
         }
 
+        // Create specific test appointments with 2+ pets for easy testing
+        $this->command->info('Creating test appointments with multiple pets...');
+        $testAppointments = $this->createTestMultiPetAppointments($patients, $appointmentTypes, $users);
+        if ($testAppointments && $testAppointments->isNotEmpty()) {
+            foreach ($testAppointments as $testAppointment) {
+                $appointments->push($testAppointment);
+                $appointmentCount++;
+            }
+        }
+
         $this->command->info("Created {$appointmentCount} historical appointments.");
         return new \Illuminate\Database\Eloquent\Collection($appointments->all());
+    }
+
+    /**
+     * Create test appointments with 2+ pets for testing purposes
+     */
+    private function createTestMultiPetAppointments($patients, $appointmentTypes, $users)
+    {
+        // Find users with at least 2 pets
+        $patientsByUser = $patients->groupBy('user_id');
+        $usersWithMultiplePets = $patientsByUser->filter(function ($userPatients) {
+            return $userPatients->count() >= 2;
+        });
+
+        if ($usersWithMultiplePets->isEmpty()) {
+            $this->command->warn('No user with multiple pets found. Skipping test appointments.');
+            return collect();
+        }
+
+        $testAppointments = collect();
+
+        // Create test appointment #1: 3 pets, Pending status, for tomorrow
+        $user1 = $usersWithMultiplePets->first();
+        $userPets1 = $user1->values();
+        $selectedPets1 = $userPets1->take(3); // Take 3 pets
+        $user1Obj = $users->where('id', $userPets1->first()->user_id)->first();
+
+        if ($user1Obj && $appointmentTypes->isNotEmpty()) {
+            $appointmentType1 = $appointmentTypes->first(); // Use first appointment type
+            $appointmentDate1 = Carbon::tomorrow();
+            $appointmentTime1 = '09:30'; // 9:30 AM
+
+            $appointment1 = Appointment::create([
+                'appointment_type_id' => $appointmentType1->id,
+                'patient_id' => $selectedPets1->first()->id,
+                'user_id' => $user1Obj->id,
+                'appointment_date' => $appointmentDate1,
+                'appointment_time' => $appointmentTime1,
+                'symptoms' => 'Test appointment #1: Multiple pets (3 pets) - Pending status for testing.',
+                'is_approved' => false, // Pending status
+                'is_completed' => false,
+                'remarks' => 'TEST APPOINTMENT: Created by seeder to test multi-pet functionality. This appointment has 3 pets.',
+                'created_at' => Carbon::now(),
+                'updated_at' => Carbon::now(),
+            ]);
+
+            $appointment1->appointment_types()->sync([$appointmentType1->id]);
+            $appointment1->patients()->sync($selectedPets1->pluck('id')->toArray());
+            $testAppointments->push($appointment1);
+            $this->command->info("✓ Created test appointment #1 (ID: {$appointment1->id}) - 3 pets, Pending, Tomorrow 9:30 AM - User: {$user1Obj->name}");
+        }
+
+        // Create test appointment #2: 2 pets, Approved status, for day after tomorrow
+        if ($usersWithMultiplePets->count() > 1) {
+            $user2 = $usersWithMultiplePets->skip(1)->first();
+            $userPets2 = $user2->values();
+            $selectedPets2 = $userPets2->take(2); // Take 2 pets
+            $user2Obj = $users->where('id', $userPets2->first()->user_id)->first();
+
+            if ($user2Obj && $appointmentTypes->isNotEmpty()) {
+                $appointmentType2 = $appointmentTypes->skip(1)->first() ?? $appointmentTypes->first();
+                $appointmentDate2 = Carbon::tomorrow()->addDay();
+                $appointmentTime2 = '10:00'; // 10:00 AM
+
+                $appointment2 = Appointment::create([
+                    'appointment_type_id' => $appointmentType2->id,
+                    'patient_id' => $selectedPets2->first()->id,
+                    'user_id' => $user2Obj->id,
+                    'appointment_date' => $appointmentDate2,
+                    'appointment_time' => $appointmentTime2,
+                    'symptoms' => 'Test appointment #2: Multiple pets (2 pets) - Approved status for testing.',
+                    'is_approved' => true, // Approved status
+                    'is_completed' => false,
+                    'remarks' => 'TEST APPOINTMENT: Created by seeder to test multi-pet functionality. This appointment has 2 pets and is approved.',
+                    'created_at' => Carbon::now(),
+                    'updated_at' => Carbon::now(),
+                ]);
+
+                $appointment2->appointment_types()->sync([$appointmentType2->id]);
+                $appointment2->patients()->sync($selectedPets2->pluck('id')->toArray());
+                $testAppointments->push($appointment2);
+                $this->command->info("✓ Created test appointment #2 (ID: {$appointment2->id}) - 2 pets, Approved, Day after tomorrow 10:00 AM - User: {$user2Obj->name}");
+            }
+        }
+
+        return $testAppointments;
     }
 
     /**

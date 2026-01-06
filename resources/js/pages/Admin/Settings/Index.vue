@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import AppLayout from '@/layouts/AppLayout.vue';
 import { Head, router, useForm } from '@inertiajs/vue3';
-import { watch, ref } from 'vue';
+import { watch, ref, computed } from 'vue';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
@@ -12,6 +12,8 @@ import { dashboard } from '@/routes';
 import axios from 'axios';
 import AlgorithmMetricsChart from '@/components/AlgorithmMetricsChart.vue';
 import ConfusionMatrixChart from '@/components/ConfusionMatrixChart.vue';
+import ClassificationReport from '@/components/ClassificationReport.vue';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { useToast } from '@/composables/useToast';
 
 interface Setting {
@@ -54,6 +56,36 @@ interface Props {
 const props = defineProps<Props>();
 
 const { success: showSuccess, error: showError } = useToast();
+
+// Tab state for algorithm metrics
+const activeAlgorithmTab = ref('neural_network');
+
+// Available algorithms
+const availableAlgorithms = computed(() => {
+    const algorithms = [];
+    if (props.algorithmMetrics?.neural_network) {
+        algorithms.push({ value: 'neural_network', label: 'Neural Network' });
+    }
+    if (props.algorithmMetrics?.logistic_regression) {
+        algorithms.push({ value: 'logistic_regression', label: 'Logistic Regression' });
+    }
+    if (props.algorithmMetrics?.knn) {
+        algorithms.push({ value: 'knn', label: 'K-Nearest Neighbors (KNN)' });
+    }
+    
+    // Set default tab to first available algorithm
+    if (algorithms.length > 0 && !algorithms.find(a => a.value === activeAlgorithmTab.value)) {
+        activeAlgorithmTab.value = algorithms[0].value;
+    }
+    
+    return algorithms;
+});
+
+// Get current algorithm metrics
+const currentMetrics = computed(() => {
+    if (!props.algorithmMetrics) return null;
+    return props.algorithmMetrics[activeAlgorithmTab.value as keyof typeof props.algorithmMetrics] || null;
+});
 
 const breadcrumbs = [
     { title: 'Dashboard', href: dashboard().url },
@@ -497,76 +529,111 @@ const saveVeterinarianInfo = () => {
                 </Card>
 
                 <!-- Algorithm Performance Metrics -->
-                <Card v-if="props.algorithmMetrics">
+                <Card v-if="props.algorithmMetrics && availableAlgorithms.length > 0">
                     <CardHeader>
                         <CardTitle class="flex items-center gap-2">
                             <BarChart3 class="h-5 w-5" />
                             Algorithm Performance Metrics
                         </CardTitle>
                         <CardDescription>
-                            View detailed performance metrics for each machine learning algorithm including confusion matrix, precision, recall, F1-score, and accuracy
+                            View detailed performance metrics for each machine learning algorithm including classification report, confusion matrix, precision, recall, F1-score, and accuracy
                         </CardDescription>
                     </CardHeader>
-                    <CardContent class="space-y-8">
-                        <!-- Neural Network Metrics -->
-                        <div v-if="props.algorithmMetrics.neural_network" class="space-y-4">
-                            <div class="border rounded-lg p-4">
-                                <h3 class="text-lg font-semibold mb-4">Neural Network</h3>
-                                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                                    <div>
-                                        <AlgorithmMetricsChart :metrics="props.algorithmMetrics.neural_network" />
-                                    </div>
-                                    <div>
-                                        <ConfusionMatrixChart 
-                                            :confusion-matrix="props.algorithmMetrics.neural_network.confusion_matrix"
-                                            algorithm="neural_network"
-                                        />
+                    <CardContent>
+                        <Tabs v-model="activeAlgorithmTab" class="w-full">
+                            <TabsList class="grid w-full" :style="{ gridTemplateColumns: `repeat(${availableAlgorithms.length}, 1fr)` }">
+                                <TabsTrigger
+                                    v-for="algorithm in availableAlgorithms"
+                                    :key="algorithm.value"
+                                    :value="algorithm.value"
+                                >
+                                    {{ algorithm.label }}
+                                </TabsTrigger>
+                            </TabsList>
+
+                            <!-- Neural Network Tab -->
+                            <TabsContent v-if="props.algorithmMetrics.neural_network" value="neural_network" class="mt-6">
+                                <div class="space-y-6">
+                                    <ClassificationReport 
+                                        :confusion-matrix="props.algorithmMetrics.neural_network.confusion_matrix"
+                                        algorithm="neural_network"
+                                        :accuracy="props.algorithmMetrics.neural_network.accuracy"
+                                        :total-samples="props.algorithmMetrics.neural_network.total_samples"
+                                        class0-label="Not Eligible"
+                                        class1-label="Eligible"
+                                    />
+                                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                                        <div>
+                                            <AlgorithmMetricsChart :metrics="props.algorithmMetrics.neural_network" />
+                                        </div>
+                                        <div>
+                                            <ConfusionMatrixChart 
+                                                :confusion-matrix="props.algorithmMetrics.neural_network.confusion_matrix"
+                                                algorithm="neural_network"
+                                            />
+                                        </div>
                                     </div>
                                 </div>
-                            </div>
-                        </div>
+                            </TabsContent>
 
-                        <!-- Logistic Regression Metrics -->
-                        <div v-if="props.algorithmMetrics.logistic_regression" class="space-y-4">
-                            <div class="border rounded-lg p-4">
-                                <h3 class="text-lg font-semibold mb-4">Logistic Regression</h3>
-                                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                                    <div>
-                                        <AlgorithmMetricsChart :metrics="props.algorithmMetrics.logistic_regression" />
-                                    </div>
-                                    <div>
-                                        <ConfusionMatrixChart 
-                                            :confusion-matrix="props.algorithmMetrics.logistic_regression.confusion_matrix"
-                                            algorithm="logistic_regression"
-                                        />
+                            <!-- Logistic Regression Tab -->
+                            <TabsContent v-if="props.algorithmMetrics.logistic_regression" value="logistic_regression" class="mt-6">
+                                <div class="space-y-6">
+                                    <ClassificationReport 
+                                        :confusion-matrix="props.algorithmMetrics.logistic_regression.confusion_matrix"
+                                        algorithm="logistic_regression"
+                                        :accuracy="props.algorithmMetrics.logistic_regression.accuracy"
+                                        :total-samples="props.algorithmMetrics.logistic_regression.total_samples"
+                                        class0-label="Not Eligible"
+                                        class1-label="Eligible"
+                                    />
+                                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                                        <div>
+                                            <AlgorithmMetricsChart :metrics="props.algorithmMetrics.logistic_regression" />
+                                        </div>
+                                        <div>
+                                            <ConfusionMatrixChart 
+                                                :confusion-matrix="props.algorithmMetrics.logistic_regression.confusion_matrix"
+                                                algorithm="logistic_regression"
+                                            />
+                                        </div>
                                     </div>
                                 </div>
-                            </div>
-                        </div>
+                            </TabsContent>
 
-                        <!-- KNN Metrics -->
-                        <div v-if="props.algorithmMetrics.knn" class="space-y-4">
-                            <div class="border rounded-lg p-4">
-                                <h3 class="text-lg font-semibold mb-4">K-Nearest Neighbors (KNN)</h3>
-                                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                                    <div>
-                                        <AlgorithmMetricsChart :metrics="props.algorithmMetrics.knn" />
-                                    </div>
-                                    <div>
-                                        <ConfusionMatrixChart 
-                                            :confusion-matrix="props.algorithmMetrics.knn.confusion_matrix"
-                                            algorithm="knn"
-                                        />
+                            <!-- KNN Tab -->
+                            <TabsContent v-if="props.algorithmMetrics.knn" value="knn" class="mt-6">
+                                <div class="space-y-6">
+                                    <ClassificationReport 
+                                        :confusion-matrix="props.algorithmMetrics.knn.confusion_matrix"
+                                        algorithm="knn"
+                                        :accuracy="props.algorithmMetrics.knn.accuracy"
+                                        :total-samples="props.algorithmMetrics.knn.total_samples"
+                                        class0-label="Not Eligible"
+                                        class1-label="Eligible"
+                                    />
+                                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                                        <div>
+                                            <AlgorithmMetricsChart :metrics="props.algorithmMetrics.knn" />
+                                        </div>
+                                        <div>
+                                            <ConfusionMatrixChart 
+                                                :confusion-matrix="props.algorithmMetrics.knn.confusion_matrix"
+                                                algorithm="knn"
+                                            />
+                                        </div>
                                     </div>
                                 </div>
-                            </div>
-                        </div>
+                            </TabsContent>
 
-                        <!-- No Metrics Available -->
-                        <div v-if="!props.algorithmMetrics || (!props.algorithmMetrics.neural_network && !props.algorithmMetrics.logistic_regression && !props.algorithmMetrics.knn)" 
-                             class="text-center py-8 text-gray-500 dark:text-gray-400">
-                            <p>No algorithm metrics available. Metrics are calculated based on training data.</p>
-                        </div>
+                        </Tabs>
+                    </CardContent>
+                </Card>
+
+                <!-- No Metrics Available -->
+                <Card v-else-if="!props.algorithmMetrics || availableAlgorithms.length === 0">
+                    <CardContent class="text-center py-8 text-gray-500 dark:text-gray-400">
+                        <p>No algorithm metrics available. Metrics are calculated based on training data.</p>
                     </CardContent>
                 </Card>
             </div>

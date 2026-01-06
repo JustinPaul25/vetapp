@@ -36,7 +36,6 @@ interface AppointmentItem {
 
 interface Appointment {
     id: number | string;
-    is_grouped: boolean;
     appointment_type: string;
     appointment_date: string | null;
     appointment_time: string | null;
@@ -44,7 +43,7 @@ interface Appointment {
     pet_type: string;
     pet_name: string;
     pet_count?: number;
-    appointments?: AppointmentItem[];
+    appointments?: AppointmentItem[]; // Pets in this appointment
 }
 
 interface Pet {
@@ -963,21 +962,22 @@ onUnmounted(() => {
                             v-for="appointment in (appointments || [])"
                             :key="appointment.id"
                             class="border rounded-lg overflow-hidden"
-                            :class="appointment.is_grouped ? 'bg-muted/30' : ''"
                         >
-                            <!-- Single Appointment or Group Header -->
+                            <!-- Appointment Row - ONE appointment with potentially multiple pets -->
                             <div
                                 class="grid grid-cols-7 gap-4 p-4 items-center hover:bg-muted/50 transition-colors"
-                                :class="appointment.is_grouped ? 'cursor-pointer' : ''"
-                                @click="appointment.is_grouped ? toggleGroupExpansion(appointment.id) : null"
+                                :class="appointment.pet_count > 1 ? 'cursor-pointer' : ''"
+                                @click="appointment.pet_count > 1 ? toggleGroupExpansion(appointment.id) : null"
                             >
                                 <div class="text-sm font-medium">
-                                    <span v-if="appointment.is_grouped" class="flex items-center gap-2">
-                                        <span class="px-2 py-0.5 rounded-full text-xs font-semibold bg-primary/10 text-primary">
-                                            {{ appointment.pet_count }} Pet{{ appointment.pet_count !== 1 ? 's' : '' }}
+                                    <template v-if="appointment.pet_count > 1">
+                                        <span class="inline-flex items-center gap-2">
+                                            <span class="px-2 py-0.5 rounded-full text-xs font-semibold bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200 whitespace-nowrap">
+                                                {{ appointment.pet_count }} Pet{{ appointment.pet_count !== 1 ? 's' : '' }}
+                                            </span>
+                                            <span>{{ appointment.appointment_type }}</span>
                                         </span>
-                                        {{ appointment.appointment_type }}
-                                    </span>
+                                    </template>
                                     <span v-else>{{ appointment.appointment_type }}</span>
                                 </div>
                                 <div class="text-sm">{{ appointment.pet_type }}</div>
@@ -993,7 +993,7 @@ onUnmounted(() => {
                                 </div>
                                 <div class="flex justify-end gap-2">
                                     <Link
-                                        v-if="!appointment.is_grouped"
+                                        v-if="appointment.pet_count === 1"
                                         :href="`/appointments/${appointment.id}`"
                                         @click.stop
                                     >
@@ -1009,6 +1009,7 @@ onUnmounted(() => {
                                         variant="outline"
                                         size="sm"
                                         @click.stop="toggleGroupExpansion(appointment.id)"
+                                        class="p-0 h-8 w-8"
                                     >
                                         <ChevronRight
                                             :class="['h-4 w-4 transition-transform', isGroupExpanded(appointment.id) ? 'rotate-90' : '']"
@@ -1017,37 +1018,42 @@ onUnmounted(() => {
                                 </div>
                             </div>
 
-                            <!-- Expanded Group Content -->
+                            <!-- Expanded Pets List - Show all pets in this ONE appointment -->
                             <div
-                                v-if="appointment.is_grouped && isGroupExpanded(appointment.id)"
+                                v-if="appointment.pet_count > 1 && isGroupExpanded(appointment.id)"
                                 class="border-t bg-background"
                             >
                                 <div class="p-4 space-y-3">
+                                    <div class="text-sm font-semibold mb-2">Pets in this appointment:</div>
                                     <div
-                                        v-for="(item, index) in appointment.appointments"
-                                        :key="item.id"
+                                        v-for="(pet, index) in appointment.appointments"
+                                        :key="pet.id"
                                         class="flex items-center justify-between p-3 bg-muted/30 rounded-lg"
                                     >
                                         <div class="flex-1 grid grid-cols-3 gap-4">
                                             <div>
                                                 <span class="text-xs text-muted-foreground">Pet Name</span>
-                                                <p class="text-sm font-medium">{{ item.pet_name }}</p>
+                                                <p class="text-sm font-medium">{{ pet.pet_name }}</p>
                                             </div>
                                             <div>
                                                 <span class="text-xs text-muted-foreground">Pet Type</span>
-                                                <p class="text-sm">{{ item.pet_type }}</p>
+                                                <p class="text-sm">{{ pet.pet_type }}</p>
                                             </div>
                                             <div>
                                                 <span class="text-xs text-muted-foreground">Appointment Type</span>
-                                                <p class="text-sm">{{ item.appointment_type }}</p>
+                                                <p class="text-sm">{{ pet.appointment_type }}</p>
                                             </div>
                                         </div>
-                                        <Link :href="`/appointments/${item.id}`">
+                                    </div>
+                                    <div class="pt-2 border-t">
+                                        <Link :href="`/appointments/${appointment.id}`">
                                             <Button
                                                 variant="outline"
                                                 size="sm"
+                                                class="w-full"
                                             >
-                                                <Eye class="h-4 w-4" />
+                                                <Eye class="h-4 w-4 mr-2" />
+                                                View Appointment Details
                                             </Button>
                                         </Link>
                                     </div>

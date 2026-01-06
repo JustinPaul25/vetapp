@@ -68,7 +68,7 @@ interface Props {
 
 const props = defineProps<Props>();
 
-const { success: showSuccess } = useToast();
+const { success: showSuccess, error: showError } = useToast();
 
 const breadcrumbs = [
     { title: 'Dashboard', href: dashboard().url },
@@ -399,7 +399,20 @@ const submit = () => {
             showSuccess('Prescription created successfully!', 'The prescription has been saved and the pet owner will be notified.');
         },
         onError: (errors) => {
-            // Error handling - errors will be displayed via form validation
+            // Show error toast for general errors
+            let errorMessage = 'Failed to create prescription. Please check the form for errors.';
+            
+            // Check for specific error messages
+            if (errors.message) {
+                errorMessage = errors.message;
+            } else if (typeof errors === 'string') {
+                errorMessage = errors;
+            } else if (errors && Object.keys(errors).length > 0) {
+                // If there are validation errors, show a general message
+                errorMessage = 'Please fix the errors in the form before submitting.';
+            }
+            
+            showError('Error creating prescription', errorMessage);
             console.error('Error creating prescription:', errors);
         },
     });

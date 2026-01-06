@@ -65,6 +65,7 @@ interface Appointment {
     summary: string | null;
     created_at: string;
     updated_at: string;
+    pet_count?: number;
 }
 
 interface Props {
@@ -322,6 +323,12 @@ const cancelAppointment = () => {
                                 <CardTitle class="flex items-center gap-2">
                                     <Calendar class="h-5 w-5" />
                                     Appointment Details
+                                    <span 
+                                        v-if="appointment.pet_count && appointment.pet_count > 1"
+                                        class="px-2 py-0.5 rounded-full text-xs font-semibold bg-primary/10 text-primary"
+                                    >
+                                        {{ appointment.pet_count }} Pet{{ appointment.pet_count !== 1 ? 's' : '' }}
+                                    </span>
                                 </CardTitle>
                                 <CardDescription>
                                     View detailed information about your appointment
@@ -532,49 +539,21 @@ const cancelAppointment = () => {
 
                         <!-- Patient Details -->
                         <div v-if="patients && patients.length > 0">
-                            <h3 class="text-lg font-semibold mb-4">Patient Information</h3>
+                            <h3 class="text-lg font-semibold mb-4">Pets in this appointment:</h3>
                             <div class="grid grid-cols-1 gap-4">
                                 <!-- Multiple pets displayed in separate cards -->
                                 <Card
                                     v-for="(pet, index) in patients"
                                     :key="pet.id"
-                                    class="border-2"
+                                    class="border"
                                 >
-                                    <CardHeader class="pb-3">
-                                        <CardTitle class="text-base flex items-center gap-2">
-                                            <span class="text-muted-foreground">Pet {{ index + 1 }}</span>
-                                            <span class="text-foreground">{{ pet.pet_name || 'Unnamed Pet' }}</span>
-                                        </CardTitle>
-                                    </CardHeader>
-                                    <CardContent>
-                                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                            <div class="space-y-2">
-                                                <Label class="text-sm font-medium text-muted-foreground">Pet Name</Label>
-                                                <div class="text-lg font-semibold">{{ pet.pet_name || '—' }}</div>
-                                            </div>
-                                            <div class="space-y-2">
-                                                <Label class="text-sm font-medium text-muted-foreground">Pet Type</Label>
-                                                <div class="text-lg font-semibold">{{ pet.pet_type }}</div>
-                                            </div>
-                                            <div class="space-y-2">
-                                                <Label class="text-sm font-medium text-muted-foreground">Breed</Label>
-                                                <div class="text-lg font-semibold">{{ pet.pet_breed || '—' }}</div>
-                                            </div>
-                                            <div class="space-y-2">
-                                                <Label class="text-sm font-medium text-muted-foreground">Gender</Label>
-                                                <div class="text-lg font-semibold">{{ pet.pet_gender || '—' }}</div>
-                                            </div>
-                                            <div class="space-y-2">
-                                                <Label class="text-sm font-medium text-muted-foreground">Birth Date</Label>
-                                                <div class="text-lg font-semibold">{{ formatDate(pet.pet_birth_date) }}</div>
-                                            </div>
-                                            <div class="space-y-2">
-                                                <Label class="text-sm font-medium text-muted-foreground">Age</Label>
-                                                <div class="text-lg font-semibold">{{ calculateAge(pet.pet_birth_date) }}</div>
-                                            </div>
-                                            <div class="space-y-2">
-                                                <Label class="text-sm font-medium text-muted-foreground">Allergies</Label>
-                                                <div class="text-lg font-semibold">{{ pet.pet_allergies || '—' }}</div>
+                                    <CardContent class="p-4">
+                                        <div class="flex items-center justify-between">
+                                            <div>
+                                                <div class="text-base font-semibold">{{ pet.pet_name || 'Unnamed Pet' }}</div>
+                                                <div class="text-sm text-muted-foreground mt-1">
+                                                    {{ pet.pet_type }} · {{ pet.pet_breed || '—' }}
+                                                </div>
                                             </div>
                                         </div>
                                     </CardContent>

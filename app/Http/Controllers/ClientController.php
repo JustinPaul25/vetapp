@@ -44,30 +44,34 @@ class ClientController extends Controller
                 $keyword = trim((string) ($request->input('search.value') ?? ''));
             }
 
-            $appointments = Appointment::select(
-                'appointments.*',
-                'appointment_types.name as appointment_type',
-                'patients.pet_name',
-                'pt.name as pet_type',
-                DB::raw("IF(appointments.is_canceled = 1, 'Canceled', IF(appointments.is_approved = 0, 'Pending', IF(appointments.is_completed = 1, 'Completed', 'Approved'))) as status")
-            )
-                ->join('appointment_types', 'appointments.appointment_type_id', 'appointment_types.id')
-                ->leftJoin('patients', 'patients.id', 'appointments.patient_id')
-                ->leftJoin('pet_types as pt', 'pt.id', 'patients.pet_type_id')
-                ->leftJoin('prescriptions', 'prescriptions.appointment_id', 'appointments.id')
-                ->leftJoin('prescription_diagnoses', 'prescription_diagnoses.prescription_id', 'prescriptions.id')
-                ->leftJoin('diseases', 'diseases.id', 'prescription_diagnoses.disease_id')
-                ->where(function ($query) {
-                    $query->where('patients.user_id', auth()->id())
-                        ->orWhere('appointments.user_id', auth()->id());
-                });
+            // Primary check: appointments belong to the authenticated user
+            // This is the most reliable since we set user_id when creating appointments
+            $appointments = Appointment::where('appointments.user_id', auth()->id());
 
             if (!empty($keyword)) {
                 $appointments->where(function ($q) use ($keyword) {
-                    $q->where('pt.name', 'LIKE', "%{$keyword}%")
-                        ->orWhere(DB::raw("CONCAT(COALESCE(patients.owner_first_name, ''), ' ', COALESCE(patients.owner_last_name, ''))"), 'LIKE', "%{$keyword}%")
-                        ->orWhere('diseases.name', 'LIKE', "%{$keyword}%")
-                        ->orWhere('patients.pet_name', 'LIKE', "%{$keyword}%");
+                    // Search in patients via pivot table
+                    $q->whereHas('patients.petType', function ($subQ) use ($keyword) {
+                        $subQ->where('pet_types.name', 'LIKE', "%{$keyword}%");
+                    })
+                    ->orWhereHas('patients', function ($subQ) use ($keyword) {
+                        $subQ->where('patients.pet_name', 'LIKE', "%{$keyword}%");
+                    })
+                    // Fallback to legacy patient relationship
+                    ->orWhereHas('patient.petType', function ($subQ) use ($keyword) {
+                        $subQ->where('pet_types.name', 'LIKE', "%{$keyword}%");
+                    })
+                    ->orWhereHas('patient', function ($subQ) use ($keyword) {
+                        $subQ->where('patients.pet_name', 'LIKE', "%{$keyword}%");
+                    })
+                    // Search in appointment types
+                    ->orWhereHas('appointment_type', function ($subQ) use ($keyword) {
+                        $subQ->where('appointment_types.name', 'LIKE', "%{$keyword}%");
+                    })
+                    // Search in prescriptions and diseases
+                    ->orWhereHas('prescription.diagnoses.disease', function ($subQ) use ($keyword) {
+                        $subQ->where('diseases.name', 'LIKE', "%{$keyword}%");
+                    });
                 });
             }
 
@@ -98,71 +102,77 @@ class ClientController extends Controller
                 }
             }
 
-            $appointments = $appointments->orderBy('appointments.appointment_date', 'desc')
+            // Order appointments and load relationships
+            $appointments = $appointments
+                ->orderBy('appointments.appointment_date', 'desc')
                 ->orderBy('appointments.appointment_time', 'desc')
+                ->orderBy('appointments.created_at', 'desc')
+                ->with('patients.petType', 'appointment_type')
                 ->get();
 
-            // Group appointments by date, time, and user_id
-            $groupedAppointments = [];
-            foreach ($appointments as $appointment) {
-                $groupKey = sprintf(
-                    '%s_%s_%s',
-                    $appointment->appointment_date ? $appointment->appointment_date->format('Y-m-d') : 'no-date',
-                    $appointment->appointment_time ?? 'no-time',
-                    $appointment->user_id ?? 'no-user'
-                );
-
-                if (!isset($groupedAppointments[$groupKey])) {
-                    $groupedAppointments[$groupKey] = [
-                        'id' => $groupKey, // Use group key as ID for grouped appointments
-                        'is_grouped' => false,
-                        'appointment_date' => $appointment->appointment_date ? $appointment->appointment_date->format('Y-m-d') : null,
-                        'appointment_time' => $appointment->appointment_time,
-                        'status' => $appointment->status,
-                        'appointments' => [],
-                    ];
-                }
-
-                $groupedAppointments[$groupKey]['appointments'][] = [
-                    'id' => $appointment->id,
-                    'appointment_type' => $appointment->appointment_type,
-                    'pet_type' => $appointment->pet_type,
-                    'pet_name' => $appointment->pet_name,
-                ];
-            }
-
-            // Convert grouped appointments to final format
+            // Build result array - ONE appointment can have multiple pets
             $result = [];
-            foreach ($groupedAppointments as $groupKey => $group) {
-                if (count($group['appointments']) > 1) {
-                    // Multiple pets - return as grouped
-                    $result[] = [
-                        'id' => $groupKey,
-                        'is_grouped' => true,
-                        'appointment_date' => $group['appointment_date'],
-                        'appointment_time' => $group['appointment_time'],
-                        'status' => $group['status'],
-                        'pet_count' => count($group['appointments']),
-                        'appointments' => $group['appointments'],
-                        // For display purposes, show first pet and first appointment type
-                        'pet_name' => $group['appointments'][0]['pet_name'] . ' (+' . (count($group['appointments']) - 1) . ' more)',
-                        'pet_type' => $group['appointments'][0]['pet_type'],
-                        'appointment_type' => $group['appointments'][0]['appointment_type'],
-                    ];
-                } else {
-                    // Single pet - return as regular appointment
-                    $appointment = $group['appointments'][0];
-                    $result[] = [
-                        'id' => $appointment['id'],
-                        'is_grouped' => false,
-                        'appointment_type' => $appointment['appointment_type'],
-                        'pet_type' => $appointment['pet_type'],
-                        'pet_name' => $appointment['pet_name'],
-                        'appointment_date' => $group['appointment_date'],
-                        'appointment_time' => $group['appointment_time'],
-                        'status' => $group['status'],
-                    ];
+            foreach ($appointments as $appointment) {
+                // Get all patients for this appointment
+                $patients = $appointment->patients;
+                
+                // If no patients in pivot table, fallback to single patient
+                if ($patients->isEmpty() && $appointment->patient) {
+                    $patients = collect([$appointment->patient]);
+                    // Load petType for the single patient if not loaded
+                    if ($patients->first() && !$patients->first()->relationLoaded('petType')) {
+                        $patients->first()->load('petType');
+                    }
                 }
+
+                // Calculate status
+                $status = 'Pending';
+                if ($appointment->is_canceled) {
+                    $status = 'Canceled';
+                } elseif ($appointment->is_approved) {
+                    $status = $appointment->is_completed ? 'Completed' : 'Approved';
+                }
+
+                // Get appointment type name from relationship
+                $appointmentTypeName = 'N/A';
+                if ($appointment->relationLoaded('appointment_type') && $appointment->appointment_type) {
+                    $appointmentTypeName = $appointment->appointment_type->name;
+                } elseif ($appointment->appointment_type_id) {
+                    // Fallback: load if not already loaded
+                    $appointment->load('appointment_type');
+                    $appointmentTypeName = $appointment->appointment_type ? $appointment->appointment_type->name : 'N/A';
+                }
+
+                $petCount = $patients->count();
+                
+                // Build pet items for this appointment
+                $petItems = $patients->map(function ($pet) use ($appointmentTypeName) {
+                    return [
+                        'id' => $pet->id,
+                        'appointment_type' => $appointmentTypeName,
+                        'pet_type' => $pet->petType ? $pet->petType->name : 'N/A',
+                        'pet_name' => $pet->pet_name,
+                    ];
+                })->toArray();
+
+                // Always return as ONE appointment (not grouped)
+                // If multiple pets, show pet count badge
+                $result[] = [
+                    'id' => $appointment->id,
+                    'appointment_date' => $appointment->appointment_date ? $appointment->appointment_date->format('Y-m-d') : null,
+                    'appointment_time' => $appointment->appointment_time,
+                    'status' => $status,
+                    'pet_count' => $petCount,
+                    'appointments' => $petItems, // All pets in this appointment
+                    'appointment_type' => $appointmentTypeName,
+                    // For display purposes
+                    'pet_name' => $petCount > 1 
+                        ? ($patients->first() ? $patients->first()->pet_name . ' (+' . ($petCount - 1) . ' more)' : 'N/A')
+                        : ($patients->first() ? $patients->first()->pet_name : 'N/A'),
+                    'pet_type' => $patients->first() && $patients->first()->petType 
+                        ? $patients->first()->petType->name 
+                        : 'N/A',
+                ];
             }
 
             return response()->json([
@@ -270,28 +280,63 @@ class ClientController extends Controller
                 return back()->withErrors($e->errors())->withInput();
             }
 
-            // Create appointments for each pet-appointment type pair
+            // Group pet-appointment pairs by appointment_type_id
+            // IMPORTANT: Multiple pets with the SAME appointment_type_id will be grouped into ONE appointment
+            // Example: Pet 1 + Pet 2 + Pet 3 all with "Check-up" = ONE appointment with 3 pets
+            $appointmentsByType = [];
             foreach ($petAppointments as $pair) {
-                $petId = $pair['pet_id'];
-                $appointmentTypeId = $pair['appointment_type_id'];
+                $petId = (int) $pair['pet_id']; // Ensure integer
+                $appointmentTypeId = (int) $pair['appointment_type_id']; // Ensure integer
 
                 // Verify pet belongs to user
                 $pet = $pets->firstWhere('id', $petId);
                 if (!$pet) continue;
 
-                $appointment = Appointment::with('appointment_type')->create([
-                    'patient_id' => $petId,
-                    'appointment_type_id' => $appointmentTypeId,
-                    'appointment_date' => $appointmentDate,
-                    'symptoms' => $symptoms,
-                    'is_approved' => false, // Client appointments start as pending
-                    'is_completed' => false, // Explicitly set to false for pending status
-                    'appointment_time' => $time->format('H:i'), // Store in 24-hour format
-                    'user_id' => Auth::id(),
-                ]);
-
-                $createdAppointments[] = $appointment;
+                // Group by appointment type - pets with same appointment_type_id go into same group
+                if (!isset($appointmentsByType[$appointmentTypeId])) {
+                    $appointmentsByType[$appointmentTypeId] = [];
+                }
+                // Only add if not already in the array (avoid duplicates)
+                if (!in_array($petId, $appointmentsByType[$appointmentTypeId])) {
+                    $appointmentsByType[$appointmentTypeId][] = $petId;
+                }
             }
+
+            // Create ONE appointment per appointment type and attach all pets for that type
+            // If user selects: Pet1+Pet2 for "Check-up" and Pet3 for "Vaccination"
+            // Result: 2 appointments (1 Check-up with Pet1+Pet2, 1 Vaccination with Pet3)
+            // Use database transaction to ensure atomicity
+            \DB::transaction(function () use ($appointmentsByType, $appointmentDate, $symptoms, $time, &$createdAppointments) {
+                foreach ($appointmentsByType as $appointmentTypeId => $petIdsForType) {
+                    // Ensure unique pet IDs and at least one pet
+                    $petIdsForType = array_unique($petIdsForType);
+                    if (empty($petIdsForType)) {
+                        continue; // Skip if no pets for this type
+                    }
+
+                    // Get the first pet as the primary patient_id (for backward compatibility)
+                    $firstPetId = $petIdsForType[0];
+
+                    // Create ONE appointment for this appointment type with ALL pets attached
+                    // This is the key: ONE appointment record, multiple pets via pivot table
+                    $appointment = Appointment::create([
+                        'patient_id' => $firstPetId, // Keep for backward compatibility
+                        'appointment_type_id' => $appointmentTypeId,
+                        'appointment_date' => $appointmentDate,
+                        'symptoms' => $symptoms,
+                        'is_approved' => false, // Client appointments start as pending
+                        'is_completed' => false, // Explicitly set to false for pending status
+                        'appointment_time' => $time->format('H:i'), // Store in 24-hour format
+                        'user_id' => Auth::id(),
+                    ]);
+
+                    // Attach ALL pets to this ONE appointment via pivot table
+                    // This is what makes it ONE appointment with multiple pets
+                    $appointment->patients()->sync($petIdsForType);
+
+                    $createdAppointments[] = $appointment;
+                }
+            });
         } else {
             // Legacy format: separate pet_ids and appointment_type_ids arrays (creates cartesian product)
             $petIds = $request->has('pet_ids') && is_array($request->pet_ids) ? $request->pet_ids : 
@@ -364,15 +409,22 @@ class ClientController extends Controller
                 return back()->withErrors($e->errors())->withInput();
             }
 
-            // Create appointments for each pet - all pets share the same time slot
-            foreach ($petIds as $index => $petId) {
-                $pet = $pets->firstWhere('id', $petId);
-                if (!$pet) continue;
-
-                // Create appointment for each appointment type
+            // Group by appointment type - create ONE appointment per type with all pets attached
+            // Use database transaction to ensure atomicity
+            \DB::transaction(function () use ($appointmentTypeIds, $petIds, $appointmentDate, $symptoms, $time, &$createdAppointments) {
                 foreach ($appointmentTypeIds as $appointmentTypeId) {
-                    $appointment = Appointment::with('appointment_type')->create([
-                        'patient_id' => $petId,
+                    // Ensure unique pet IDs
+                    $uniquePetIds = array_unique($petIds);
+                    if (empty($uniquePetIds)) {
+                        continue;
+                    }
+
+                    // Get the first pet as the primary patient_id (for backward compatibility)
+                    $firstPetId = $uniquePetIds[0];
+
+                    // Create ONE appointment for this appointment type with ALL pets attached
+                    $appointment = Appointment::create([
+                        'patient_id' => $firstPetId, // Keep for backward compatibility
                         'appointment_type_id' => $appointmentTypeId,
                         'appointment_date' => $appointmentDate,
                         'symptoms' => $symptoms,
@@ -382,9 +434,12 @@ class ClientController extends Controller
                         'user_id' => Auth::id(),
                     ]);
 
+                    // Attach ALL pets to this ONE appointment via pivot table
+                    $appointment->patients()->sync($uniquePetIds);
+
                     $createdAppointments[] = $appointment;
                 }
-            }
+            });
         }
 
         // Reload appointments with relationships
@@ -498,10 +553,13 @@ class ClientController extends Controller
      */
     public function showAppointments($id)
     {
-        $appointment = Appointment::with(['appointment_type', 'patient.petType'])
+        $appointment = Appointment::with(['appointment_type', 'patients.petType', 'patient.petType'])
             ->where('id', $id)
             ->where(function ($query) {
-                $query->whereHas('patient', function ($q) {
+                $query->whereHas('patients', function ($q) {
+                    $q->where('user_id', auth()->id());
+                })
+                ->orWhereHas('patient', function ($q) {
                     $q->where('user_id', auth()->id());
                 })
                 ->orWhere('user_id', auth()->id());
@@ -511,6 +569,9 @@ class ClientController extends Controller
         // Ensure relationships are loaded
         if (!$appointment->relationLoaded('appointment_type')) {
             $appointment->load('appointment_type');
+        }
+        if (!$appointment->relationLoaded('patients')) {
+            $appointment->load('patients.petType');
         }
         if (!$appointment->relationLoaded('patient')) {
             $appointment->load('patient.petType');
@@ -522,6 +583,35 @@ class ClientController extends Controller
             $status = 'Canceled';
         } elseif ($appointment->is_approved) {
             $status = $appointment->is_completed ? 'Completed' : 'Approved';
+        }
+
+        // Build patients array from the appointment's patients relationship
+        // Use patients() relationship (many-to-many) if available, fallback to patient() for backward compatibility
+        $patients = [];
+        if ($appointment->patients && $appointment->patients->isNotEmpty()) {
+            // New structure: multiple pets via pivot table
+            $patients = $appointment->patients->map(function ($pet) {
+                return [
+                    'id' => $pet->id,
+                    'pet_name' => $pet->pet_name,
+                    'pet_breed' => $pet->pet_breed,
+                    'pet_gender' => $pet->pet_gender,
+                    'pet_birth_date' => $pet->pet_birth_date ? $pet->pet_birth_date->format('Y-m-d') : null,
+                    'pet_allergies' => $pet->pet_allergies,
+                    'pet_type' => $pet->petType ? $pet->petType->name : 'N/A',
+                ];
+            })->toArray();
+        } elseif ($appointment->patient) {
+            // Fallback: single pet via patient_id (backward compatibility)
+            $patients = [[
+                'id' => $appointment->patient->id,
+                'pet_name' => $appointment->patient->pet_name,
+                'pet_breed' => $appointment->patient->pet_breed,
+                'pet_gender' => $appointment->patient->pet_gender,
+                'pet_birth_date' => $appointment->patient->pet_birth_date ? $appointment->patient->pet_birth_date->format('Y-m-d') : null,
+                'pet_allergies' => $appointment->patient->pet_allergies,
+                'pet_type' => $appointment->patient->petType ? $appointment->patient->petType->name : 'N/A',
+            ]];
         }
 
         // Load prescription if exists
@@ -541,16 +631,10 @@ class ClientController extends Controller
                 'summary' => $appointment->summary,
                 'created_at' => $appointment->created_at->toISOString(),
                 'updated_at' => $appointment->updated_at->toISOString(),
+                'pet_count' => count($patients),
             ],
-            'patient' => $appointment->patient ? [
-                'id' => $appointment->patient->id,
-                'pet_name' => $appointment->patient->pet_name,
-                'pet_breed' => $appointment->patient->pet_breed,
-                'pet_gender' => $appointment->patient->pet_gender,
-                'pet_birth_date' => $appointment->patient->pet_birth_date ? $appointment->patient->pet_birth_date->format('Y-m-d') : null,
-                'pet_allergies' => $appointment->patient->pet_allergies,
-                'pet_type' => $appointment->patient->petType ? $appointment->patient->petType->name : 'N/A',
-            ] : null,
+            'patient' => count($patients) === 1 ? $patients[0] : null, // For backward compatibility
+            'patients' => count($patients) > 1 ? $patients : null, // Multiple patients
             'prescription' => $appointment->prescription ? [
                 'id' => $appointment->prescription->id,
                 'symptoms' => $appointment->prescription->symptoms,

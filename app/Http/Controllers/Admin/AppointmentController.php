@@ -112,57 +112,11 @@ class AppointmentController extends Controller
         $sortDirection = strtolower($sortDirection) === 'asc' ? 'asc' : 'desc';
         $query->orderBy($sortBy, $sortDirection);
 
-        $appointments = $query->paginate(15);
+        // Load patients relationship for each appointment
+        $appointments = $query->with('patients.petType', 'patients.user')->paginate(15);
 
-        // Group appointments that have the same date, time, and owner (for multi-pet bookings)
-        $appointmentGroups = [];
-        
-        foreach ($appointments->getCollection() as $appointment) {
-            // Get owner user_id
-            $patients = $appointment->patients;
-            $firstPatient = $patients->first() ?? $appointment->patient;
-            $ownerUserId = $firstPatient && $firstPatient->user ? $firstPatient->user->id : $appointment->user_id;
-            
-            // Create a group key based on date, time, owner, and status
-            $groupKey = sprintf(
-                '%s_%s_%s_%s',
-                $appointment->appointment_date ? $appointment->appointment_date->format('Y-m-d') : 'no-date',
-                $appointment->appointment_time ?? 'no-time',
-                $ownerUserId ?? 'no-user',
-                $appointment->is_approved ? 'approved' : ($appointment->is_completed ? 'completed' : ($appointment->is_canceled ? 'canceled' : 'pending'))
-            );
-            
-            if (!isset($appointmentGroups[$groupKey])) {
-                $appointmentGroups[$groupKey] = [];
-            }
-            $appointmentGroups[$groupKey][] = $appointment;
-        }
-        
-        // Mark appointments that should be grouped (2+ appointments with same key)
-        $appointmentsToGroup = [];
-        $appointmentIdsToHide = [];
-        foreach ($appointmentGroups as $groupKey => $group) {
-            if (count($group) >= 2) {
-                // Mark all appointments in the group
-                foreach ($group as $appointment) {
-                    $appointmentsToGroup[$appointment->id] = $group;
-                }
-                // Mark all except the first one to hide
-                for ($i = 1; $i < count($group); $i++) {
-                    $appointmentIdsToHide[] = $group[$i]->id;
-                }
-            }
-        }
-
-        // Filter out duplicate appointments that are part of a group (keep only the first one)
-        $appointments->setCollection(
-            $appointments->getCollection()->reject(function ($appointment) use ($appointmentIdsToHide) {
-                return in_array($appointment->id, $appointmentIdsToHide);
-            })
-        );
-
-        // Transform the data for Inertia
-        $appointments->getCollection()->transform(function ($appointment) use ($appointmentsToGroup) {
+        // Transform the data for Inertia - ONE appointment can have multiple pets
+        $appointments->getCollection()->transform(function ($appointment) {
             $status = 'Pending';
             if ($appointment->is_canceled) {
                 $status = 'Canceled';
@@ -172,32 +126,15 @@ class AppointmentController extends Controller
                 $status = 'Approved';
             }
 
-            // Check if this appointment should be grouped with others
-            $shouldGroup = isset($appointmentsToGroup[$appointment->id]);
-            $groupedAppointments = $shouldGroup ? $appointmentsToGroup[$appointment->id] : null;
-            
-            // If grouped, collect all pets from all appointments in the group
-            if ($shouldGroup && $groupedAppointments) {
-                $allPatients = collect();
-                foreach ($groupedAppointments as $groupedAppointment) {
-                    $groupPatients = $groupedAppointment->patients;
-                    if ($groupPatients->isEmpty() && $groupedAppointment->patient) {
-                        $groupPatients = collect([$groupedAppointment->patient]);
-                    }
-                    $allPatients = $allPatients->merge($groupPatients);
-                }
-                $patients = $allPatients->unique('id');
-            } else {
-                // Get all patients for this appointment
-                $patients = $appointment->patients;
-                // Fallback to single patient if many-to-many is empty
-                if ($patients->isEmpty() && $appointment->patient) {
-                    $patients = collect([$appointment->patient]);
-                }
+            // Get all patients for this ONE appointment
+            $patients = $appointment->patients;
+            // Fallback to single patient if many-to-many is empty
+            if ($patients->isEmpty() && $appointment->patient) {
+                $patients = collect([$appointment->patient]);
             }
             
             $petCount = $patients->count();
-            $isMultiPet = $petCount >= 2 || $shouldGroup;
+            $isMultiPet = $petCount >= 2;
             
             $petTypes = $patients->map(function ($patient) {
                 return $patient->petType->name ?? 'N/A';
@@ -211,7 +148,7 @@ class AppointmentController extends Controller
             $ownerEmail = $firstPatient && $firstPatient->user ? $firstPatient->user->email ?? 'N/A' : 'N/A';
             $ownerMobile = $firstPatient && $firstPatient->user ? $firstPatient->user->mobile_number ?? 'N/A' : 'N/A';
             
-            // Get all pets details for multi-pet appointments
+            // Get all pets details for this appointment
             $allPets = $patients->map(function ($patient) {
                 return [
                     'id' => $patient->id,
@@ -227,8 +164,8 @@ class AppointmentController extends Controller
                 'appointment_date' => $appointment->appointment_date ? $appointment->appointment_date->format('Y-m-d') : null,
                 'appointment_time' => $appointment->appointment_time,
                 'status' => $status,
-                'pet_type' => $petTypes ?: ($appointment->patient->petType->name ?? 'N/A'),
-                'pet_breed' => $petBreeds ?: ($appointment->patient->pet_breed ?? 'N/A'),
+                'pet_type' => $petTypes ?: ($appointment->patient && $appointment->patient->petType ? $appointment->patient->petType->name : 'N/A'),
+                'pet_breed' => $petBreeds ?: ($appointment->patient ? $appointment->patient->pet_breed : 'N/A'),
                 'owner_name' => $ownerName,
                 'owner_email' => $ownerEmail,
                 'owner_mobile' => $ownerMobile,
@@ -238,8 +175,6 @@ class AppointmentController extends Controller
                 'pet_count' => $petCount,
                 'is_multi_pet' => $isMultiPet,
                 'all_pets' => $allPets,
-                'is_grouped' => $shouldGroup,
-                'grouped_appointment_ids' => $shouldGroup && $groupedAppointments ? collect($groupedAppointments)->pluck('id')->toArray() : null,
                 'created_at' => $appointment->created_at->toISOString(),
                 'updated_at' => $appointment->updated_at->toISOString(),
             ];

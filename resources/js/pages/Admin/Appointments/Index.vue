@@ -259,82 +259,34 @@ const getStatusBadgeClass = (status: string) => {
                             </thead>
                             <tbody>
                                 <template v-for="appointment in appointments.data" :key="appointment.id">
-                                    <!-- Multi-pet appointment container -->
-                                    <tr
-                                        v-if="appointment.is_multi_pet"
-                                        class="border-b hover:bg-muted/50 bg-blue-50/30 dark:bg-blue-950/20"
-                                    >
-                                        <td class="p-3 text-sm" colspan="6">
-                                            <div class="flex items-center justify-between">
-                                                <div class="flex items-center gap-3 flex-1">
-                                                    <button
-                                                        @click="toggleExpand(appointment.id)"
-                                                        class="flex items-center gap-2 text-left hover:opacity-80 transition-opacity"
-                                                    >
-                                                        <component
-                                                            :is="expandedAppointments.has(appointment.id) ? ChevronUp : ChevronDown"
-                                                            class="h-4 w-4 text-muted-foreground"
-                                                        />
-                                                        <div class="flex items-center gap-2">
-                                                            <Users class="h-4 w-4 text-blue-600 dark:text-blue-400" />
-                                                            <span class="font-medium">{{ appointment.owner_name }}</span>
-                                                            <span
-                                                                class="px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200"
-                                                            >
-                                                                {{ appointment.pet_count }} Pet{{ appointment.pet_count > 1 ? 's' : '' }}
-                                                            </span>
-                                                        </div>
-                                                    </button>
-                                                </div>
-                                                <div class="flex items-center gap-4">
-                                                    <div class="text-sm text-muted-foreground">
-                                                        <div>{{ formatDate(appointment.appointment_date) }}</div>
-                                                        <div class="text-xs">{{ formatTime(appointment.appointment_time) }}</div>
-                                                    </div>
-                                                    <span
-                                                        :class="['px-2 py-1 rounded-full text-xs font-medium', getStatusBadgeClass(appointment.status)]"
-                                                    >
-                                                        {{ appointment.status }}
-                                                    </span>
-                                                    <Link :href="adminAppointmentsRoute(`/${appointment.id}`)">
-                                                        <Button variant="outline" size="sm">
-                                                            <Eye class="h-4 w-4" />
-                                                        </Button>
-                                                    </Link>
-                                                </div>
-                                            </div>
-                                        </td>
-                                    </tr>
-                                    <!-- Expanded pets list for multi-pet appointments -->
-                                    <tr
-                                        v-if="appointment.is_multi_pet && expandedAppointments.has(appointment.id)"
-                                        class="border-b bg-blue-50/10 dark:bg-blue-950/10"
-                                    >
-                                        <td class="p-3" colspan="6">
-                                            <div class="pl-8 space-y-2">
-                                                <div class="text-xs font-semibold text-muted-foreground mb-2">Pets in this appointment:</div>
-                                                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                                                    <div
-                                                        v-for="pet in appointment.all_pets"
-                                                        :key="pet.id"
-                                                        class="p-3 bg-white dark:bg-neutral-800 rounded-lg border border-neutral-200 dark:border-neutral-700"
-                                                    >
-                                                        <div class="font-medium text-sm">{{ pet.pet_name }}</div>
-                                                        <div class="text-xs text-muted-foreground mt-1">
-                                                            {{ pet.pet_type }} • {{ pet.pet_breed }}
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        </td>
-                                    </tr>
-                                    <!-- Single-pet appointment (normal row) -->
-                                    <tr
-                                        v-else-if="!appointment.is_multi_pet"
-                                        class="border-b hover:bg-muted/50"
-                                    >
+                                    <!-- Standard table row for all appointments (consistent styling) -->
+                                    <tr class="border-b hover:bg-muted/50">
                                         <td class="p-3 text-sm">
-                                            {{ appointment.owner_name }}
+                                            <div class="flex items-center gap-2">
+                                                <button
+                                                    v-if="appointment.is_multi_pet"
+                                                    @click="toggleExpand(appointment.id)"
+                                                    class="flex items-center gap-1 hover:opacity-80 transition-opacity"
+                                                >
+                                                    <component
+                                                        :is="expandedAppointments.has(appointment.id) ? ChevronUp : ChevronDown"
+                                                        class="h-4 w-4 text-muted-foreground"
+                                                    />
+                                                </button>
+                                                <div class="flex items-center gap-2">
+                                                    <Users 
+                                                        v-if="appointment.is_multi_pet"
+                                                        class="h-4 w-4 text-muted-foreground"
+                                                    />
+                                                    <span>{{ appointment.owner_name }}</span>
+                                                    <span
+                                                        v-if="appointment.is_multi_pet"
+                                                        class="px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200"
+                                                    >
+                                                        {{ appointment.pet_count }} Pet{{ appointment.pet_count > 1 ? 's' : '' }}
+                                                    </span>
+                                                </div>
+                                            </div>
                                         </td>
                                         <td class="p-3 text-sm">
                                             {{ appointment.owner_email }}
@@ -360,6 +312,29 @@ const getStatusBadgeClass = (status: string) => {
                                                         <Eye class="h-4 w-4" />
                                                     </Button>
                                                 </Link>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                    <!-- Expanded pets list for multi-pet appointments -->
+                                    <tr
+                                        v-if="appointment.is_multi_pet && expandedAppointments.has(appointment.id)"
+                                        class="border-b bg-muted/30"
+                                    >
+                                        <td class="p-3" colspan="6">
+                                            <div class="pl-8 space-y-2">
+                                                <div class="text-xs font-semibold text-muted-foreground mb-2">Pets in this appointment:</div>
+                                                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                                                    <div
+                                                        v-for="pet in appointment.all_pets"
+                                                        :key="pet.id"
+                                                        class="p-3 bg-white dark:bg-neutral-800 rounded-lg border border-neutral-200 dark:border-neutral-700"
+                                                    >
+                                                        <div class="font-medium text-sm">{{ pet.pet_name }}</div>
+                                                        <div class="text-xs text-muted-foreground mt-1">
+                                                            {{ pet.pet_type }} • {{ pet.pet_breed }}
+                                                        </div>
+                                                    </div>
+                                                </div>
                                             </div>
                                         </td>
                                     </tr>
