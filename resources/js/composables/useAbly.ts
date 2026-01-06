@@ -24,12 +24,19 @@ export function useAbly() {
     const user = page.props.auth?.user;
 
     const loadDatabaseNotifications = async () => {
-        if (!user || !(user.roles?.includes('admin') || user.roles?.includes('staff'))) {
+        if (!user) {
             return;
         }
 
         try {
-            const response = await fetch('/notifications/api/list?limit=20', {
+            // Use appropriate endpoint based on user role
+            let endpoint = '/notifications/api/list?limit=20';
+            if (!user.roles?.includes('admin') && !user.roles?.includes('staff')) {
+                // For clients, use the client notification endpoint
+                endpoint = '/notifications/api/list?limit=20';
+            }
+
+            const response = await fetch(endpoint, {
                 headers: {
                     'X-Requested-With': 'XMLHttpRequest',
                     'Accept': 'application/json',
@@ -40,21 +47,47 @@ export function useAbly() {
             if (response.ok) {
                 const data = await response.json();
                 const dbNotifications = data.notifications || [];
+                const now = new Date();
                 
                 // Add database notifications to the list (avoid duplicates)
                 dbNotifications.forEach((dbNotif: any) => {
-                    // Check if notification already exists (by checking if we have a notification with similar timestamp)
-                    const exists = notifications.value.some(
-                        (n) => n.id === dbNotif.id || (n.subject === dbNotif.subject && Math.abs(new Date(n.timestamp).getTime() - new Date(dbNotif.created_at).getTime()) < 5000)
-                    );
+                    const dbNotifTime = new Date(dbNotif.created_at);
+                    
+                    // Skip very recent notifications (last 2 minutes) - they'll come via Ably real-time
+                    const timeDiff = now.getTime() - dbNotifTime.getTime();
+                    if (timeDiff < 120000) { // 2 minutes
+                        return; // Skip this notification, it will come via Ably
+                    }
+                    
+                    // Check if notification already exists by multiple criteria
+                    const dbNotifSubject = dbNotif.subject || dbNotif.message || 'Notification';
+                    const dbNotifMessage = dbNotif.message || dbNotif.subject || 'Notification';
+                    
+                    const exists = notifications.value.some((existing) => {
+                        // Check by database notification ID
+                        if (existing.id === dbNotif.id) {
+                            return true;
+                        }
+                        
+                        // Check by subject and message match within 30 seconds
+                        const subjectMatch = existing.subject === dbNotifSubject;
+                        const messageMatch = existing.message === dbNotifMessage;
+                        const existingTimeDiff = Math.abs(existing.timestamp.getTime() - dbNotifTime.getTime());
+                        
+                        if (subjectMatch && messageMatch && existingTimeDiff < 30000) {
+                            return true;
+                        }
+                        
+                        return false;
+                    });
                     
                     if (!exists) {
                         const notification: Notification = {
                             id: dbNotif.id,
-                            subject: dbNotif.subject,
-                            message: dbNotif.subject, // Use subject as message for database notifications
+                            subject: dbNotifSubject,
+                            message: dbNotifMessage,
                             link: dbNotif.link || undefined,
-                            timestamp: new Date(dbNotif.created_at),
+                            timestamp: dbNotifTime,
                         };
                         notifications.value.unshift(notification);
                     }
@@ -109,6 +142,9 @@ export function useAbly() {
             userChannel.subscribe('appointment.approved', (message) => {
                 addNotification(message.data as any);
             });
+            userChannel.subscribe('appointment.rescheduled', (message) => {
+                addNotification(message.data as any);
+            });
             channels.push(userChannel);
 
             // Subscribe to admin channel if user is admin
@@ -147,6 +183,40 @@ export function useAbly() {
     };
 
     const addNotification = (data: any) => {
+        // Check for duplicates before adding
+        // Check by appointment_id + subject + message similarity (within 30 seconds)
+        const now = new Date();
+        const isDuplicate = notifications.value.some((existing) => {
+            // Same appointment ID and similar subject/message
+            if (data.appointment_id && existing.appointment_id === data.appointment_id) {
+                const subjectMatch = existing.subject === (data.subject || 'New Appointment');
+                const messageMatch = existing.message === (data.message || '');
+                const timeDiff = Math.abs(now.getTime() - existing.timestamp.getTime());
+                
+                // If same appointment, subject, and message, and within 30 seconds, it's a duplicate
+                if (subjectMatch && messageMatch && timeDiff < 30000) {
+                    return true;
+                }
+            }
+            
+            // Also check by subject and message content (for notifications without appointment_id)
+            const subjectMatch = existing.subject === (data.subject || 'New Appointment');
+            const messageMatch = existing.message === (data.message || '');
+            const timeDiff = Math.abs(now.getTime() - existing.timestamp.getTime());
+            
+            // If same subject and message within 10 seconds, it's likely a duplicate
+            if (subjectMatch && messageMatch && timeDiff < 10000) {
+                return true;
+            }
+            
+            return false;
+        });
+
+        if (isDuplicate) {
+            console.log('Duplicate notification detected, skipping:', data.subject);
+            return;
+        }
+
         const notification: Notification = {
             id: `${Date.now()}-${Math.random()}`,
             appointment_id: data.appointment_id,

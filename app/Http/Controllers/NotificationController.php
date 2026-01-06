@@ -94,7 +94,8 @@ class NotificationController extends Controller
             return [
                 'id' => $notification->id,
                 'type' => $notification->type,
-                'subject' => $data['message'] ?? 'Notification',
+                'subject' => $data['subject'] ?? $data['message'] ?? 'Notification',
+                'message' => $data['message'] ?? $data['subject'] ?? 'Notification',
                 'link' => $data['link'] ?? null,
                 'read_at' => $notification->read_at?->toIso8601String(),
                 'created_at' => $notification->created_at->toIso8601String(),

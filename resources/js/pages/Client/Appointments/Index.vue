@@ -21,11 +21,12 @@ import AppointmentCalendar from '@/components/AppointmentCalendar.vue';
 import InputError from '@/components/InputError.vue';
 // Using native textarea
 import { Calendar, Plus, Eye, Search, List, ChevronRight, ChevronLeft, Check, MapPin, AlertCircle, Heart } from 'lucide-vue-next';
-import { computed, ref, watch } from 'vue';
+import { computed, ref, watch, onMounted, onUnmounted } from 'vue';
 import { dashboard } from '@/routes';
 import { edit as editProfile } from '@/routes/profile';
 import axios from 'axios';
 import { useToast } from '@/composables/useToast';
+import { useAbly } from '@/composables/useAbly';
 
 interface AppointmentItem {
     id: number;
@@ -75,6 +76,7 @@ interface Props {
 const props = defineProps<Props>();
 const page = usePage();
 const { success: showSuccess } = useToast();
+const { notifications, connect, disconnect } = useAbly();
 
 const breadcrumbs = [
     { title: 'Dashboard', href: dashboard().url },
@@ -513,8 +515,28 @@ const handleCreatePet = async () => {
     }
 };
 
-// Fetch appointments on mount
-fetchAppointments();
+// Watch for reschedule notifications and refresh appointments list
+watch(notifications, (newNotifications) => {
+    // Check if there's a new reschedule notification
+    const rescheduleNotification = newNotifications.find(
+        (n) => n.subject?.toLowerCase().includes('rescheduled') || n.message?.toLowerCase().includes('rescheduled')
+    );
+    
+    if (rescheduleNotification) {
+        // Refresh appointments list to show updated schedule
+        fetchAppointments();
+    }
+}, { deep: true });
+
+// Connect to Ably on mount and disconnect on unmount
+onMounted(() => {
+    connect();
+    fetchAppointments();
+});
+
+onUnmounted(() => {
+    disconnect();
+});
 </script>
 
 <template>

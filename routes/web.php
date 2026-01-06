@@ -40,6 +40,9 @@ Route::get('dashboard', [\App\Http\Controllers\DashboardController::class, 'inde
 
 // Client routes (authenticated users)
 Route::middleware(['auth', 'verified'])->group(function () {
+    // Client notification API route
+    Route::get('/notifications/api/list', [\App\Http\Controllers\NotificationController::class, 'getNotifications'])->name('client.notifications.api.list');
+    
     // Appointment routes
     Route::prefix('appointments')->name('client.appointments.')->group(function () {
         Route::get('/', [\App\Http\Controllers\ClientController::class, 'appointments'])->name('index');
