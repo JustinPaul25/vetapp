@@ -182,7 +182,9 @@ export class NeuralNetworkSymptomModel {
                             patience++;
                             if (patience >= maxPatience) {
                                 console.log(`Early stopping at epoch ${epoch}`);
-                                this.model?.stopTraining = true;
+                                if (this.model) {
+                                    (this.model as any).stopTraining = true;
+                                }
                             }
                         }
                     }
