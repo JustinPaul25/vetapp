@@ -5,6 +5,7 @@ import { type BreadcrumbItem } from '@/types';
 import { Head, Link } from '@inertiajs/vue3';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { Users, Shield, Dog, Heart, Pill, FileText, LayoutGrid, UserCheck, MapPin, Calendar, Stethoscope, Activity } from 'lucide-vue-next';
 import { usePage } from '@inertiajs/vue3';
 import { computed, ref, onMounted } from 'vue';
@@ -472,6 +473,16 @@ const lineChartOptions = {
         },
     },
 };
+
+// Limit displayed pets to 6 for client dashboard
+const displayedPets = computed(() => {
+    if (!props.clientPets || props.clientPets.length === 0) return [];
+    return props.clientPets.slice(0, 6);
+});
+
+const hasMorePets = computed(() => {
+    return props.clientPets && props.clientPets.length > 6;
+});
 </script>
 
 <template>
@@ -506,8 +517,8 @@ const lineChartOptions = {
                 <!-- Client Records (Pets) -->
                 <div class="mb-6">
                     <h2 class="text-xl font-semibold mb-4">My Pet Records</h2>
-                    <div v-if="props.clientPets && props.clientPets.length > 0" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                        <Card v-for="pet in props.clientPets" :key="pet.id" class="hover:shadow-lg transition-shadow">
+                    <div v-if="displayedPets.length > 0" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        <Card v-for="pet in displayedPets" :key="pet.id" class="hover:shadow-lg transition-shadow">
                             <CardHeader>
                                 <div class="flex items-center justify-between">
                                     <CardTitle class="text-lg">{{ pet.pet_name || 'Unnamed Pet' }}</CardTitle>
@@ -529,7 +540,14 @@ const lineChartOptions = {
                             </CardContent>
                         </Card>
                     </div>
-                    <div v-else class="text-center py-8 text-muted-foreground">
+                    <div v-if="displayedPets.length > 0 && hasMorePets" class="mt-4 flex justify-center">
+                        <Link href="/pets">
+                            <Button variant="outline" class="w-full sm:w-auto">
+                                View All Pets
+                            </Button>
+                        </Link>
+                    </div>
+                    <div v-else-if="displayedPets.length === 0" class="text-center py-8 text-muted-foreground">
                         <Heart class="h-12 w-12 mx-auto mb-4 opacity-50" />
                         <p>No pets registered yet.</p>
                         <Link href="/pets" class="text-blue-600 hover:underline mt-2 inline-block">

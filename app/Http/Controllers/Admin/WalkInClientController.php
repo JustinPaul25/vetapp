@@ -271,8 +271,14 @@ class WalkInClientController extends Controller
                 $appointment->patients()->sync([$existingPet->id]);
                 $appointment->appointment_types()->sync([$validated['appointment_type_id']]);
 
-                return redirect()->route('admin.appointments.prescription.create', $appointment->id)
-                    ->with('success', 'Appointment created successfully for existing client and pet.');
+                // Redirect based on user role: admin can create prescription, staff goes to appointment show
+                if (auth()->user()->hasRole('admin')) {
+                    return redirect()->route('admin.appointments.prescription.create', $appointment->id)
+                        ->with('success', 'Appointment created successfully for existing client and pet.');
+                } else {
+                    return redirect()->route('admin.appointments.show', $appointment->id)
+                        ->with('success', 'Appointment created successfully for existing client and pet.');
+                }
             });
         }
 
@@ -474,8 +480,14 @@ class WalkInClientController extends Controller
                 $messages[] = 'Appointment created successfully.';
             }
 
-            return redirect()->route('admin.appointments.prescription.create', $appointment->id)
-                ->with('success', implode(' ', $messages));
+            // Redirect based on user role: admin can create prescription, staff goes to appointment show
+            if (auth()->user()->hasRole('admin')) {
+                return redirect()->route('admin.appointments.prescription.create', $appointment->id)
+                    ->with('success', implode(' ', $messages));
+            } else {
+                return redirect()->route('admin.appointments.show', $appointment->id)
+                    ->with('success', implode(' ', $messages));
+            }
         });
     }
 

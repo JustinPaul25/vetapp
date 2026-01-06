@@ -136,6 +136,9 @@ const petFormErrors = ref<Record<string, string[]>>({});
 const customPetTypeDisplay = ref<string | null>(null);
 const customBreedDisplay = ref<string | null>(null);
 
+// Pet sorting
+const petSortOrder = ref<'az' | 'za'>('az');
+
 // Step definitions
 const steps = [
     { id: 0, title: 'Pet & Type', description: 'Select pet and appointment type(s)' },
@@ -418,6 +421,19 @@ const breedOptions = computed(() => {
     }));
 });
 
+// Sorted pets based on sort order
+const sortedPets = computed(() => {
+    if (!props.pets || props.pets.length === 0) {
+        return [];
+    }
+    const pets = [...props.pets];
+    if (petSortOrder.value === 'az') {
+        return pets.sort((a, b) => a.pet_name.localeCompare(b.pet_name));
+    } else {
+        return pets.sort((a, b) => b.pet_name.localeCompare(a.pet_name));
+    }
+});
+
 // Handle creating a new pet type
 const handleCreatePetType = (name: string) => {
     petForm.value.custom_pet_type_name = name;
@@ -658,47 +674,75 @@ onUnmounted(() => {
 
                                         <div
                                             v-else
-                                            class="border rounded-lg overflow-hidden"
+                                            class="space-y-3"
                                         >
-                                            <div class="overflow-x-auto">
-                                                <table class="w-full border-collapse">
-                                                    <thead>
-                                                        <tr class="bg-muted/50 border-b">
-                                                            <th class="text-left p-3 font-semibold text-sm">Pet</th>
-                                                            <th
-                                                                v-for="appointmentType in props.appointment_types"
-                                                                :key="appointmentType.id"
-                                                                class="text-center p-3 font-semibold text-sm"
+                                            <!-- Sort Options -->
+                                            <div class="flex items-center gap-2">
+                                                <Label class="text-sm text-muted-foreground">Sort by name:</Label>
+                                                <div class="inline-flex gap-1 rounded-lg bg-muted p-1">
+                                                    <Button
+                                                        type="button"
+                                                        :variant="petSortOrder === 'az' ? 'default' : 'ghost'"
+                                                        size="sm"
+                                                        @click="petSortOrder = 'az'"
+                                                        class="h-7 px-3 text-xs"
+                                                    >
+                                                        A-Z
+                                                    </Button>
+                                                    <Button
+                                                        type="button"
+                                                        :variant="petSortOrder === 'za' ? 'default' : 'ghost'"
+                                                        size="sm"
+                                                        @click="petSortOrder = 'za'"
+                                                        class="h-7 px-3 text-xs"
+                                                    >
+                                                        Z-A
+                                                    </Button>
+                                                </div>
+                                            </div>
+
+                                            <!-- Scrollable Table Container -->
+                                            <div class="border rounded-lg overflow-hidden">
+                                                <div class="overflow-x-auto max-h-[400px] overflow-y-auto">
+                                                    <table class="w-full border-collapse">
+                                                        <thead class="sticky top-0 bg-muted/50 z-10">
+                                                            <tr class="border-b">
+                                                                <th class="text-left p-3 font-semibold text-sm">Pet</th>
+                                                                <th
+                                                                    v-for="appointmentType in props.appointment_types"
+                                                                    :key="appointmentType.id"
+                                                                    class="text-center p-3 font-semibold text-sm"
+                                                                >
+                                                                    {{ appointmentType.name }}
+                                                                </th>
+                                                            </tr>
+                                                        </thead>
+                                                        <tbody>
+                                                            <tr
+                                                                v-for="pet in sortedPets"
+                                                                :key="pet.id"
+                                                                class="border-b hover:bg-muted/30"
                                                             >
-                                                                {{ appointmentType.name }}
-                                                            </th>
-                                                        </tr>
-                                                    </thead>
-                                                    <tbody>
-                                                        <tr
-                                                            v-for="pet in props.pets"
-                                                            :key="pet.id"
-                                                            class="border-b hover:bg-muted/30"
-                                                        >
-                                                            <td class="p-3 font-medium text-sm">
-                                                                {{ pet.pet_name }} ({{ pet.pet_type }})
-                                                            </td>
-                                                            <td
-                                                                v-for="appointmentType in props.appointment_types"
-                                                                :key="appointmentType.id"
-                                                                class="p-3 text-center"
-                                                            >
-                                                                <input
-                                                                    type="checkbox"
-                                                                    :id="`checkbox_${pet.id}_${appointmentType.id}`"
-                                                                    :checked="isCheckboxSelected(pet.id.toString(), appointmentType.id.toString())"
-                                                                    @change="toggleCheckbox(pet.id.toString(), appointmentType.id.toString())"
-                                                                    class="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary cursor-pointer"
-                                                                />
-                                                            </td>
-                                                        </tr>
-                                                    </tbody>
-                                                </table>
+                                                                <td class="p-3 font-medium text-sm">
+                                                                    {{ pet.pet_name }} ({{ pet.pet_type }})
+                                                                </td>
+                                                                <td
+                                                                    v-for="appointmentType in props.appointment_types"
+                                                                    :key="appointmentType.id"
+                                                                    class="p-3 text-center"
+                                                                >
+                                                                    <input
+                                                                        type="checkbox"
+                                                                        :id="`checkbox_${pet.id}_${appointmentType.id}`"
+                                                                        :checked="isCheckboxSelected(pet.id.toString(), appointmentType.id.toString())"
+                                                                        @change="toggleCheckbox(pet.id.toString(), appointmentType.id.toString())"
+                                                                        class="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary cursor-pointer"
+                                                                    />
+                                                                </td>
+                                                            </tr>
+                                                        </tbody>
+                                                    </table>
+                                                </div>
                                             </div>
                                         </div>
 
