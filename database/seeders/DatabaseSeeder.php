@@ -42,5 +42,10 @@ class DatabaseSeeder extends Seeder
 
         // Seed historical data (patients, appointments, prescriptions, etc.)
         $this->call(HistoricalDataSeeder::class);
+
+        // Optional: Import medical records from Excel file
+        // Uncomment the line below to import data from public/dataset/PetMedicalRecord.xlsx
+        // Make sure the Excel file exists and SymptomsSeeder has been run first
+        $this->call(PetMedicalRecordSeeder::class);
     }
 }

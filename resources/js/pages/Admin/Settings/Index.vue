@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import AppLayout from '@/layouts/AppLayout.vue';
 import { Head, router, useForm } from '@inertiajs/vue3';
+import { watch } from 'vue';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
@@ -41,6 +42,31 @@ const form = useForm({
     veterinarian_license_number: props.settings.veterinarian_license_number?.value ?? '',
 });
 
+// Watch for prop changes to sync form state (e.g., after server updates)
+watch(() => props.settings, (newSettings) => {
+    // Only update if the value has actually changed to avoid unnecessary updates
+    if (newSettings.enable_knn_prediction !== undefined && 
+        form.enable_knn_prediction !== newSettings.enable_knn_prediction.value) {
+        form.enable_knn_prediction = newSettings.enable_knn_prediction.value ?? true;
+    }
+    if (newSettings.enable_logistic_regression_prediction !== undefined && 
+        form.enable_logistic_regression_prediction !== newSettings.enable_logistic_regression_prediction.value) {
+        form.enable_logistic_regression_prediction = newSettings.enable_logistic_regression_prediction.value ?? true;
+    }
+    if (newSettings.enable_neural_network_prediction !== undefined && 
+        form.enable_neural_network_prediction !== newSettings.enable_neural_network_prediction.value) {
+        form.enable_neural_network_prediction = newSettings.enable_neural_network_prediction.value ?? true;
+    }
+    if (newSettings.veterinarian_name !== undefined && 
+        form.veterinarian_name !== newSettings.veterinarian_name.value) {
+        form.veterinarian_name = newSettings.veterinarian_name.value ?? '';
+    }
+    if (newSettings.veterinarian_license_number !== undefined && 
+        form.veterinarian_license_number !== newSettings.veterinarian_license_number.value) {
+        form.veterinarian_license_number = newSettings.veterinarian_license_number.value ?? '';
+    }
+}, { deep: true, immediate: false });
+
 const updateSetting = (key: string, value: any) => {
     router.patch(
         '/admin/settings',
@@ -50,8 +76,18 @@ const updateSetting = (key: string, value: any) => {
         },
         {
             preserveScroll: true,
-            preserveState: true,
-            only: [],
+            preserveState: false,
+            only: ['settings'],
+            onError: () => {
+                // Revert local state on error by reloading from props
+                if (key === 'enable_knn_prediction') {
+                    form.enable_knn_prediction = props.settings.enable_knn_prediction?.value ?? false;
+                } else if (key === 'enable_logistic_regression_prediction') {
+                    form.enable_logistic_regression_prediction = props.settings.enable_logistic_regression_prediction?.value ?? false;
+                } else if (key === 'enable_neural_network_prediction') {
+                    form.enable_neural_network_prediction = props.settings.enable_neural_network_prediction?.value ?? false;
+                }
+            },
         }
     );
 };

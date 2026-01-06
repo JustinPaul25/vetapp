@@ -77,29 +77,63 @@ class SettingsController extends Controller
 
             $setting = Setting::where('key', $validated['key'])->first();
             
+            // Determine if this is a boolean setting
+            $isBoolean = is_bool($validated['value']) 
+                || $validated['value'] === 'true' 
+                || $validated['value'] === 'false'
+                || $validated['value'] === true
+                || $validated['value'] === false
+                || in_array($validated['key'], [
+                    'enable_knn_prediction',
+                    'enable_logistic_regression_prediction',
+                    'enable_neural_network_prediction',
+                ]);
+            
             if (!$setting) {
-                // Create the setting if it doesn't exist
+                // Create the setting if it doesn't exist with appropriate type
                 $setting = Setting::create([
                     'key' => $validated['key'],
                     'value' => '',
-                    'type' => 'string',
+                    'type' => $isBoolean ? 'boolean' : 'string',
                     'description' => '',
                 ]);
             }
             
-            // Handle boolean values properly
+            // Handle boolean values properly - convert all possible boolean representations to '1' or '0'
             $value = $validated['value'];
-            if (is_bool($value)) {
-                $value = $value ? '1' : '0';
-            } elseif ($value === 'true' || $value === 'false') {
-                $value = $value === 'true' ? '1' : '0';
+            $truthyValues = [true, 'true', '1', 1, 'on', 'yes'];
+            $falsyValues = [false, 'false', '0', 0, 'off', 'no', '', null];
+            
+            if (in_array($value, $truthyValues, true) || (is_bool($value) && $value === true)) {
+                $value = '1';
+            } elseif (in_array($value, $falsyValues, true) || (is_bool($value) && $value === false)) {
+                $value = '0';
             }
             
-            $setting->update([
-                'value' => $value,
-            ]);
+            // Prepare update data
+            $updateData = ['value' => $value];
+            
+            // Ensure type is boolean if it's a boolean setting
+            if ($isBoolean && $setting->type !== 'boolean') {
+                $updateData['type'] = 'boolean';
+            }
+            
+            $setting->update($updateData);
+            
+            // Reload the setting to ensure we have the latest data
+            $setting->refresh();
 
-            return redirect()->back()->with('success', 'Setting updated successfully');
+            // Get updated settings to return in response
+            $settings = Setting::all()->mapWithKeys(function ($s) {
+                return [$s->key => [
+                    'value' => $this->castValue($s->value, $s->type),
+                    'type' => $s->type,
+                    'description' => $s->description,
+                ]];
+            });
+
+            // Use Inertia::back() to properly refresh props, or redirect with Inertia
+            return back()->with('success', 'Setting updated successfully');
         }
     }
 
