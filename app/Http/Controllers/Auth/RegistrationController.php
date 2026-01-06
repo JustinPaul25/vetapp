@@ -5,7 +5,6 @@ namespace App\Http\Controllers\Auth;
 use App\Http\Controllers\Controller;
 use App\Models\User;
 use App\Rules\PhilippineMobileNumber;
-use Illuminate\Auth\Events\Registered;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
@@ -56,8 +55,7 @@ class RegistrationController extends Controller
         // Log in the user for email verification
         Auth::login($user);
 
-        // Send email verification
-        event(new Registered($user));
+        // Send email verification (only once)
         $user->sendEmailVerificationNotification();
 
         return redirect()->route('register.verify-email')
