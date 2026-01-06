@@ -28,7 +28,10 @@ class DefaultNotification extends Notification
     {
         return (new MailMessage)
                     ->subject($this->subject)
-                    ->line(new \Illuminate\Support\HtmlString($this->message));
+                    ->view('emails.notification', [
+                        'subject' => $this->subject,
+                        'content' => new \Illuminate\Support\HtmlString($this->message),
+                    ]);
     }
     
     public function toArray($notifiable)

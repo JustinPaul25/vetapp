@@ -24,7 +24,10 @@ class ClientEmailNotification extends Notification
     {
         return (new MailMessage)
                     ->subject($this->details['subject'])
-                    ->line(new \Illuminate\Support\HtmlString($this->details['body']));
+                    ->view('emails.notification', [
+                        'subject' => $this->details['subject'],
+                        'content' => new \Illuminate\Support\HtmlString($this->details['body']),
+                    ]);
     }
 }
 

@@ -8,6 +8,14 @@
             size: A4 portrait;
             margin: 15mm;
         }
+        
+        @media print {
+            @page {
+                size: A4 portrait;
+                margin: 15mm;
+            }
+        }
+        
         body {
             font-family: Arial, sans-serif;
             font-size: 16px;

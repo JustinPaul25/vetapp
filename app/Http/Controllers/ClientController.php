@@ -170,9 +170,6 @@ class ClientController extends Controller
             ]);
         }
 
-        $user = auth()->user();
-        $hasLocationPin = !!($user->lat && $user->long);
-
         // Get pet types and breeds for creating new pets
         $pet_types = PetType::all()->map(function ($pet_type) {
             return [
@@ -210,7 +207,6 @@ class ClientController extends Controller
             }),
             'pet_types' => $pet_types,
             'pet_breeds' => $pet_breeds,
-            'has_location_pin' => $hasLocationPin,
             'philippine_holidays' => $holidays,
         ]);
     }
@@ -242,14 +238,6 @@ class ClientController extends Controller
             if (empty($appointmentTimes)) {
                 return back()->withErrors([
                     'appointment_times' => ['At least one appointment time must be selected.'],
-                ])->withInput();
-            }
-
-            // Check if user has location pin set
-            $user = Auth::user();
-            if (!$user->lat || !$user->long) {
-                return back()->withErrors([
-                    'location_pin' => 'Please set your home address location pin in settings before booking an appointment.',
                 ])->withInput();
             }
 
@@ -344,14 +332,6 @@ class ClientController extends Controller
             if (empty($appointmentTimes)) {
                 return back()->withErrors([
                     'appointment_times' => ['At least one appointment time must be selected.'],
-                ])->withInput();
-            }
-
-            // Check if user has location pin set
-            $user = Auth::user();
-            if (!$user->lat || !$user->long) {
-                return back()->withErrors([
-                    'location_pin' => 'Please set your home address location pin in settings before booking an appointment.',
                 ])->withInput();
             }
 

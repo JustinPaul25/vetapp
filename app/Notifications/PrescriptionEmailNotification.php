@@ -82,21 +82,37 @@ class PrescriptionEmailNotification extends Notification
         $pdfContent = $pdf->output();
         $fileName = 'prescription-' . $prescriptionNumber . '.pdf';
 
-        return (new MailMessage)
+        $content = '<h2 style="margin: 0 0 20px 0; color: #1f2937; font-size: 22px; font-weight: 600;">Hello!</h2>' .
+            '<p style="margin: 0 0 20px 0; color: #4b5563; font-size: 16px; line-height: 1.6;">' .
+            'Your prescription for <strong>' . e($petName) . '</strong> has been prepared and is attached to this email.' .
+            '</p>' .
+            '<p style="margin: 0 0 15px 0; color: #1f2937; font-size: 16px; font-weight: 600;">Prescription Details:</p>' .
+            '<ul style="margin: 0 0 20px 0; padding-left: 20px; color: #4b5563; font-size: 16px; line-height: 1.6;">' .
+            '<li>Prescription Number: #' . $prescriptionNumber . '</li>' .
+            '<li>Date: ' . $this->prescription->created_at->format('F d, Y') . '</li>' .
+            '<li>Pet: ' . e($petName) . '</li>' .
+            '</ul>' .
+            '<p style="margin: 0 0 20px 0; color: #4b5563; font-size: 16px; line-height: 1.6;">' .
+            'Please find the complete prescription details in the attached PDF file.' .
+            '</p>' .
+            '<p style="margin: 0 0 20px 0; color: #4b5563; font-size: 16px; line-height: 1.6;">' .
+            'If you have any questions about the prescription, please contact our clinic.' .
+            '</p>' .
+            '<p style="margin: 30px 0 0 0; color: #4b5563; font-size: 16px; line-height: 1.6;">' .
+            'Thank you for choosing our veterinary services!' .
+            '</p>';
+
+        $message = (new MailMessage)
             ->subject('Prescription for ' . $petName . ' - Prescription #' . $prescriptionNumber)
-            ->greeting('Hello!')
-            ->line('Your prescription for **' . $petName . '** has been prepared and is attached to this email.')
-            ->line('**Prescription Details:**')
-            ->line('- Prescription Number: #' . $prescriptionNumber)
-            ->line('- Date: ' . $this->prescription->created_at->format('F d, Y'))
-            ->line('- Pet: ' . $petName)
-            ->line('')
-            ->line('Please find the complete prescription details in the attached PDF file.')
-            ->line('If you have any questions about the prescription, please contact our clinic.')
+            ->view('emails.notification', [
+                'subject' => 'Prescription for ' . $petName . ' - Prescription #' . $prescriptionNumber,
+                'content' => new \Illuminate\Support\HtmlString($content),
+            ])
             ->attachData($pdfContent, $fileName, [
                 'mime' => 'application/pdf',
-            ])
-            ->salutation('Thank you for choosing our veterinary services!');
+            ]);
+
+        return $message;
     }
 }
 
