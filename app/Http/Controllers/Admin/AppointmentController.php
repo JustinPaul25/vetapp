@@ -22,6 +22,7 @@ use App\Notifications\PrescriptionEmailNotification;
 use App\Services\AblyService;
 use App\Services\AppointmentLimitService;
 use Barryvdh\DomPDF\Facade\Pdf;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Notification;
@@ -543,7 +544,8 @@ class AppointmentController extends Controller
 
         // Store old date and time for notification
         $oldDate = $appointment->appointment_date->format('Y-m-d');
-        $oldTime = $appointment->appointment_time;
+        $oldTime = $appointment->appointment_time; // Stored in 24-hour format
+        $oldTimeFormatted = Carbon::createFromFormat('H:i', $oldTime)->format('h:i A'); // Convert to 12-hour format
         
         // If date is changing, validate daily limits for the new date (excluding current appointment)
         if ($appointment->appointment_date->format('Y-m-d') !== $request->appointment_date) {
@@ -585,7 +587,12 @@ class AppointmentController extends Controller
         $appointmentTypeName = $appointment->appointment_type->name ?? 'N/A';
         $patient = $appointment->patient;
 
-        // Send notifications to client when staff reschedules
+        // Convert new time from 24-hour format to 12-hour format for notifications
+        $newTimeFormatted = Carbon::createFromFormat('H:i', $request->appointment_time)->format('h:i A');
+        $newDateFormatted = Carbon::createFromFormat('Y-m-d', $request->appointment_date)->format('M d, Y');
+        $oldDateFormatted = Carbon::createFromFormat('Y-m-d', $oldDate)->format('M d, Y');
+
+        // Send notifications to client when admin/staff reschedules
         if ($patient && $patient->user) {
             $ownerName = trim(($patient->user->first_name ?? '') . ' ' . ($patient->user->last_name ?? '')) ?: $patient->user->name;
             $clientLink = config('app.url') . '/appointments/' . $appointment->id;
@@ -595,10 +602,10 @@ class AppointmentController extends Controller
                 "Appointment Details:<br><br>" .
                 "Pet Name: {$patient->pet_name}<br>" .
                 "Appointment Type: {$appointmentTypeName}<br>" .
-                "Previous Date: {$oldDate}<br>" .
-                "Previous Time: {$oldTime}<br>" .
-                "New Date: {$request->appointment_date}<br>" .
-                "New Time: {$request->appointment_time}<br><br>" .
+                "Previous Date: {$oldDateFormatted}<br>" .
+                "Previous Time: {$oldTimeFormatted}<br>" .
+                "New Date: {$newDateFormatted}<br>" .
+                "New Time: {$newTimeFormatted}<br><br>" .
                 "Please note that your appointment status has been reset to pending and will need to be approved again.<br><br>" .
                 "<p style='text-align:center'><a href='" . $clientLink . "' style='background-color: #4CAF50; border: none; color: white; padding: 15px 32px; text-align: center; text-decoration: none; font-size: 12px; border-radius: 15px;'>View Appointment</a></p>";
 
@@ -612,12 +619,12 @@ class AppointmentController extends Controller
             }
 
             // Send database notification (in-app notification) to client
-            $databaseMessage = "Your {$appointmentTypeName} appointment has been rescheduled from {$oldDate} at {$oldTime} to {$request->appointment_date} at {$request->appointment_time}.";
+            $databaseMessage = "Your {$appointmentTypeName} appointment has been rescheduled from {$oldDateFormatted} at {$oldTimeFormatted} to {$newDateFormatted} at {$newTimeFormatted}.";
             $patient->user->notify(new DatabaseNotification($clientSubject, $databaseMessage, $clientLink));
 
             // Send real-time notification to client via Ably
             $ablyService = app(AblyService::class);
-            $clientAppointmentMessage = "Your {$appointmentTypeName} appointment has been rescheduled from {$oldDate} at {$oldTime} to {$request->appointment_date} at {$request->appointment_time}";
+            $clientAppointmentMessage = "Your {$appointmentTypeName} appointment has been rescheduled from {$oldDateFormatted} at {$oldTimeFormatted} to {$newDateFormatted} at {$newTimeFormatted}";
             
             $ablyService->publishToUser($patient->user->id, 'appointment.rescheduled', [
                 'appointment_id' => $appointment->id,
@@ -625,10 +632,10 @@ class AppointmentController extends Controller
                 'message' => $clientAppointmentMessage,
                 'link' => $clientLink,
                 'patient_name' => $patient->pet_name ?? 'N/A',
-                'old_date' => $oldDate,
-                'old_time' => $oldTime,
-                'new_date' => $request->appointment_date,
-                'new_time' => $request->appointment_time,
+                'old_date' => $oldDateFormatted,
+                'old_time' => $oldTimeFormatted,
+                'new_date' => $newDateFormatted,
+                'new_time' => $newTimeFormatted,
                 'appointment_type' => $appointmentTypeName,
             ]);
         }
