@@ -10,6 +10,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -60,7 +61,7 @@ class RegistrationController extends Controller
         $user->sendEmailVerificationNotification();
 
         return redirect()->route('register.verify-email')
-            ->with('status', 'verification-link-sent');
+            ->with('status', 'verification-code-sent');
     }
 
     /**
@@ -78,6 +79,42 @@ class RegistrationController extends Controller
     }
 
     /**
+     * Verify email using code
+     */
+    public function verifyCode(Request $request)
+    {
+        if ($request->user()->hasVerifiedEmail()) {
+            return redirect()->route('register.address');
+        }
+
+        $validated = $request->validate([
+            'code' => ['required', 'string', 'size:6', 'regex:/^[0-9]{6}$/'],
+        ]);
+
+        $user = $request->user();
+        $cacheKey = "verification_code_{$user->getKey()}";
+        $storedCode = Cache::get($cacheKey);
+
+        if (!$storedCode || $storedCode !== $validated['code']) {
+            return back()->withErrors([
+                'code' => 'Invalid or expired verification code. Please request a new code.',
+            ]);
+        }
+
+        // Verify the email
+        if (!$user->hasVerifiedEmail()) {
+            $user->markEmailAsVerified();
+            event(new \Illuminate\Auth\Events\Verified($user));
+        }
+
+        // Clear the verification code from cache
+        Cache::forget($cacheKey);
+
+        return redirect()->route('register.address')
+            ->with('status', 'email-verified');
+    }
+
+    /**
      * Resend verification email
      */
     public function resendVerificationEmail(Request $request)
@@ -88,7 +125,7 @@ class RegistrationController extends Controller
 
         $request->user()->sendEmailVerificationNotification();
 
-        return back()->with('status', 'verification-link-sent');
+        return back()->with('status', 'verification-code-sent');
     }
 
     /**

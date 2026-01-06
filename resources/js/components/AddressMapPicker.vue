@@ -58,7 +58,7 @@ interface GeocodeResult {
     lon: string;
 }
 
-// Search for locations using Nominatim
+// Search for locations using backend proxy (avoids CORS issues)
 const searchLocation = async (query: string) => {
     if (!query.trim()) {
         searchResults.value = [];
@@ -70,19 +70,25 @@ const searchLocation = async (query: string) => {
     showResults.value = true;
 
     try {
-        // Use Nominatim API for geocoding (free, no API key required)
+        // Use backend proxy to avoid CORS issues
         const response = await fetch(
-            `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=5&countrycodes=ph&addressdetails=1`,
+            `/api/geocode/search?q=${encodeURIComponent(query)}&limit=5`,
             {
+                method: 'GET',
                 headers: {
-                    'User-Agent': 'VetApp Address Picker', // Required by Nominatim
+                    'Accept': 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest',
                 },
             }
         );
 
         if (response.ok) {
             const data = await response.json();
-            searchResults.value = data;
+            if (Array.isArray(data)) {
+                searchResults.value = data;
+            } else {
+                searchResults.value = [];
+            }
         } else {
             searchResults.value = [];
         }

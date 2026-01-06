@@ -38,44 +38,29 @@
                             </p>
                             
                             <p style="margin: 0 0 30px 0; color: #4b5563; font-size: 16px; line-height: 1.6;">
-                                Thank you for registering with Panabo City ANIMED! Please click the button below to verify your email address and complete your registration.
+                                Thank you for registering with Panabo City ANIMED! Please use the verification code below to verify your email address and complete your registration.
                             </p>
                             
-                            <!-- Verification Link - Prominent Display -->
+                            <!-- Verification Code - Prominent Display -->
                             <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="margin-bottom: 30px;">
                                 <tr>
-                                    <td align="center" style="padding: 20px; background-color: #eff6ff; border: 2px solid #2563eb; border-radius: 6px;">
+                                    <td align="center" style="padding: 30px 20px; background-color: #eff6ff; border: 2px solid #2563eb; border-radius: 6px;">
                                         <p style="margin: 0 0 15px 0; color: #1f2937; font-size: 16px; font-weight: 600;">
-                                            Click the link below to verify your email:
+                                            Your verification code is:
                                         </p>
-                                        <p style="margin: 0; word-break: break-all;">
-                                            <a href="{{ $verificationUrl }}" style="color: #2563eb; text-decoration: underline; font-size: 14px; font-weight: 600; word-break: break-all;">{{ $verificationUrl }}</a>
+                                        <p style="margin: 0; font-size: 36px; font-weight: 700; color: #2563eb; letter-spacing: 8px; font-family: 'Courier New', monospace;">
+                                            {{ $verificationCode }}
                                         </p>
                                     </td>
                                 </tr>
                             </table>
                             
-                            <!-- Button Alternative -->
-                            <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%">
-                                <tr>
-                                    <td align="center" style="padding-bottom: 30px;">
-                                        <table role="presentation" cellspacing="0" cellpadding="0" border="0">
-                                            <tr>
-                                                <td align="center" bgcolor="#2563eb" style="border-radius: 6px;">
-                                                    <a href="{{ $verificationUrl }}" target="_blank" style="display: inline-block; padding: 14px 32px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; font-size: 16px; font-weight: 600; color: #ffffff; text-decoration: none; border-radius: 6px;">Verify Email Address</a>
-                                                </td>
-                                            </tr>
-                                        </table>
-                                    </td>
-                                </tr>
-                            </table>
-                            
-                            <p style="margin: 0 0 20px 0; color: #6b7280; font-size: 14px; line-height: 1.6;">
-                                <strong>Alternative:</strong> If the button above doesn't work, copy and paste the verification link shown above into your browser's address bar.
+                            <p style="margin: 0 0 20px 0; color: #4b5563; font-size: 16px; line-height: 1.6;">
+                                Enter this code in the registration form to verify your email address.
                             </p>
                             
                             <p style="margin: 0; color: #6b7280; font-size: 14px; line-height: 1.6;">
-                                This verification link will expire in 60 minutes. If you did not create an account, please ignore this email.
+                                This verification code will expire in {{ $expirationMinutes }} minutes. If you did not create an account, please ignore this email.
                             </p>
                         </td>
                     </tr>

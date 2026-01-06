@@ -63,19 +63,25 @@ const searchLocation = async () => {
     showResults.value = true;
 
     try {
-        // Use Nominatim API for geocoding (free, no API key required)
+        // Use backend proxy to avoid CORS issues
         const response = await fetch(
-            `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(searchQuery.value)}&limit=5&countrycodes=ph&addressdetails=1`,
+            `/api/geocode/search?q=${encodeURIComponent(searchQuery.value)}&limit=5`,
             {
+                method: 'GET',
                 headers: {
-                    'User-Agent': 'VetApp Location Picker', // Required by Nominatim
+                    'Accept': 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest',
                 },
             }
         );
 
         if (response.ok) {
             const data = await response.json();
-            searchResults.value = data;
+            if (Array.isArray(data)) {
+                searchResults.value = data;
+            } else {
+                searchResults.value = [];
+            }
         } else {
             searchResults.value = [];
         }

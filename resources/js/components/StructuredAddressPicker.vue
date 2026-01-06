@@ -60,9 +60,22 @@ interface GeocodeResult {
     display_name: string;
     lat: string;
     lon: string;
+    address?: {
+        state?: string;
+        province?: string;
+        city?: string;
+        municipality?: string;
+        town?: string;
+        village?: string;
+        barangay?: string;
+        road?: string;
+        street?: string;
+        house_number?: string;
+        postcode?: string;
+    };
 }
 
-// Search for locations using Nominatim
+// Search for locations using backend proxy (avoids CORS issues)
 const searchLocation = async (query: string) => {
     if (!query.trim()) {
         searchResults.value = [];
@@ -74,19 +87,27 @@ const searchLocation = async (query: string) => {
     showResults.value = true;
 
     try {
+        // Use backend proxy to avoid CORS issues
         const response = await fetch(
-            `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=5&countrycodes=ph&addressdetails=1`,
+            `/api/geocode/search?q=${encodeURIComponent(query)}&limit=5`,
             {
+                method: 'GET',
                 headers: {
-                    'User-Agent': 'VetApp Address Picker',
+                    'Accept': 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest',
                 },
             }
         );
 
         if (response.ok) {
             const data = await response.json();
-            searchResults.value = data;
+            if (Array.isArray(data)) {
+                searchResults.value = data;
+            } else {
+                searchResults.value = [];
+            }
         } else {
+            console.error('Geocoding API error:', response.status, response.statusText);
             searchResults.value = [];
         }
     } catch (error) {
@@ -98,30 +119,52 @@ const searchLocation = async (query: string) => {
 };
 
 // Parse address components from geocoding result
-const parseAddressComponents = (displayName: string) => {
-    const parts = displayName.split(',');
-    const trimmed = parts.map(p => p.trim());
-    
-    // Try to extract province, city, barangay, street
-    // This is a simplified parser - you may need to adjust based on actual data structure
+const parseAddressComponents = (result: GeocodeResult) => {
     let province = '';
     let city = '';
     let barangay = '';
     let street = '';
 
-    // Reverse order: typically "Street, Barangay, City, Province"
-    if (trimmed.length >= 4) {
-        province = trimmed[trimmed.length - 1] || '';
-        city = trimmed[trimmed.length - 2] || '';
-        barangay = trimmed[trimmed.length - 3] || '';
-        street = trimmed.slice(0, trimmed.length - 3).join(', ') || '';
-    } else if (trimmed.length === 3) {
-        province = trimmed[2] || '';
-        city = trimmed[1] || '';
-        barangay = trimmed[0] || '';
-    } else if (trimmed.length === 2) {
-        province = trimmed[1] || '';
-        city = trimmed[0] || '';
+    // Use structured address data if available (more reliable)
+    if (result.address) {
+        const addr = result.address;
+        
+        // Province/State
+        province = addr.province || addr.state || '';
+        
+        // City/Municipality
+        city = addr.city || addr.municipality || addr.town || '';
+        
+        // Barangay/Village
+        barangay = addr.barangay || addr.village || '';
+        
+        // Street/Road
+        const streetParts: string[] = [];
+        if (addr.house_number) streetParts.push(addr.house_number);
+        if (addr.road) streetParts.push(addr.road);
+        if (addr.street) streetParts.push(addr.street);
+        street = streetParts.join(' ') || '';
+    }
+
+    // Fallback to parsing display_name if structured data is not available
+    if (!province || !city) {
+        const parts = result.display_name.split(',');
+        const trimmed = parts.map(p => p.trim());
+        
+        // Try to extract from display_name
+        if (trimmed.length >= 4) {
+            if (!province) province = trimmed[trimmed.length - 1] || '';
+            if (!city) city = trimmed[trimmed.length - 2] || '';
+            if (!barangay) barangay = trimmed[trimmed.length - 3] || '';
+            if (!street) street = trimmed.slice(0, trimmed.length - 3).join(', ') || '';
+        } else if (trimmed.length === 3) {
+            if (!province) province = trimmed[2] || '';
+            if (!city) city = trimmed[1] || '';
+            if (!barangay) barangay = trimmed[0] || '';
+        } else if (trimmed.length === 2) {
+            if (!province) province = trimmed[1] || '';
+            if (!city) city = trimmed[0] || '';
+        }
     }
 
     return { province, city, barangay, street };
@@ -133,8 +176,8 @@ const selectLocation = (result: GeocodeResult) => {
     const lng = parseFloat(result.lon);
 
     if (!isNaN(lat) && !isNaN(lng)) {
-        // Parse address components
-        const addressComponents = parseAddressComponents(result.display_name);
+        // Parse address components using structured data
+        const addressComponents = parseAddressComponents(result);
         
         // Update address fields
         emit('update:province', addressComponents.province);
@@ -183,15 +226,35 @@ const handleSearchInput = () => {
         return;
     }
 
+    // Show results immediately if we have cached results
+    if (searchResults.value.length > 0) {
+        showResults.value = true;
+    }
+
     searchTimeout = setTimeout(() => {
         searchLocation(searchQuery.value);
     }, 500);
 };
 
+// Handle input focus
+const handleInputFocus = () => {
+    if (searchQuery.value.trim() && searchResults.value.length > 0) {
+        showResults.value = true;
+    }
+};
+
 // Handle click outside to close search results
+let clickOutsideTimeout: ReturnType<typeof setTimeout> | null = null;
 const handleClickOutside = (event: MouseEvent) => {
     if (searchContainerRef.value && !searchContainerRef.value.contains(event.target as Node)) {
-        showResults.value = false;
+        // Clear any existing timeout
+        if (clickOutsideTimeout) {
+            clearTimeout(clickOutsideTimeout);
+        }
+        // Small delay to allow click events on results to fire first
+        clickOutsideTimeout = setTimeout(() => {
+            showResults.value = false;
+        }, 150);
     }
 };
 
@@ -307,6 +370,10 @@ onBeforeUnmount(() => {
         clearTimeout(searchTimeout);
     }
     
+    if (clickOutsideTimeout) {
+        clearTimeout(clickOutsideTimeout);
+    }
+    
     if (resizeObserver) {
         resizeObserver.disconnect();
         resizeObserver = null;
@@ -332,6 +399,7 @@ onBeforeUnmount(() => {
                     class="pl-10 pr-10"
                     :disabled="disabled"
                     @input="handleSearchInput"
+                    @focus="handleInputFocus"
                     @keydown.enter.prevent="searchLocation(searchQuery)"
                 />
                 <Loader2
@@ -342,8 +410,8 @@ onBeforeUnmount(() => {
 
             <!-- Search Results Dropdown -->
             <div
-                v-if="showResults && (searchResults.length > 0 || isSearching) && searchQuery"
-                class="absolute z-50 mt-1 w-full rounded-md border bg-popover text-popover-foreground shadow-md max-h-[200px] overflow-auto"
+                v-if="showResults && (searchResults.length > 0 || isSearching) && searchQuery.trim()"
+                class="absolute z-[100] mt-1 w-full rounded-md border bg-white dark:bg-gray-800 text-popover-foreground shadow-lg max-h-[200px] overflow-auto"
             >
                 <div
                     v-if="isSearching"
@@ -360,10 +428,11 @@ onBeforeUnmount(() => {
                 <div
                     v-for="(result, index) in searchResults"
                     :key="index"
-                    @click="selectLocation(result)"
-                    class="cursor-pointer px-4 py-3 text-sm hover:bg-accent hover:text-accent-foreground border-b last:border-b-0"
+                    @click.stop="selectLocation(result)"
+                    @mousedown.prevent
+                    class="cursor-pointer px-4 py-3 text-sm hover:bg-gray-100 dark:hover:bg-gray-700 border-b last:border-b-0 transition-colors"
                 >
-                    <div class="font-medium">{{ result.display_name }}</div>
+                    <div class="font-medium text-gray-900 dark:text-gray-100">{{ result.display_name }}</div>
                 </div>
             </div>
         </div>

@@ -18,6 +18,7 @@ Route::middleware(['guest'])->group(function () {
 
 Route::middleware(['auth'])->group(function () {
     Route::get('/register/verify-email', [\App\Http\Controllers\Auth\RegistrationController::class, 'showVerifyEmail'])->name('register.verify-email');
+    Route::post('/register/verify-code', [\App\Http\Controllers\Auth\RegistrationController::class, 'verifyCode'])->name('register.verify-code');
     Route::post('/register/resend-verification', [\App\Http\Controllers\Auth\RegistrationController::class, 'resendVerificationEmail'])->name('register.resend-verification');
     Route::get('/register/address', [\App\Http\Controllers\Auth\RegistrationController::class, 'showAddress'])->name('register.address');
     Route::post('/register/address', [\App\Http\Controllers\Auth\RegistrationController::class, 'storeAddress'])->name('register.address.store');
@@ -29,6 +30,9 @@ Route::middleware(['auth'])->group(function () {
 
 // Public disease search route for landing page
 Route::get('/search-diseases', [\App\Http\Controllers\DiseaseSearchController::class, 'search'])->name('diseases.search');
+
+// Geocoding proxy route (to avoid CORS issues with Nominatim)
+Route::get('/api/geocode/search', [\App\Http\Controllers\GeocodingController::class, 'search'])->name('geocode.search');
 
 Route::get('dashboard', [\App\Http\Controllers\DashboardController::class, 'index'])
     ->middleware(['auth', 'verified'])

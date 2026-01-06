@@ -89,12 +89,13 @@ const submit = () => {
                 <div class="flex items-start space-x-2 p-4 border rounded-lg">
                     <Checkbox
                         id="confirmed"
-                        v-model:checked="confirmed"
+                        v-model="confirmed"
                         required
                     />
                     <Label
                         for="confirmed"
-                        class="text-sm leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                        class="text-sm leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
+                        @click="confirmed = !confirmed"
                     >
                         I confirm that all the information provided is accurate and correct.
                     </Label>
