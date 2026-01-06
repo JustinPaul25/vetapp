@@ -220,7 +220,8 @@ class PrescriptionController extends Controller
             'title' => 'Prescriptions Report',
             'filterInfo' => $filterInfo,
             'total' => $data->count(),
-        ]);
+        ])
+        ->setPaper('a4', 'portrait');
 
         return $pdf->stream('prescriptions-report-' . date('Y-m-d') . '.pdf');
     }

@@ -4,9 +4,13 @@
     <meta charset="utf-8">
     <title>{{ $title }}</title>
     <style>
+        @page {
+            size: A4 portrait;
+            margin: 15mm;
+        }
         body {
             font-family: Arial, sans-serif;
-            font-size: 12px;
+            font-size: 16px;
             margin: 20px;
             padding-right: 40px;
         }
@@ -18,11 +22,11 @@
         }
         .header h1 {
             margin: 0;
-            font-size: 18px;
+            font-size: 28px;
         }
         .filter-info {
             margin-bottom: 15px;
-            font-size: 11px;
+            font-size: 14px;
             color: #666;
         }
         table {
@@ -32,12 +36,14 @@
         }
         th, td {
             border: 1px solid #ddd;
-            padding: 8px;
+            padding: 12px;
             text-align: left;
+            font-size: 15px;
         }
         th {
             background-color: #f2f2f2;
             font-weight: bold;
+            font-size: 16px;
         }
         tr:nth-child(even) {
             background-color: #f9f9f9;
@@ -45,7 +51,7 @@
         .footer {
             margin-top: 20px;
             text-align: right;
-            font-size: 10px;
+            font-size: 12px;
             color: #666;
         }
     </style>

@@ -581,54 +581,55 @@ class AppointmentController extends Controller
         $appointment->save();
 
         // Reload appointment with relationships for notification
-        $appointment->load('appointment_type', 'patient.petType');
+        $appointment->load('appointment_type', 'patient.petType', 'patient.user');
         $appointmentTypeName = $appointment->appointment_type->name ?? 'N/A';
         $patient = $appointment->patient;
 
-        // Send email notification
-        if ($patient && $patient->user && $patient->user->email) {
+        // Send notifications to client when staff reschedules
+        if ($patient && $patient->user) {
             $ownerName = trim(($patient->user->first_name ?? '') . ' ' . ($patient->user->last_name ?? '')) ?: $patient->user->name;
-            $details = [
-                'subject' => 'Your appointment has been rescheduled',
-                'body' => "Hi {$ownerName},<br><br>Your appointment has been rescheduled.<br><br>" .
-                    "Previous Date: {$oldDate}<br>" .
-                    "Previous Time: {$oldTime}<br><br>" .
-                    "New Date: {$request->appointment_date}<br>" .
-                    "New Time: {$request->appointment_time}"
-            ];
+            $clientLink = config('app.url') . '/appointments/' . $appointment->id;
+            $clientSubject = 'Your appointment has been rescheduled';
+            $clientMessage = "Hi {$ownerName},<br><br>" .
+                "Your appointment has been rescheduled by our staff.<br><br>" .
+                "Appointment Details:<br><br>" .
+                "Pet Name: {$patient->pet_name}<br>" .
+                "Appointment Type: {$appointmentTypeName}<br>" .
+                "Previous Date: {$oldDate}<br>" .
+                "Previous Time: {$oldTime}<br>" .
+                "New Date: {$request->appointment_date}<br>" .
+                "New Time: {$request->appointment_time}<br><br>" .
+                "Please note that your appointment status has been reset to pending and will need to be approved again.<br><br>" .
+                "<p style='text-align:center'><a href='" . $clientLink . "' style='background-color: #4CAF50; border: none; color: white; padding: 15px 32px; text-align: center; text-decoration: none; font-size: 12px; border-radius: 15px;'>View Appointment</a></p>";
 
-            Notification::route('mail', $patient->user->email)
-                ->notify(new ClientEmailNotification($details));
-        }
+            // Send email notification to client
+            if ($patient->user->email) {
+                Notification::route('mail', $patient->user->email)
+                    ->notify(new ClientEmailNotification([
+                        'subject' => $clientSubject,
+                        'body' => $clientMessage,
+                    ]));
+            }
 
-        // Send database notification (in-app notification) to client
-        if ($patient && $patient->user) {
-            $link = config('app.url') . '/appointments/' . $appointment->id;
-            $subject = 'Your appointment has been rescheduled';
-            $message = "Your {$appointmentTypeName} appointment has been rescheduled from {$oldDate} at {$oldTime} to {$request->appointment_date} at {$request->appointment_time}.";
-            
-            $patient->user->notify(new DatabaseNotification($subject, $message, $link));
-        }
+            // Send database notification (in-app notification) to client
+            $databaseMessage = "Your {$appointmentTypeName} appointment has been rescheduled from {$oldDate} at {$oldTime} to {$request->appointment_date} at {$request->appointment_time}.";
+            $patient->user->notify(new DatabaseNotification($clientSubject, $databaseMessage, $clientLink));
 
-        // Send real-time notification to client via Ably
-        if ($patient && $patient->user) {
+            // Send real-time notification to client via Ably
             $ablyService = app(AblyService::class);
-            $link = config('app.url') . '/appointments/' . $appointment->id;
-            $subject = 'Your appointment has been rescheduled';
-            $message = "Your {$appointmentTypeName} appointment has been rescheduled from {$oldDate} at {$oldTime} to {$request->appointment_date} at {$request->appointment_time}.";
-
-            // Send to client's user channel
+            $clientAppointmentMessage = "Your {$appointmentTypeName} appointment has been rescheduled from {$oldDate} at {$oldTime} to {$request->appointment_date} at {$request->appointment_time}";
+            
             $ablyService->publishToUser($patient->user->id, 'appointment.rescheduled', [
                 'appointment_id' => $appointment->id,
-                'subject' => $subject,
-                'message' => $message,
-                'link' => $link,
-                'appointment_date' => $request->appointment_date,
-                'appointment_time' => $request->appointment_time,
-                'appointment_type' => $appointmentTypeName,
+                'subject' => $clientSubject,
+                'message' => $clientAppointmentMessage,
+                'link' => $clientLink,
                 'patient_name' => $patient->pet_name ?? 'N/A',
                 'old_date' => $oldDate,
                 'old_time' => $oldTime,
+                'new_date' => $request->appointment_date,
+                'new_time' => $request->appointment_time,
+                'appointment_type' => $appointmentTypeName,
             ]);
         }
 

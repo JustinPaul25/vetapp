@@ -26,7 +26,8 @@ class DatabaseNotification extends Notification
     {
         return [
             'link' => $this->link,
-            'message' => $this->subject
+            'subject' => $this->subject,
+            'message' => $this->message
         ];
     }
 }
