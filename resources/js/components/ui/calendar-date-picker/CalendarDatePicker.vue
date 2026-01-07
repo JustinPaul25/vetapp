@@ -30,19 +30,27 @@ const containerRef = ref<HTMLElement | null>(null);
 const currentMonth = ref(new Date());
 const selectedDate = computed(() => {
     if (!props.modelValue) return null;
-    return new Date(props.modelValue);
+    // Parse date string (YYYY-MM-DD) as local date to avoid timezone issues
+    const [year, month, day] = props.modelValue.split('-').map(Number);
+    const date = new Date(year, month - 1, day);
+    date.setHours(0, 0, 0, 0);
+    return date;
 });
 
 const minDateObj = computed(() => {
     if (!props.minDate) return null;
-    const date = new Date(props.minDate);
+    // Parse date string (YYYY-MM-DD) as local date to avoid timezone issues
+    const [year, month, day] = props.minDate.split('-').map(Number);
+    const date = new Date(year, month - 1, day);
     date.setHours(0, 0, 0, 0);
     return date;
 });
 
 const maxDateObj = computed(() => {
     if (!props.maxDate) return null;
-    const date = new Date(props.maxDate);
+    // Parse date string (YYYY-MM-DD) as local date to avoid timezone issues
+    const [year, month, day] = props.maxDate.split('-').map(Number);
+    const date = new Date(year, month - 1, day);
     date.setHours(0, 0, 0, 0);
     return date;
 });
@@ -155,7 +163,9 @@ const nextMonth = () => {
 
 const displayValue = computed(() => {
     if (!props.modelValue) return '';
-    const date = new Date(props.modelValue);
+    // Parse date string (YYYY-MM-DD) as local date to avoid timezone issues
+    const [year, month, day] = props.modelValue.split('-').map(Number);
+    const date = new Date(year, month - 1, day);
     return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 });
 
