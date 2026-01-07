@@ -106,7 +106,10 @@ CREATE TABLE `appointment_types` (
 **Default Types:**
 - Check-up
 - Vaccination
-- Dental
+- Castration (appointment-only, no walk-ins)
+- Minor Surgery (appointment-only, no walk-ins)
+- Deworming
+- Consultation
 
 ---
 

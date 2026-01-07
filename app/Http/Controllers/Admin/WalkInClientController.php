@@ -192,7 +192,7 @@ class WalkInClientController extends Controller
             $pet_breeds[$pet_type['name']] = $breeds;
         }
 
-        $appointment_types = AppointmentType::all()->map(function ($type) {
+        $appointment_types = AppointmentType::where('allows_walk_in', true)->get()->map(function ($type) {
             return [
                 'id' => $type->id,
                 'name' => $type->name,
@@ -226,7 +226,16 @@ class WalkInClientController extends Controller
             $validated = $request->validate([
                 'existing_owner_id' => 'required|exists:users,id',
                 'existing_pet_id' => 'required|exists:patients,id',
-                'appointment_type_id' => 'required|exists:appointment_types,id',
+                'appointment_type_id' => [
+                    'required',
+                    'exists:appointment_types,id',
+                    function ($attribute, $value, $fail) {
+                        $appointmentType = AppointmentType::find($value);
+                        if ($appointmentType && !$appointmentType->allows_walk_in) {
+                            $fail('This appointment type is only available for scheduled appointments, not walk-ins.');
+                        }
+                    },
+                ],
                 'symptoms' => 'nullable|string|max:1825',
             ]);
 
@@ -303,7 +312,16 @@ class WalkInClientController extends Controller
             'pet_birth_date' => 'nullable|date',
             'pet_allergies' => 'nullable|string',
             // Appointment fields (always required for walk-in)
-            'appointment_type_id' => 'required|exists:appointment_types,id',
+            'appointment_type_id' => [
+                'required',
+                'exists:appointment_types,id',
+                function ($attribute, $value, $fail) {
+                    $appointmentType = AppointmentType::find($value);
+                    if ($appointmentType && !$appointmentType->allows_walk_in) {
+                        $fail('This appointment type is only available for scheduled appointments, not walk-ins.');
+                    }
+                },
+            ],
             'symptoms' => 'nullable|string|max:1825',
         ]);
 

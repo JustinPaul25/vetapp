@@ -14,16 +14,26 @@ class AppointmentTypesSeeder extends Seeder
     public function run(): void
     {
         $data = AppointmentTypes::ALL_TYPES;
+        
+        // Appointment types that don't allow walk-ins (appointment-only)
+        $appointmentOnlyTypes = [
+            AppointmentTypes::CASTRATION,
+            AppointmentTypes::MINOR_SURGERY,
+        ];
 
         foreach ($data as $item) {
+            $allowsWalkIn = !in_array($item, $appointmentOnlyTypes);
+            
             $appointment_type = AppointmentType::where('name', $item)->first();
             if (empty($appointment_type)) {
                 AppointmentType::create([
                     'name' => $item,
+                    'allows_walk_in' => $allowsWalkIn,
                 ]);
                 echo sprintf("Appointment Type - %s has been added \n", $item);
             } else {
                 $appointment_type->name = $item;
+                $appointment_type->allows_walk_in = $allowsWalkIn;
                 $appointment_type->save();
             }
         }

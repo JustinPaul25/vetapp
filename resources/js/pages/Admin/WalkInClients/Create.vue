@@ -760,15 +760,15 @@ const submit = () => {
 
                         <!-- Appointment Section -->
                         <div class="border-t pt-6 mt-6">
-                            <h3 class="text-lg font-semibold mb-4">Appointment Details</h3>
+                            <h3 class="text-lg font-semibold mb-4">Visit Details</h3>
                             <div class="space-y-4">
                                 <div class="space-y-2">
-                                    <Label for="appointment_type_id">Appointment Type <span class="text-destructive">*</span></Label>
+                                    <Label for="appointment_type_id">Type of Services <span class="text-destructive">*</span></Label>
                                     <SearchableSelect
                                         id="appointment_type_id"
                                         v-model="form.appointment_type_id"
                                         :options="appointmentTypeOptions"
-                                        placeholder="Select Appointment Type"
+                                        placeholder="Select Type of Services"
                                         search-placeholder="Search appointment types..."
                                         :required="true"
                                     />

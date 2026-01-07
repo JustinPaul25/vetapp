@@ -47,6 +47,8 @@ return [
         'Deworming' => env('APPOINTMENT_LIMIT_DEWORMING', 40),
         'Check-up' => env('APPOINTMENT_LIMIT_CHECKUP', 40),
         'Consultation' => env('APPOINTMENT_LIMIT_CONSULTATION', 40),
+        'Castration' => env('APPOINTMENT_LIMIT_CASTRATION', 40),
+        'Minor Surgery' => env('APPOINTMENT_LIMIT_MINOR_SURGERY', 40),
         // Default limit for other types
         'default' => env('APPOINTMENT_LIMIT_DEFAULT', 40),
     ],
