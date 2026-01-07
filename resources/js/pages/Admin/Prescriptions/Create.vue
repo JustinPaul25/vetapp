@@ -395,18 +395,43 @@ const filledMedicineRows = computed(() => {
 
 // Submit form
 const submit = () => {
-    // Sync disease_ids from selectedDiseases before submission
-    form.disease_ids = selectedDiseases.value.map(d => d.id);
+    // Client-side validation before submission
+    const validationErrors: string[] = [];
+    
+    if (!form.pet_current_weight || parseFloat(form.pet_current_weight) <= 0) {
+        validationErrors.push('Pet weight is required and must be greater than 0');
+    }
+    
+    if (selectedSymptoms.value.length === 0) {
+        validationErrors.push('Please select at least one symptom');
+    }
+    
+    if (selectedDiseases.value.length === 0) {
+        validationErrors.push('Please select at least one disease/diagnosis');
+    }
     
     // Prepare medicines data - filter out empty rows and newly added rows without medicine
     const validMedicineRows = medicineRows.value.filter(row => 
         row.medicine_id !== null && row.dosage && row.instructions && row.quantity
     );
     
+    if (validMedicineRows.length === 0) {
+        validationErrors.push('Please add at least one medicine with dosage, instructions, and quantity');
+    }
+    
+    // If there are client-side validation errors, show them and don't submit
+    if (validationErrors.length > 0) {
+        showError('Error creating prescription', validationErrors.join('. ') + '.');
+        return;
+    }
+    
+    // Sync disease_ids from selectedDiseases before submission
+    form.disease_ids = selectedDiseases.value.map(d => d.id);
+    
     // Map to the structure expected by the backend
+    // Backend expects 'id' not 'medicine_id' for the medicine identifier
     form.medicines = validMedicineRows.map(row => ({
-        id: row.id,
-        medicine_id: row.medicine_id!,
+        id: row.medicine_id!, // Backend expects 'id' field to contain medicine_id
         dosage: row.dosage,
         instructions: row.instructions,
         quantity: row.quantity,
@@ -420,14 +445,37 @@ const submit = () => {
             // Show error toast for general errors
             let errorMessage = 'Failed to create prescription. Please check the form for errors.';
             
-            // Check for specific error messages
-            if (errors.message) {
-                errorMessage = errors.message;
+            // Build detailed error message from validation errors
+            if (errors && typeof errors === 'object') {
+                const errorMessages: string[] = [];
+                
+                if (errors.disease_ids) {
+                    errorMessages.push('Please select at least one disease/diagnosis');
+                }
+                if (errors.medicines) {
+                    errorMessages.push('Please add at least one medicine with all required fields');
+                }
+                if (errors.symptoms) {
+                    errorMessages.push('Please select at least one symptom');
+                }
+                if (errors.pet_current_weight) {
+                    errorMessages.push('Please enter a valid pet weight');
+                }
+                
+                // Add any other specific error messages
+                Object.keys(errors).forEach(key => {
+                    if (!['disease_ids', 'medicines', 'symptoms', 'pet_current_weight'].includes(key) && errors[key]) {
+                        errorMessages.push(Array.isArray(errors[key]) ? errors[key][0] : String(errors[key]));
+                    }
+                });
+                
+                if (errorMessages.length > 0) {
+                    errorMessage = errorMessages.join('. ') + '.';
+                } else if (errors.message) {
+                    errorMessage = errors.message;
+                }
             } else if (typeof errors === 'string') {
                 errorMessage = errors;
-            } else if (errors && Object.keys(errors).length > 0) {
-                // If there are validation errors, show a general message
-                errorMessage = 'Please fix the errors in the form before submitting.';
             }
             
             showError('Error creating prescription', errorMessage);

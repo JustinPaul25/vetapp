@@ -1013,7 +1013,7 @@ onUnmounted(() => {
                             <!-- Appointment Row - ONE appointment with potentially multiple pets -->
                             <div
                                 class="grid grid-cols-7 gap-4 p-4 items-center hover:bg-muted/50 transition-colors"
-                                :class="appointment.pet_count > 1 ? 'cursor-pointer' : ''"
+                                :class="appointment.pet_count > 1 ? 'cursor-pointer bg-blue-50/30 dark:bg-blue-950/20' : ''"
                                 @click="appointment.pet_count > 1 ? toggleGroupExpansion(appointment.id) : null"
                             >
                                 <div class="text-sm font-medium">
@@ -1027,8 +1027,18 @@ onUnmounted(() => {
                                     </template>
                                     <span v-else>{{ appointment.appointment_type }}</span>
                                 </div>
-                                <div class="text-sm">{{ appointment.pet_type }}</div>
-                                <div class="text-sm">{{ appointment.pet_name }}</div>
+                                <div class="text-sm">
+                                    <template v-if="appointment.pet_count > 1">
+                                        <span class="text-muted-foreground">Multiple</span>
+                                    </template>
+                                    <span v-else>{{ appointment.pet_type }}</span>
+                                </div>
+                                <div class="text-sm">
+                                    <template v-if="appointment.pet_count > 1">
+                                        <span class="text-muted-foreground">Click to view</span>
+                                    </template>
+                                    <span v-else>{{ appointment.pet_name }}</span>
+                                </div>
                                 <div class="text-sm">{{ formatDate(appointment.appointment_date) }}</div>
                                 <div class="text-sm">{{ formatTime(appointment.appointment_time) }}</div>
                                 <div>

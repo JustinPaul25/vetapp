@@ -155,6 +155,14 @@ class ClientController extends Controller
                     ];
                 })->toArray();
 
+                // Get unique pet types for display
+                $petTypes = $patients->map(function ($pet) {
+                    return $pet->petType ? $pet->petType->name : 'N/A';
+                })->unique()->values()->toArray();
+                $petTypeDisplay = $petCount > 1 
+                    ? (count($petTypes) > 1 ? implode(', ', $petTypes) : ($petTypes[0] ?? 'N/A'))
+                    : ($patients->first() && $patients->first()->petType ? $patients->first()->petType->name : 'N/A');
+
                 // Always return as ONE appointment (not grouped)
                 // If multiple pets, show pet count badge
                 $result[] = [
@@ -169,9 +177,7 @@ class ClientController extends Controller
                     'pet_name' => $petCount > 1 
                         ? ($patients->first() ? $patients->first()->pet_name . ' (+' . ($petCount - 1) . ' more)' : 'N/A')
                         : ($patients->first() ? $patients->first()->pet_name : 'N/A'),
-                    'pet_type' => $patients->first() && $patients->first()->petType 
-                        ? $patients->first()->petType->name 
-                        : 'N/A',
+                    'pet_type' => $petTypeDisplay,
                 ];
             }
 

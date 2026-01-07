@@ -427,7 +427,13 @@ class AppointmentController extends Controller
             'pet_allergies' => 'nullable|string',
         ]);
 
-        $appointment = Appointment::with('patient.user')->findOrFail($id);
+        $appointment = Appointment::with('patients.user', 'patient.user')->findOrFail($id);
+        
+        // Get all patients for this appointment (multi-pet support)
+        $patients = $appointment->patients;
+        if ($patients->isEmpty() && $appointment->patient) {
+            $patients = collect([$appointment->patient]);
+        }
         
         // If date is changing, validate daily limits for the new date (excluding current appointment)
         if ($appointment->appointment_date->format('Y-m-d') !== $request->appointment_date) {
@@ -464,52 +470,73 @@ class AppointmentController extends Controller
         $appointment->is_approved = true;
         $appointment->save();
 
-        // Update patient info
-        $patient = $appointment->patient;
-        if ($request->has('pet_gender')) {
-            $patient->pet_gender = $request->pet_gender ?? '';
+        // Update primary patient info (for backward compatibility)
+        $primaryPatient = $appointment->patient;
+        if ($primaryPatient && $request->has('pet_gender')) {
+            $primaryPatient->pet_gender = $request->pet_gender ?? '';
         }
-        if ($request->has('pet_allergies')) {
-            $patient->pet_allergies = $request->pet_allergies ?? '';
+        if ($primaryPatient && $request->has('pet_allergies')) {
+            $primaryPatient->pet_allergies = $request->pet_allergies ?? '';
         }
-        $patient->save();
+        if ($primaryPatient) {
+            $primaryPatient->save();
+        }
 
         // Reload appointment with relationships for notification
-        $appointment->load('appointment_type', 'patient.petType');
+        $appointment->load('appointment_type', 'patients.petType');
         $appointmentTypeName = $appointment->appointment_type->name ?? 'N/A';
+        
+        // Get pet count and names for notification
+        $petCount = $patients->count();
+        $petNames = $patients->pluck('pet_name')->filter()->toArray();
+        $petNamesList = implode(', ', $petNames);
+        
+        // Get owner from first patient (all should belong to same user)
+        $firstPatient = $patients->first();
+        $owner = $firstPatient && $firstPatient->user ? $firstPatient->user : null;
 
         // Send email notification
-        if ($patient->user && $patient->user->email) {
-            $ownerName = trim(($patient->user->first_name ?? '') . ' ' . ($patient->user->last_name ?? '')) ?: $patient->user->name;
+        if ($owner && $owner->email) {
+            $ownerName = trim(($owner->first_name ?? '') . ' ' . ($owner->last_name ?? '')) ?: $owner->name;
+            $petInfo = $petCount > 1 
+                ? "for {$petCount} pets ({$petNamesList})"
+                : "for {$petNamesList}";
+            
             $details = [
                 'subject' => 'Your appointment has been approved!',
-                'body' => "Hi {$ownerName},<br><br>Your appointment has been approved.<br><br>" .
+                'body' => "Hi {$ownerName},<br><br>Your appointment {$petInfo} has been approved.<br><br>" .
                     "Appointment Date: {$request->appointment_date}<br>" .
                     "Appointment Time: {$request->appointment_time}"
             ];
 
-            Notification::route('mail', $patient->user->email)
+            Notification::route('mail', $owner->email)
                 ->notify(new ClientEmailNotification($details));
         }
 
         // Send database notification (in-app notification) to client
-        if ($patient->user) {
+        if ($owner) {
             $link = config('app.url') . '/appointments/' . $appointment->id;
             $subject = 'Your appointment has been approved!';
-            $message = "Your {$appointmentTypeName} appointment scheduled for {$request->appointment_date} at {$request->appointment_time} has been approved.";
+            $petInfo = $petCount > 1 
+                ? "for {$petCount} pets"
+                : "for {$petNamesList}";
+            $message = "Your {$appointmentTypeName} appointment {$petInfo} scheduled for {$request->appointment_date} at {$request->appointment_time} has been approved.";
             
-            $patient->user->notify(new DatabaseNotification($subject, $message, $link));
+            $owner->notify(new DatabaseNotification($subject, $message, $link));
         }
 
         // Send real-time notification to client via Ably
-        if ($patient->user) {
+        if ($owner) {
             $ablyService = app(AblyService::class);
             $link = config('app.url') . '/appointments/' . $appointment->id;
             $subject = 'Your appointment has been approved!';
-            $message = "Your {$appointmentTypeName} appointment scheduled for {$request->appointment_date} at {$request->appointment_time} has been approved.";
+            $petInfo = $petCount > 1 
+                ? "for {$petCount} pets"
+                : "for {$petNamesList}";
+            $message = "Your {$appointmentTypeName} appointment {$petInfo} scheduled for {$request->appointment_date} at {$request->appointment_time} has been approved.";
 
             // Send to client's user channel
-            $ablyService->publishToUser($patient->user->id, 'appointment.approved', [
+            $ablyService->publishToUser($owner->id, 'appointment.approved', [
                 'appointment_id' => $appointment->id,
                 'subject' => $subject,
                 'message' => $message,
@@ -517,7 +544,8 @@ class AppointmentController extends Controller
                 'appointment_date' => $request->appointment_date,
                 'appointment_time' => $request->appointment_time,
                 'appointment_type' => $appointmentTypeName,
-                'patient_name' => $patient->pet_name ?? 'N/A',
+                'patient_name' => $petCount > 1 ? "{$petCount} pets" : ($petNamesList ?? 'N/A'),
+                'pet_count' => $petCount,
             ]);
         }
 

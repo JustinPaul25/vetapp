@@ -263,7 +263,10 @@ const getStatusBadgeClass = (status: string) => {
                             <tbody>
                                 <template v-for="appointment in appointments.data" :key="appointment.id">
                                     <!-- Standard table row for all appointments (consistent styling) -->
-                                    <tr class="border-b hover:bg-muted/50">
+                                    <tr 
+                                        class="border-b hover:bg-muted/50 transition-colors"
+                                        :class="appointment.is_multi_pet ? 'bg-blue-50/30 dark:bg-blue-950/20' : ''"
+                                    >
                                         <td class="p-3 text-sm">
                                             <div class="flex items-center gap-2">
                                                 <button
@@ -279,12 +282,12 @@ const getStatusBadgeClass = (status: string) => {
                                                 <div class="flex items-center gap-2">
                                                     <Users 
                                                         v-if="appointment.is_multi_pet"
-                                                        class="h-4 w-4 text-muted-foreground"
+                                                        class="h-4 w-4 text-blue-600 dark:text-blue-400"
                                                     />
                                                     <span>{{ appointment.owner_name }}</span>
                                                     <span
                                                         v-if="appointment.is_multi_pet"
-                                                        class="px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200"
+                                                        class="px-2 py-0.5 rounded-full text-xs font-semibold bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200"
                                                     >
                                                         {{ appointment.pet_count }} Pet{{ appointment.pet_count > 1 ? 's' : '' }}
                                                     </span>
