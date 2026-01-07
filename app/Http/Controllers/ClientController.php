@@ -107,7 +107,7 @@ class ClientController extends Controller
                 ->orderBy('appointments.appointment_date', 'desc')
                 ->orderBy('appointments.appointment_time', 'desc')
                 ->orderBy('appointments.created_at', 'desc')
-                ->with('patients.petType', 'appointment_type')
+                ->with('patients.petType', 'appointment_type', 'appointment_types')
                 ->get();
 
             // Build result array - ONE appointment can have multiple pets
@@ -133,23 +133,45 @@ class ClientController extends Controller
                     $status = $appointment->is_completed ? 'Completed' : 'Approved';
                 }
 
-                // Get appointment type name from relationship
-                $appointmentTypeName = 'N/A';
-                if ($appointment->relationLoaded('appointment_type') && $appointment->appointment_type) {
-                    $appointmentTypeName = $appointment->appointment_type->name;
+                // Get appointment type name(s) from relationship
+                // Check if appointment has multiple appointment types via many-to-many
+                $appointmentTypes = [];
+                if ($appointment->relationLoaded('appointment_types') && $appointment->appointment_types->isNotEmpty()) {
+                    $appointmentTypes = $appointment->appointment_types->pluck('name')->toArray();
+                } elseif ($appointment->relationLoaded('appointment_type') && $appointment->appointment_type) {
+                    $appointmentTypes = [$appointment->appointment_type->name];
                 } elseif ($appointment->appointment_type_id) {
                     // Fallback: load if not already loaded
-                    $appointment->load('appointment_type');
-                    $appointmentTypeName = $appointment->appointment_type ? $appointment->appointment_type->name : 'N/A';
+                    if (!$appointment->relationLoaded('appointment_types')) {
+                        $appointment->load('appointment_types');
+                    }
+                    if ($appointment->appointment_types->isNotEmpty()) {
+                        $appointmentTypes = $appointment->appointment_types->pluck('name')->toArray();
+                    } else {
+                        $appointment->load('appointment_type');
+                        $appointmentTypes = $appointment->appointment_type ? [$appointment->appointment_type->name] : ['N/A'];
+                    }
+                } else {
+                    $appointmentTypes = ['N/A'];
                 }
+                
+                // Create display string for appointment types
+                $appointmentTypeName = count($appointmentTypes) > 1 
+                    ? implode(', ', $appointmentTypes) 
+                    : ($appointmentTypes[0] ?? 'N/A');
 
                 $petCount = $patients->count();
                 
                 // Build pet items for this appointment
-                $petItems = $patients->map(function ($pet) use ($appointmentTypeName) {
+                // For each pet, we need to determine which appointment type(s) it has
+                // Since we're grouping all pets together, we'll show all appointment types for each pet
+                // or we can show the primary appointment type for backward compatibility
+                $petItems = $patients->map(function ($pet) use ($appointmentTypes) {
+                    // For now, show all appointment types for each pet since they're in the same appointment
+                    // In the future, we could track individual pet-appointment type relationships
                     return [
                         'id' => $pet->id,
-                        'appointment_type' => $appointmentTypeName,
+                        'appointment_type' => count($appointmentTypes) > 1 ? implode(', ', $appointmentTypes) : ($appointmentTypes[0] ?? 'N/A'),
                         'pet_type' => $pet->petType ? $pet->petType->name : 'N/A',
                         'pet_name' => $pet->pet_name,
                     ];
@@ -286,10 +308,13 @@ class ClientController extends Controller
                 return back()->withErrors($e->errors())->withInput();
             }
 
-            // Group pet-appointment pairs by appointment_type_id
-            // IMPORTANT: Multiple pets with the SAME appointment_type_id will be grouped into ONE appointment
-            // Example: Pet 1 + Pet 2 + Pet 3 all with "Check-up" = ONE appointment with 3 pets
-            $appointmentsByType = [];
+            // Group ALL pets together into ONE appointment regardless of appointment type
+            // IMPORTANT: All selected pets will be grouped into ONE appointment, even if they have different appointment types
+            // Example: Pet 1 with "Check-up" + Pet 2 with "Vaccination" = ONE appointment with 2 pets and 2 appointment types
+            $allPetIds = [];
+            $allAppointmentTypeIds = [];
+            $petAppointmentTypeMap = []; // Track which pet has which appointment type(s)
+            
             foreach ($petAppointments as $pair) {
                 // Validate pair structure
                 if (!isset($pair['pet_id']) || !isset($pair['appointment_type_id'])) {
@@ -306,13 +331,22 @@ class ClientController extends Controller
                     continue;
                 }
 
-                // Group by appointment type - pets with same appointment_type_id go into same group
-                if (!isset($appointmentsByType[$appointmentTypeId])) {
-                    $appointmentsByType[$appointmentTypeId] = [];
+                // Collect all unique pet IDs
+                if (!in_array($petId, $allPetIds)) {
+                    $allPetIds[] = $petId;
                 }
-                // Only add if not already in the array (avoid duplicates)
-                if (!in_array($petId, $appointmentsByType[$appointmentTypeId])) {
-                    $appointmentsByType[$appointmentTypeId][] = $petId;
+
+                // Collect all unique appointment type IDs
+                if (!in_array($appointmentTypeId, $allAppointmentTypeIds)) {
+                    $allAppointmentTypeIds[] = $appointmentTypeId;
+                }
+
+                // Track which appointment types each pet has
+                if (!isset($petAppointmentTypeMap[$petId])) {
+                    $petAppointmentTypeMap[$petId] = [];
+                }
+                if (!in_array($appointmentTypeId, $petAppointmentTypeMap[$petId])) {
+                    $petAppointmentTypeMap[$petId][] = $appointmentTypeId;
                 }
             }
             
@@ -320,55 +354,64 @@ class ClientController extends Controller
             Log::info('Appointment grouping', [
                 'user_id' => auth()->id(),
                 'input_pairs' => $petAppointments,
-                'grouped_by_type' => $appointmentsByType,
+                'all_pet_ids' => $allPetIds,
+                'all_appointment_type_ids' => $allAppointmentTypeIds,
+                'pet_appointment_type_map' => $petAppointmentTypeMap,
             ]);
 
-            // Create ONE appointment per appointment type and attach all pets for that type
-            // If user selects: Pet1+Pet2 for "Check-up" and Pet3 for "Vaccination"
-            // Result: 2 appointments (1 Check-up with Pet1+Pet2, 1 Vaccination with Pet3)
+            // Create ONE appointment for ALL pets with ALL appointment types
             // Use database transaction to ensure atomicity
-            \DB::transaction(function () use ($appointmentsByType, $appointmentDate, $symptoms, $time, &$createdAppointments) {
-                foreach ($appointmentsByType as $appointmentTypeId => $petIdsForType) {
-                    // Ensure unique pet IDs and at least one pet
-                    $petIdsForType = array_unique($petIdsForType);
-                    if (empty($petIdsForType)) {
-                        Log::warning("Skipping appointment creation for type {$appointmentTypeId} - no pets");
-                        continue; // Skip if no pets for this type
-                    }
-
-                    // Get the first pet as the primary patient_id (for backward compatibility)
-                    $firstPetId = $petIdsForType[0];
-
-                    // Create ONE appointment for this appointment type with ALL pets attached
-                    // This is the key: ONE appointment record, multiple pets via pivot table
-                    $appointment = Appointment::create([
-                        'patient_id' => $firstPetId, // Keep for backward compatibility
-                        'appointment_type_id' => $appointmentTypeId,
-                        'appointment_date' => $appointmentDate,
-                        'symptoms' => $symptoms,
-                        'is_approved' => false, // Client appointments start as pending
-                        'is_completed' => false, // Explicitly set to false for pending status
-                        'appointment_time' => $time->format('H:i'), // Store in 24-hour format
-                        'user_id' => Auth::id(),
-                    ]);
-
-                    // Attach ALL pets to this ONE appointment via pivot table
-                    // This is what makes it ONE appointment with multiple pets
-                    $appointment->patients()->sync($petIdsForType);
-                    
-                    // Reload the appointment with relationships to ensure data is correct
-                    $appointment->load('patients', 'appointment_type');
-
-                    // Log for debugging
-                    Log::info('Appointment created', [
-                        'appointment_id' => $appointment->id,
-                        'appointment_type_id' => $appointmentTypeId,
-                        'pet_count' => count($petIdsForType),
-                        'pet_ids' => $petIdsForType,
-                    ]);
-
-                    $createdAppointments[] = $appointment;
+            \DB::transaction(function () use ($allPetIds, $allAppointmentTypeIds, $appointmentDate, $symptoms, $time, &$createdAppointments) {
+                // Ensure we have at least one pet
+                $allPetIds = array_unique($allPetIds);
+                if (empty($allPetIds)) {
+                    Log::warning("No valid pets found for appointment creation");
+                    return;
                 }
+
+                // Get the first pet as the primary patient_id (for backward compatibility)
+                $firstPetId = $allPetIds[0];
+                
+                // Get the first appointment type as the primary appointment_type_id (for backward compatibility)
+                $firstAppointmentTypeId = !empty($allAppointmentTypeIds) ? $allAppointmentTypeIds[0] : null;
+                if (!$firstAppointmentTypeId) {
+                    Log::warning("No appointment types found for appointment creation");
+                    return;
+                }
+
+                // Create ONE appointment for ALL pets
+                $appointment = Appointment::create([
+                    'patient_id' => $firstPetId, // Keep for backward compatibility
+                    'appointment_type_id' => $firstAppointmentTypeId, // Primary appointment type for backward compatibility
+                    'appointment_date' => $appointmentDate,
+                    'symptoms' => $symptoms,
+                    'is_approved' => false, // Client appointments start as pending
+                    'is_completed' => false, // Explicitly set to false for pending status
+                    'appointment_time' => $time->format('H:i'), // Store in 24-hour format
+                    'user_id' => Auth::id(),
+                ]);
+
+                // Attach ALL pets to this ONE appointment via pivot table
+                $appointment->patients()->sync($allPetIds);
+                
+                // Attach ALL appointment types to this appointment via many-to-many relationship
+                if (!empty($allAppointmentTypeIds)) {
+                    $appointment->appointment_types()->sync($allAppointmentTypeIds);
+                }
+                
+                // Reload the appointment with relationships to ensure data is correct
+                $appointment->load('patients', 'appointment_type', 'appointment_types');
+
+                // Log for debugging
+                Log::info('Appointment created', [
+                    'appointment_id' => $appointment->id,
+                    'primary_appointment_type_id' => $firstAppointmentTypeId,
+                    'all_appointment_type_ids' => $allAppointmentTypeIds,
+                    'pet_count' => count($allPetIds),
+                    'pet_ids' => $allPetIds,
+                ]);
+
+                $createdAppointments[] = $appointment;
             });
         } else {
             // Legacy format: separate pet_ids and appointment_type_ids arrays (creates cartesian product)
@@ -444,40 +487,65 @@ class ClientController extends Controller
 
             // Group by appointment type - create ONE appointment per type with all pets attached
             // Use database transaction to ensure atomicity
+            // Group ALL pets together into ONE appointment with ALL appointment types
             \DB::transaction(function () use ($appointmentTypeIds, $petIds, $appointmentDate, $symptoms, $time, &$createdAppointments) {
-                foreach ($appointmentTypeIds as $appointmentTypeId) {
-                    // Ensure unique pet IDs
-                    $uniquePetIds = array_unique($petIds);
-                    if (empty($uniquePetIds)) {
-                        continue;
-                    }
-
-                    // Get the first pet as the primary patient_id (for backward compatibility)
-                    $firstPetId = $uniquePetIds[0];
-
-                    // Create ONE appointment for this appointment type with ALL pets attached
-                    $appointment = Appointment::create([
-                        'patient_id' => $firstPetId, // Keep for backward compatibility
-                        'appointment_type_id' => $appointmentTypeId,
-                        'appointment_date' => $appointmentDate,
-                        'symptoms' => $symptoms,
-                        'is_approved' => false, // Client appointments start as pending
-                        'is_completed' => false, // Explicitly set to false for pending status
-                        'appointment_time' => $time->format('H:i'), // Store in 24-hour format
-                        'user_id' => Auth::id(),
-                    ]);
-
-                    // Attach ALL pets to this ONE appointment via pivot table
-                    $appointment->patients()->sync($uniquePetIds);
-
-                    $createdAppointments[] = $appointment;
+                // Ensure unique pet IDs and appointment type IDs
+                $uniquePetIds = array_unique($petIds);
+                $uniqueAppointmentTypeIds = array_unique($appointmentTypeIds);
+                
+                if (empty($uniquePetIds)) {
+                    Log::warning("No valid pets found for appointment creation (legacy format)");
+                    return;
                 }
+                
+                if (empty($uniqueAppointmentTypeIds)) {
+                    Log::warning("No appointment types found for appointment creation (legacy format)");
+                    return;
+                }
+
+                // Get the first pet as the primary patient_id (for backward compatibility)
+                $firstPetId = $uniquePetIds[0];
+                
+                // Get the first appointment type as the primary appointment_type_id (for backward compatibility)
+                $firstAppointmentTypeId = $uniqueAppointmentTypeIds[0];
+
+                // Create ONE appointment for ALL pets with ALL appointment types
+                $appointment = Appointment::create([
+                    'patient_id' => $firstPetId, // Keep for backward compatibility
+                    'appointment_type_id' => $firstAppointmentTypeId, // Primary appointment type for backward compatibility
+                    'appointment_date' => $appointmentDate,
+                    'symptoms' => $symptoms,
+                    'is_approved' => false, // Client appointments start as pending
+                    'is_completed' => false, // Explicitly set to false for pending status
+                    'appointment_time' => $time->format('H:i'), // Store in 24-hour format
+                    'user_id' => Auth::id(),
+                ]);
+
+                // Attach ALL pets to this ONE appointment via pivot table
+                $appointment->patients()->sync($uniquePetIds);
+                
+                // Attach ALL appointment types to this appointment via many-to-many relationship
+                $appointment->appointment_types()->sync($uniqueAppointmentTypeIds);
+                
+                // Reload the appointment with relationships
+                $appointment->load('patients', 'appointment_type', 'appointment_types');
+
+                // Log for debugging
+                Log::info('Appointment created (legacy format)', [
+                    'appointment_id' => $appointment->id,
+                    'primary_appointment_type_id' => $firstAppointmentTypeId,
+                    'all_appointment_type_ids' => $uniqueAppointmentTypeIds,
+                    'pet_count' => count($uniquePetIds),
+                    'pet_ids' => $uniquePetIds,
+                ]);
+
+                $createdAppointments[] = $appointment;
             });
         }
 
         // Reload appointments with relationships
         foreach ($createdAppointments as $appointment) {
-            $appointment->load('appointment_type', 'patients.petType', 'patient.petType', 'patient.user');
+            $appointment->load('appointment_type', 'appointment_types', 'patients.petType', 'patient.petType', 'patient.user');
         }
 
         // Notify Super Admins
