@@ -568,7 +568,7 @@ onUnmounted(() => {
                                     Book Appointment
                                 </Button>
                             </DialogTrigger>
-                            <DialogContent class="sm:max-w-[700px] max-h-[95vh] sm:max-h-[90vh] !flex flex-col m-4 sm:m-0 !top-4 sm:!top-[50%] !translate-y-0 sm:!translate-y-[-50%] overflow-hidden">
+                            <DialogContent class="sm:max-w-[700px] h-[100vh] max-h-[100vh] sm:h-auto sm:max-h-[90vh] !flex flex-col m-0 sm:m-4 sm:m-0 !top-0 sm:!top-[50%] !translate-y-0 sm:!translate-y-[-50%] overflow-hidden rounded-none sm:rounded-lg">
                                 <div class="flex flex-col flex-1 min-h-0 overflow-y-auto sm:overflow-visible">
                                     <DialogHeader class="pb-2 sm:pb-4 flex-shrink-0">
                                         <DialogTitle class="text-lg sm:text-xl">Book an Appointment</DialogTitle>
@@ -709,7 +709,7 @@ onUnmounted(() => {
 
                                             <!-- Scrollable Table Container -->
                                             <div class="border rounded-lg overflow-hidden sm:flex-1 sm:min-h-0 flex flex-col">
-                                                <div class="overflow-x-auto sm:overflow-y-auto sm:max-h-[350px] md:max-h-[400px]">
+                                                <div class="overflow-x-auto sm:overflow-y-auto sm:max-h-[450px] md:max-h-[500px]">
                                                     <table class="w-full border-collapse">
                                                         <thead class="sticky top-0 bg-muted/50 z-10 backdrop-blur-sm">
                                                             <tr class="border-b">

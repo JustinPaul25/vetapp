@@ -146,11 +146,40 @@ const calculateAge = (birthDate: string | null) => {
     return `${months} month${months > 1 ? 's' : ''}`;
 };
 
+// Convert 12-hour format (h:mm AM/PM) to 24-hour format (HH:mm) for time input
+const convertTo24HourForInput = (timeString: string | null): string => {
+    if (!timeString) return '';
+    
+    // Check if already in 24-hour format (HH:mm or HH:mm:ss)
+    if (/^\d{2}:\d{2}(:\d{2})?$/.test(timeString)) {
+        // Extract just HH:mm
+        return timeString.substring(0, 5);
+    }
+    
+    // Check if in 12-hour format with AM/PM
+    if (timeString.includes('AM') || timeString.includes('PM')) {
+        const [time, period] = timeString.split(' ');
+        const [hours, minutes] = time.split(':');
+        let hour24 = parseInt(hours);
+        
+        if (period === 'PM' && hour24 !== 12) {
+            hour24 += 12;
+        } else if (period === 'AM' && hour24 === 12) {
+            hour24 = 0;
+        }
+        
+        return `${hour24.toString().padStart(2, '0')}:${minutes}`;
+    }
+    
+    // If format is unknown, return empty string
+    return '';
+};
+
 const approveDialogOpen = ref(false);
 
 const approveForm = useForm({
     appointment_date: props.appointment.appointment_date,
-    appointment_time: props.appointment.appointment_time,
+    appointment_time: convertTo24HourForInput(props.appointment.appointment_time),
     pet_gender: props.patient?.pet_gender || '',
     pet_allergies: props.patient?.pet_allergies || '',
 });
@@ -234,6 +263,14 @@ watch(() => rescheduleDialogOpen.value, (isOpen) => {
         if (rescheduleForm.value.appointment_date) {
             fetchAvailableTimes(rescheduleForm.value.appointment_date);
         }
+    }
+});
+
+// Watch for approve dialog open to ensure time is properly formatted
+watch(() => approveDialogOpen.value, (isOpen) => {
+    if (isOpen) {
+        // Update form with properly formatted time
+        approveForm.appointment_time = convertTo24HourForInput(props.appointment.appointment_time);
     }
 });
 
