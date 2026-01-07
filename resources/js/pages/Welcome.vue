@@ -351,7 +351,7 @@
     
     <style scoped>
     .hero-section {
-        background-image: url('/media/background.jpg');
+        background-image: url('/media/AniMed Homepage.png');
         background-size: cover;
         background-position: center;
         background-repeat: no-repeat;
