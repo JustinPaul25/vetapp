@@ -568,7 +568,7 @@ onUnmounted(() => {
                                     Book Appointment
                                 </Button>
                             </DialogTrigger>
-                            <DialogContent class="sm:max-w-[700px] h-[100vh] max-h-[100vh] sm:h-auto sm:max-h-[90vh] !flex flex-col m-0 sm:m-4 sm:m-0 !top-0 sm:!top-[50%] !translate-y-0 sm:!translate-y-[-50%] overflow-hidden rounded-none sm:rounded-lg">
+                            <DialogContent class="sm:max-w-[700px] h-[100vh] max-h-[100vh] sm:h-[100vh] sm:max-h-[100vh] !flex flex-col m-0 !top-0 !translate-y-0 overflow-hidden rounded-none sm:rounded-lg">
                                 <div class="flex flex-col flex-1 min-h-0 overflow-y-auto sm:overflow-visible">
                                     <DialogHeader class="pb-2 sm:pb-4 flex-shrink-0">
                                         <DialogTitle class="text-lg sm:text-xl">Book an Appointment</DialogTitle>
