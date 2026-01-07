@@ -291,12 +291,20 @@ class ClientController extends Controller
             // Example: Pet 1 + Pet 2 + Pet 3 all with "Check-up" = ONE appointment with 3 pets
             $appointmentsByType = [];
             foreach ($petAppointments as $pair) {
+                // Validate pair structure
+                if (!isset($pair['pet_id']) || !isset($pair['appointment_type_id'])) {
+                    continue; // Skip invalid pairs
+                }
+                
                 $petId = (int) $pair['pet_id']; // Ensure integer
                 $appointmentTypeId = (int) $pair['appointment_type_id']; // Ensure integer
 
                 // Verify pet belongs to user
                 $pet = $pets->firstWhere('id', $petId);
-                if (!$pet) continue;
+                if (!$pet) {
+                    Log::warning("Pet {$petId} not found or doesn't belong to user " . auth()->id());
+                    continue;
+                }
 
                 // Group by appointment type - pets with same appointment_type_id go into same group
                 if (!isset($appointmentsByType[$appointmentTypeId])) {
@@ -307,6 +315,13 @@ class ClientController extends Controller
                     $appointmentsByType[$appointmentTypeId][] = $petId;
                 }
             }
+            
+            // Log grouping for debugging
+            Log::info('Appointment grouping', [
+                'user_id' => auth()->id(),
+                'input_pairs' => $petAppointments,
+                'grouped_by_type' => $appointmentsByType,
+            ]);
 
             // Create ONE appointment per appointment type and attach all pets for that type
             // If user selects: Pet1+Pet2 for "Check-up" and Pet3 for "Vaccination"
@@ -317,6 +332,7 @@ class ClientController extends Controller
                     // Ensure unique pet IDs and at least one pet
                     $petIdsForType = array_unique($petIdsForType);
                     if (empty($petIdsForType)) {
+                        Log::warning("Skipping appointment creation for type {$appointmentTypeId} - no pets");
                         continue; // Skip if no pets for this type
                     }
 
@@ -339,6 +355,17 @@ class ClientController extends Controller
                     // Attach ALL pets to this ONE appointment via pivot table
                     // This is what makes it ONE appointment with multiple pets
                     $appointment->patients()->sync($petIdsForType);
+                    
+                    // Reload the appointment with relationships to ensure data is correct
+                    $appointment->load('patients', 'appointment_type');
+
+                    // Log for debugging
+                    Log::info('Appointment created', [
+                        'appointment_id' => $appointment->id,
+                        'appointment_type_id' => $appointmentTypeId,
+                        'pet_count' => count($petIdsForType),
+                        'pet_ids' => $petIdsForType,
+                    ]);
 
                     $createdAppointments[] = $appointment;
                 }
@@ -450,7 +477,7 @@ class ClientController extends Controller
 
         // Reload appointments with relationships
         foreach ($createdAppointments as $appointment) {
-            $appointment->load('appointment_type', 'patient.petType', 'patient.user');
+            $appointment->load('appointment_type', 'patients.petType', 'patient.petType', 'patient.user');
         }
 
         // Notify Super Admins
