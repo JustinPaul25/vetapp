@@ -568,16 +568,17 @@ onUnmounted(() => {
                                     Book Appointment
                                 </Button>
                             </DialogTrigger>
-                            <DialogContent class="sm:max-w-[700px] max-h-[90vh] flex flex-col">
-                                <DialogHeader class="pb-4 flex-shrink-0">
-                                    <DialogTitle>Book an Appointment</DialogTitle>
-                                    <DialogDescription>
-                                        {{ steps[currentStep].description }}
-                                    </DialogDescription>
-                                </DialogHeader>
-                                
-                                <!-- Stepper Indicator -->
-                                <div class="py-6 px-4 border-b flex-shrink-0">
+                            <DialogContent class="sm:max-w-[700px] max-h-[95vh] sm:max-h-[90vh] !flex flex-col m-4 sm:m-0 !top-4 sm:!top-[50%] !translate-y-0 sm:!translate-y-[-50%] overflow-hidden">
+                                <div class="flex flex-col flex-1 min-h-0 overflow-y-auto sm:overflow-visible">
+                                    <DialogHeader class="pb-2 sm:pb-4 flex-shrink-0">
+                                        <DialogTitle class="text-lg sm:text-xl">Book an Appointment</DialogTitle>
+                                        <DialogDescription class="text-xs sm:text-sm">
+                                            {{ steps[currentStep].description }}
+                                        </DialogDescription>
+                                    </DialogHeader>
+                                    
+                                    <!-- Stepper Indicator -->
+                                    <div class="py-3 sm:py-6 px-2 sm:px-4 border-b flex-shrink-0">
                                     <div class="flex items-start">
                                         <div
                                             v-for="(step, index) in steps"
@@ -592,7 +593,7 @@ onUnmounted(() => {
                                                     @click="goToStep(step.id)"
                                                     :disabled="index > 0 && !canProceedFromStep(index - 1)"
                                                     :class="[
-                                                        'flex items-center justify-center w-10 h-10 rounded-full border-2 transition-all duration-200',
+                                                        'flex items-center justify-center w-8 h-8 sm:w-10 sm:h-10 rounded-full border-2 transition-all duration-200',
                                                         'disabled:pointer-events-none disabled:opacity-50',
                                                         currentStep === index
                                                             ? 'bg-primary border-primary text-primary-foreground shadow-lg scale-110'
@@ -605,15 +606,15 @@ onUnmounted(() => {
                                                 >
                                                     <Check
                                                         v-if="index < currentStep"
-                                                        class="w-5 h-5"
+                                                        class="w-4 h-4 sm:w-5 sm:h-5"
                                                     />
-                                                    <span v-else class="text-sm font-semibold">{{ index + 1 }}</span>
+                                                    <span v-else class="text-xs sm:text-sm font-semibold">{{ index + 1 }}</span>
                                                 </button>
                                                 <!-- Step Label -->
-                                                <div class="mt-2 text-center max-w-[80px]">
+                                                <div class="mt-1 sm:mt-2 text-center max-w-[60px] sm:max-w-[80px]">
                                                     <p
                                                         :class="[
-                                                            'text-xs font-medium whitespace-nowrap',
+                                                            'text-[10px] sm:text-xs font-medium whitespace-nowrap',
                                                             currentStep === index
                                                                 ? 'text-foreground font-semibold'
                                                                 : index < currentStep
@@ -628,7 +629,7 @@ onUnmounted(() => {
                                             <!-- Connector Line -->
                                             <div
                                                 v-if="index < steps.length - 1"
-                                                class="flex-1 relative -mt-[20px] mx-2"
+                                                class="flex-1 relative -mt-[16px] sm:-mt-[20px] mx-1 sm:mx-2"
                                             >
                                                 <div
                                                     :class="[
@@ -642,19 +643,21 @@ onUnmounted(() => {
                                 </div>
 
                                 <!-- Step Content -->
-                                <div class="grid gap-4 py-6 min-h-[300px] flex-1">
+                                <div class="flex flex-col gap-3 sm:gap-4 py-3 sm:py-6 min-h-[200px] sm:min-h-[300px] flex-1">
                                     <!-- Step 0: Pet & Appointment Type -->
-                                    <div v-if="currentStep === 0" class="space-y-4">
-                                        <div class="flex items-center justify-between">
-                                            <Label>Select Pet(s) and Appointment Type(s)</Label>
+                                    <div v-if="currentStep === 0" class="flex flex-col gap-3 sm:gap-4 sm:flex-1 sm:min-h-0">
+                                        <div class="flex items-center justify-between gap-2 flex-shrink-0">
+                                            <Label class="text-sm sm:text-base">Select Pet(s) and Appointment Type(s)</Label>
                                             <Button
                                                 type="button"
                                                 variant="outline"
                                                 size="sm"
+                                                class="text-xs sm:text-sm whitespace-nowrap"
                                                 @click="showCreatePetDialog = true"
                                             >
-                                                <Plus class="h-4 w-4 mr-2" />
-                                                Add Pet
+                                                <Plus class="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
+                                                <span class="hidden sm:inline">Add Pet</span>
+                                                <span class="sm:hidden">Add</span>
                                             </Button>
                                         </div>
                                         
@@ -677,18 +680,18 @@ onUnmounted(() => {
 
                                         <div
                                             v-else
-                                            class="space-y-3"
+                                            class="flex flex-col gap-3 sm:flex-1 sm:min-h-0"
                                         >
                                             <!-- Sort Options -->
-                                            <div class="flex items-center gap-2">
-                                                <Label class="text-sm text-muted-foreground">Sort by name:</Label>
+                                            <div class="flex items-center gap-2 flex-shrink-0">
+                                                <Label class="text-xs sm:text-sm text-muted-foreground">Sort by name:</Label>
                                                 <div class="inline-flex gap-1 rounded-lg bg-muted p-1">
                                                     <Button
                                                         type="button"
                                                         :variant="petSortOrder === 'az' ? 'default' : 'ghost'"
                                                         size="sm"
                                                         @click="petSortOrder = 'az'"
-                                                        class="h-7 px-3 text-xs"
+                                                        class="h-6 sm:h-7 px-2 sm:px-3 text-xs"
                                                     >
                                                         A-Z
                                                     </Button>
@@ -697,7 +700,7 @@ onUnmounted(() => {
                                                         :variant="petSortOrder === 'za' ? 'default' : 'ghost'"
                                                         size="sm"
                                                         @click="petSortOrder = 'za'"
-                                                        class="h-7 px-3 text-xs"
+                                                        class="h-6 sm:h-7 px-2 sm:px-3 text-xs"
                                                     >
                                                         Z-A
                                                     </Button>
@@ -705,16 +708,16 @@ onUnmounted(() => {
                                             </div>
 
                                             <!-- Scrollable Table Container -->
-                                            <div class="border rounded-lg overflow-hidden">
-                                                <div class="overflow-x-auto max-h-[400px] overflow-y-auto">
+                                            <div class="border rounded-lg overflow-hidden sm:flex-1 sm:min-h-0 flex flex-col">
+                                                <div class="overflow-x-auto sm:overflow-y-auto sm:max-h-[350px] md:max-h-[400px]">
                                                     <table class="w-full border-collapse">
-                                                        <thead class="sticky top-0 bg-muted/50 z-10">
+                                                        <thead class="sticky top-0 bg-muted/50 z-10 backdrop-blur-sm">
                                                             <tr class="border-b">
-                                                                <th class="text-left p-3 font-semibold text-sm">Pet</th>
+                                                                <th class="text-left p-2 sm:p-3 font-semibold text-xs sm:text-sm">Pet</th>
                                                                 <th
                                                                     v-for="appointmentType in props.appointment_types"
                                                                     :key="appointmentType.id"
-                                                                    class="text-center p-3 font-semibold text-sm"
+                                                                    class="text-center p-2 sm:p-3 font-semibold text-xs sm:text-sm"
                                                                 >
                                                                     {{ appointmentType.name }}
                                                                 </th>
@@ -726,13 +729,13 @@ onUnmounted(() => {
                                                                 :key="pet.id"
                                                                 class="border-b hover:bg-muted/30"
                                                             >
-                                                                <td class="p-3 font-medium text-sm">
+                                                                <td class="p-2 sm:p-3 font-medium text-xs sm:text-sm">
                                                                     {{ pet.pet_name }} ({{ pet.pet_type }})
                                                                 </td>
                                                                 <td
                                                                     v-for="appointmentType in props.appointment_types"
                                                                     :key="appointmentType.id"
-                                                                    class="p-3 text-center"
+                                                                    class="p-2 sm:p-3 text-center"
                                                                 >
                                                                     <input
                                                                         type="checkbox"
@@ -749,15 +752,17 @@ onUnmounted(() => {
                                             </div>
                                         </div>
 
-                                        <p
-                                            v-if="errors.pet_appointments"
-                                            class="text-sm text-destructive"
-                                        >
-                                            {{ errors.pet_appointments[0] }}
-                                        </p>
-                                        <p class="text-sm text-muted-foreground">
-                                            Select one or more appointment types for each pet by checking the boxes. You can select multiple pets and multiple appointment types.
-                                        </p>
+                                        <div class="flex-shrink-0 space-y-1 sm:space-y-2">
+                                            <p
+                                                v-if="errors.pet_appointments"
+                                                class="text-xs sm:text-sm text-destructive"
+                                            >
+                                                {{ errors.pet_appointments[0] }}
+                                            </p>
+                                            <p class="text-xs sm:text-sm text-muted-foreground">
+                                                Select one or more appointment types for each pet by checking the boxes. You can select multiple pets and multiple appointment types.
+                                            </p>
+                                        </div>
                                     </div>
 
                                     <!-- Step 1: Appointment Date -->
@@ -859,12 +864,15 @@ onUnmounted(() => {
                                         </div>
                                     </div>
                                 </div>
+                                </div>
 
                                 <!-- Navigation Footer -->
-                                <DialogFooter class="border-t pt-4 mt-4 flex-shrink-0">
-                                    <div class="flex justify-between w-full">
+                                <DialogFooter class="border-t pt-3 sm:pt-4 mt-3 sm:mt-4 flex-shrink-0 gap-2 sm:gap-0">
+                                    <div class="flex justify-between w-full gap-2">
                                         <Button
                                             variant="outline"
+                                            size="sm"
+                                            class="text-xs sm:text-sm"
                                             @click="isModalOpen = false"
                                         >
                                             Cancel
@@ -873,26 +881,36 @@ onUnmounted(() => {
                                             <Button
                                                 v-if="currentStep > 0"
                                                 variant="outline"
+                                                size="sm"
+                                                class="text-xs sm:text-sm"
                                                 @click="previousStep"
                                             >
-                                                <ChevronLeft class="h-4 w-4 mr-2" />
-                                                Previous
+                                                <ChevronLeft class="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
+                                                <span class="hidden sm:inline">Previous</span>
+                                                <span class="sm:hidden">Prev</span>
                                             </Button>
                                             <Button
                                                 v-if="currentStep < steps.length - 1"
+                                                size="sm"
+                                                class="text-xs sm:text-sm"
                                                 @click="nextStep"
                                                 :disabled="!canProceedFromStep(currentStep)"
                                             >
                                                 Next
-                                                <ChevronRight class="h-4 w-4 ml-2" />
+                                                <ChevronRight class="h-3 w-3 sm:h-4 sm:w-4 ml-1 sm:ml-2" />
                                             </Button>
                                             <Button
                                                 v-if="currentStep === steps.length - 1"
+                                                size="sm"
+                                                class="text-xs sm:text-sm"
                                                 @click="handleBookAppointment"
                                                 :disabled="!canProceedStep0 || !form.appointment_date || form.appointment_times.length === 0 || submitting"
                                             >
                                                 <span v-if="submitting">Booking...</span>
-                                                <span v-else>Book Appointment</span>
+                                                <template v-else>
+                                                    <span class="hidden sm:inline">Book Appointment</span>
+                                                    <span class="sm:hidden">Book</span>
+                                                </template>
                                             </Button>
                                         </div>
                                     </div>
