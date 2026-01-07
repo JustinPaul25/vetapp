@@ -568,8 +568,8 @@ onUnmounted(() => {
                                     Book Appointment
                                 </Button>
                             </DialogTrigger>
-                            <DialogContent class="sm:max-w-[700px]">
-                                <DialogHeader class="pb-4">
+                            <DialogContent class="sm:max-w-[700px] max-h-[90vh] flex flex-col">
+                                <DialogHeader class="pb-4 flex-shrink-0">
                                     <DialogTitle>Book an Appointment</DialogTitle>
                                     <DialogDescription>
                                         {{ steps[currentStep].description }}
@@ -577,7 +577,7 @@ onUnmounted(() => {
                                 </DialogHeader>
                                 
                                 <!-- Stepper Indicator -->
-                                <div class="py-6 px-4 border-b">
+                                <div class="py-6 px-4 border-b flex-shrink-0">
                                     <div class="flex items-start">
                                         <div
                                             v-for="(step, index) in steps"
@@ -642,7 +642,7 @@ onUnmounted(() => {
                                 </div>
 
                                 <!-- Step Content -->
-                                <div class="grid gap-4 py-6 min-h-[300px]">
+                                <div class="grid gap-4 py-6 min-h-[300px] flex-1">
                                     <!-- Step 0: Pet & Appointment Type -->
                                     <div v-if="currentStep === 0" class="space-y-4">
                                         <div class="flex items-center justify-between">
@@ -861,7 +861,7 @@ onUnmounted(() => {
                                 </div>
 
                                 <!-- Navigation Footer -->
-                                <DialogFooter class="border-t pt-4 mt-4">
+                                <DialogFooter class="border-t pt-4 mt-4 flex-shrink-0">
                                     <div class="flex justify-between w-full">
                                         <Button
                                             variant="outline"

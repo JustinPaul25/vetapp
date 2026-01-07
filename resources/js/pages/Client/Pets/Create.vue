@@ -108,6 +108,13 @@ watch(() => form.pet_breed, (newValue) => {
         customBreedDisplay.value = null;
     }
 });
+
+// Calculate yesterday's date to prevent selecting today
+const maxDate = computed(() => {
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+    return yesterday.toISOString().split('T')[0]; // Format as YYYY-MM-DD
+});
 </script>
 
 <template>
@@ -214,6 +221,7 @@ watch(() => form.pet_breed, (newValue) => {
                                     id="pet_birth_date"
                                     v-model="form.pet_birth_date"
                                     type="date"
+                                    :max="maxDate"
                                     autocomplete="off"
                                 />
                                 <InputError :message="form.errors.pet_birth_date" />
