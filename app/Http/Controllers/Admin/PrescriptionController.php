@@ -118,7 +118,7 @@ class PrescriptionController extends Controller
                 'id' => $prescription->appointment->id,
                 'appointment_type' => $prescription->appointment->appointment_type->name ?? 'N/A',
                 'appointment_date' => $prescription->appointment->appointment_date->format('Y-m-d'),
-                'appointment_time' => $prescription->appointment->appointment_time,
+                'appointment_time' => $this->formatAppointmentTime($prescription->appointment->appointment_time),
                 'created_at' => $prescription->appointment->created_at->toISOString(),
             ],
             'patient' => [
@@ -279,6 +279,22 @@ class PrescriptionController extends Controller
                 return 'Range: ' . $request->get('date_from') . ' to ' . $request->get('date_to');
             default:
                 return 'All Records';
+        }
+    }
+
+    /**
+     * Format appointment time to 12-hour format.
+     */
+    private function formatAppointmentTime($time)
+    {
+        try {
+            return \Carbon\Carbon::createFromFormat('H:i:s', $time)->format('g:i A');
+        } catch (\Exception $e) {
+            try {
+                return \Carbon\Carbon::createFromFormat('H:i', $time)->format('g:i A');
+            } catch (\Exception $e) {
+                return $time;
+            }
         }
     }
 }

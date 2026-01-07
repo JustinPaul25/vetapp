@@ -169,11 +169,23 @@ class AppointmentController extends Controller
                 ];
             })->toArray();
             
+            // Format appointment time to 12-hour format
+            $formattedTime = $appointment->appointment_time;
+            try {
+                $formattedTime = \Carbon\Carbon::createFromFormat('H:i:s', $appointment->appointment_time)->format('g:i A');
+            } catch (\Exception $e) {
+                try {
+                    $formattedTime = \Carbon\Carbon::createFromFormat('H:i', $appointment->appointment_time)->format('g:i A');
+                } catch (\Exception $e) {
+                    $formattedTime = $appointment->appointment_time;
+                }
+            }
+            
             return [
                 'id' => $appointment->id,
                 'appointment_type' => $appointment->appointment_type->name ?? 'N/A',
                 'appointment_date' => $appointment->appointment_date ? $appointment->appointment_date->format('Y-m-d') : null,
-                'appointment_time' => $appointment->appointment_time,
+                'appointment_time' => $formattedTime,
                 'status' => $status,
                 'pet_type' => $petTypes ?: ($appointment->patient && $appointment->patient->petType ? $appointment->patient->petType->name : 'N/A'),
                 'pet_breed' => $petBreeds ?: ($appointment->patient ? $appointment->patient->pet_breed : 'N/A'),
@@ -353,12 +365,24 @@ class AppointmentController extends Controller
             ];
         });
 
+        // Format appointment time to 12-hour format
+        $formattedTime = $appointment->appointment_time;
+        try {
+            $formattedTime = \Carbon\Carbon::createFromFormat('H:i:s', $appointment->appointment_time)->format('g:i A');
+        } catch (\Exception $e) {
+            try {
+                $formattedTime = \Carbon\Carbon::createFromFormat('H:i', $appointment->appointment_time)->format('g:i A');
+            } catch (\Exception $e) {
+                $formattedTime = $appointment->appointment_time;
+            }
+        }
+        
         return Inertia::render('Admin/Appointments/Show', [
             'appointment' => [
                 'id' => $appointment->id,
                 'appointment_type' => $appointment->appointment_type->name ?? 'N/A',
                 'appointment_date' => $appointment->appointment_date->format('Y-m-d'),
-                'appointment_time' => $appointment->appointment_time,
+                'appointment_time' => $formattedTime,
                 'symptoms' => $appointment->symptoms,
                 'is_approved' => $appointment->is_approved,
                 'is_completed' => $appointment->is_completed,
@@ -796,11 +820,26 @@ class AppointmentController extends Controller
             ];
         });
         
+        // Format appointment time to 12-hour format
+        $formattedTime = $appointment->appointment_time;
+        try {
+            // Try parsing with seconds first
+            $formattedTime = \Carbon\Carbon::createFromFormat('H:i:s', $appointment->appointment_time)->format('g:i A');
+        } catch (\Exception $e) {
+            try {
+                // Try parsing without seconds
+                $formattedTime = \Carbon\Carbon::createFromFormat('H:i', $appointment->appointment_time)->format('g:i A');
+            } catch (\Exception $e) {
+                // If both fail, keep the original value
+                $formattedTime = $appointment->appointment_time;
+            }
+        }
+        
         return Inertia::render('Admin/Prescriptions/Create', [
             'appointment' => [
                 'id' => $appointment->id,
                 'appointment_date' => $appointment->appointment_date->format('Y-m-d'),
-                'appointment_time' => $appointment->appointment_time,
+                'appointment_time' => $formattedTime,
                 'appointment_type' => $appointment->appointment_type->name ?? 'N/A',
             ],
             'patient' => [

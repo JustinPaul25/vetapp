@@ -236,11 +236,23 @@ class PatientController extends Controller
                     'address' => $patient->user->address ?? null,
                 ] : null,
                 'appointments' => $patient->appointments->map(function ($appointment) {
+                    // Format appointment time to 12-hour format
+                    $formattedTime = $appointment->appointment_time;
+                    try {
+                        $formattedTime = \Carbon\Carbon::createFromFormat('H:i:s', $appointment->appointment_time)->format('g:i A');
+                    } catch (\Exception $e) {
+                        try {
+                            $formattedTime = \Carbon\Carbon::createFromFormat('H:i', $appointment->appointment_time)->format('g:i A');
+                        } catch (\Exception $e) {
+                            $formattedTime = $appointment->appointment_time;
+                        }
+                    }
+                    
                     return [
                         'id' => $appointment->id,
                         'appointment_type' => $appointment->appointment_type->name ?? null,
                         'appointment_date' => $appointment->appointment_date ? $appointment->appointment_date->toDateString() : null,
-                        'appointment_time' => $appointment->appointment_time,
+                        'appointment_time' => $formattedTime,
                         'created_at' => $appointment->created_at->toISOString(),
                     ];
                 }),
