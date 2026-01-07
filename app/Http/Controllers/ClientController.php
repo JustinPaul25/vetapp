@@ -163,15 +163,32 @@ class ClientController extends Controller
                 $petCount = $patients->count();
                 
                 // Build pet items for this appointment
-                // For each pet, we need to determine which appointment type(s) it has
-                // Since we're grouping all pets together, we'll show all appointment types for each pet
-                // or we can show the primary appointment type for backward compatibility
-                $petItems = $patients->map(function ($pet) use ($appointmentTypes) {
-                    // For now, show all appointment types for each pet since they're in the same appointment
-                    // In the future, we could track individual pet-appointment type relationships
+                // Get each pet's individual appointment type(s) from the pivot table
+                $petItems = $patients->map(function ($pet) use ($appointment) {
+                    // Get appointment types for this specific pet from the pivot table
+                    $petAppointmentTypes = \DB::table('appointment_patient')
+                        ->where('appointment_id', $appointment->id)
+                        ->where('patient_id', $pet->id)
+                        ->join('appointment_types', 'appointment_patient.appointment_type_id', '=', 'appointment_types.id')
+                        ->pluck('appointment_types.name')
+                        ->toArray();
+                    
+                    // If no appointment types found in pivot, fallback to appointment's primary type
+                    if (empty($petAppointmentTypes)) {
+                        if ($appointment->relationLoaded('appointment_type') && $appointment->appointment_type) {
+                            $petAppointmentTypes = [$appointment->appointment_type->name];
+                        } else {
+                            $petAppointmentTypes = ['N/A'];
+                        }
+                    }
+                    
+                    $petAppointmentTypeDisplay = count($petAppointmentTypes) > 1 
+                        ? implode(', ', $petAppointmentTypes) 
+                        : ($petAppointmentTypes[0] ?? 'N/A');
+                    
                     return [
                         'id' => $pet->id,
-                        'appointment_type' => count($appointmentTypes) > 1 ? implode(', ', $appointmentTypes) : ($appointmentTypes[0] ?? 'N/A'),
+                        'appointment_type' => $petAppointmentTypeDisplay,
                         'pet_type' => $pet->petType ? $pet->petType->name : 'N/A',
                         'pet_name' => $pet->pet_name,
                     ];
@@ -361,7 +378,7 @@ class ClientController extends Controller
 
             // Create ONE appointment for ALL pets with ALL appointment types
             // Use database transaction to ensure atomicity
-            \DB::transaction(function () use ($allPetIds, $allAppointmentTypeIds, $appointmentDate, $symptoms, $time, &$createdAppointments) {
+            \DB::transaction(function () use ($allPetIds, $allAppointmentTypeIds, $petAppointmentTypeMap, $appointmentDate, $symptoms, $time, &$createdAppointments) {
                 // Ensure we have at least one pet
                 $allPetIds = array_unique($allPetIds);
                 if (empty($allPetIds)) {
@@ -391,8 +408,24 @@ class ClientController extends Controller
                     'user_id' => Auth::id(),
                 ]);
 
-                // Attach ALL pets to this ONE appointment via pivot table
-                $appointment->patients()->sync($allPetIds);
+                // Attach ALL pets to this ONE appointment via pivot table with their individual appointment types
+                // Each pet can have multiple appointment types, so we need to attach each combination
+                foreach ($petAppointmentTypeMap as $petId => $appointmentTypeIds) {
+                    foreach ($appointmentTypeIds as $appointmentTypeId) {
+                        // Check if this combination already exists to avoid duplicates
+                        $exists = \DB::table('appointment_patient')
+                            ->where('appointment_id', $appointment->id)
+                            ->where('patient_id', $petId)
+                            ->where('appointment_type_id', $appointmentTypeId)
+                            ->exists();
+                        
+                        if (!$exists) {
+                            $appointment->patients()->attach($petId, [
+                                'appointment_type_id' => $appointmentTypeId,
+                            ]);
+                        }
+                    }
+                }
                 
                 // Attach ALL appointment types to this appointment via many-to-many relationship
                 if (!empty($allAppointmentTypeIds)) {
@@ -409,6 +442,7 @@ class ClientController extends Controller
                     'all_appointment_type_ids' => $allAppointmentTypeIds,
                     'pet_count' => count($allPetIds),
                     'pet_ids' => $allPetIds,
+                    'pet_appointment_type_map' => $petAppointmentTypeMap,
                 ]);
 
                 $createdAppointments[] = $appointment;
@@ -521,8 +555,24 @@ class ClientController extends Controller
                     'user_id' => Auth::id(),
                 ]);
 
-                // Attach ALL pets to this ONE appointment via pivot table
-                $appointment->patients()->sync($uniquePetIds);
+                // Attach ALL pets to this ONE appointment via pivot table with ALL appointment types
+                // Legacy format: each pet gets all appointment types (cartesian product)
+                foreach ($uniquePetIds as $petId) {
+                    foreach ($uniqueAppointmentTypeIds as $appointmentTypeId) {
+                        // Check if this combination already exists to avoid duplicates
+                        $exists = \DB::table('appointment_patient')
+                            ->where('appointment_id', $appointment->id)
+                            ->where('patient_id', $petId)
+                            ->where('appointment_type_id', $appointmentTypeId)
+                            ->exists();
+                        
+                        if (!$exists) {
+                            $appointment->patients()->attach($petId, [
+                                'appointment_type_id' => $appointmentTypeId,
+                            ]);
+                        }
+                    }
+                }
                 
                 // Attach ALL appointment types to this appointment via many-to-many relationship
                 $appointment->appointment_types()->sync($uniqueAppointmentTypeIds);
