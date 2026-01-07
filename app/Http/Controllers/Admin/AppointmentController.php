@@ -149,12 +149,19 @@ class AppointmentController extends Controller
             $ownerMobile = $firstPatient && $firstPatient->user ? $firstPatient->user->mobile_number ?? 'N/A' : 'N/A';
             
             // Get all pets details for this appointment
-            $allPets = $patients->map(function ($patient) {
+            // Check if each pet has a prescription for this appointment
+            $allPets = $patients->map(function ($patient) use ($appointment) {
+                // Check if this pet has a prescription for this appointment
+                $hasPrescription = Prescription::where('appointment_id', $appointment->id)
+                    ->where('patient_id', $patient->id)
+                    ->exists();
+                
                 return [
                     'id' => $patient->id,
                     'pet_name' => $patient->pet_name ?? 'N/A',
                     'pet_type' => $patient->petType->name ?? 'N/A',
                     'pet_breed' => $patient->pet_breed ?? 'N/A',
+                    'has_prescription' => $hasPrescription,
                 ];
             })->toArray();
             
@@ -357,7 +364,12 @@ class AppointmentController extends Controller
                 'created_at' => $appointment->created_at->toISOString(),
                 'updated_at' => $appointment->updated_at->toISOString(),
             ],
-            'patients' => $appointment->patients->map(function ($patient) {
+            'patients' => $appointment->patients->map(function ($patient) use ($appointment) {
+                // Check if this pet has a prescription for this appointment
+                $hasPrescription = Prescription::where('appointment_id', $appointment->id)
+                    ->where('patient_id', $patient->id)
+                    ->exists();
+                
                 return [
                     'id' => $patient->id,
                     'pet_name' => $patient->pet_name,
@@ -366,6 +378,7 @@ class AppointmentController extends Controller
                     'pet_birth_date' => $patient->pet_birth_date ? $patient->pet_birth_date->format('Y-m-d') : null,
                     'pet_allergies' => $patient->pet_allergies,
                     'pet_type' => $patient->petType->name ?? 'N/A',
+                    'has_prescription' => $hasPrescription,
                     'owner' => $patient->user ? [
                         'id' => $patient->user->id,
                         'name' => trim(($patient->user->first_name ?? '') . ' ' . ($patient->user->last_name ?? '')) ?: $patient->user->name,
@@ -696,7 +709,7 @@ class AppointmentController extends Controller
     /**
      * Show the prescription creation form.
      */
-    public function createPrescription($id)
+    public function createPrescription(Request $request, $id)
     {
         // Exclude general "Diarrhea" and "Vomiting" when specific types exist
         $symptoms = Symptom::whereNotIn('name', ['Diarrhea', 'Vomiting'])
@@ -713,19 +726,69 @@ class AppointmentController extends Controller
             ->where('instructions', '!=', '')
             ->pluck('instructions');
         
-        $appointment = Appointment::with(['patient.petType', 'appointment_type', 'user'])
+        $appointment = Appointment::with([
+            'patient.petType', 
+            'patients.petType', // Load all patients for the appointment
+            'appointment_type', 
+            'user'
+        ])
             ->where('is_approved', 1)
-            ->doesntHave('prescription')
             ->where('id', $id)
             ->firstOrFail();
         
-        $patient = $appointment->patient;
+        // Get all pets associated with this appointment
+        $allPatients = $appointment->patients;
+        
+        // If patient_id is provided in request, use that; otherwise use primary patient
+        $requestedPatientId = $request->get('patient_id');
+        $patient = null;
+        
+        if ($requestedPatientId) {
+            // Find the requested patient among the appointment's patients
+            $patient = $allPatients->firstWhere('id', $requestedPatientId);
+        }
+        
+        // If patient not found or not provided, use primary patient
+        if (!$patient) {
+            $patient = $appointment->patient;
+        }
+        
+        // Verify the patient belongs to this appointment
+        if (!$allPatients->contains('id', $patient->id)) {
+            abort(404, 'Patient not found in this appointment.');
+        }
+        
+        // Check if this patient already has a prescription for this appointment
+        $existingPrescription = Prescription::where('appointment_id', $appointment->id)
+            ->where('patient_id', $patient->id)
+            ->first();
+        
+        if ($existingPrescription) {
+            return redirect()->route('admin.appointments.show', $appointment->id)
+                ->with('error', "A prescription already exists for {$patient->pet_name} in this appointment.");
+        }
+        
         $medicines = Medicine::all()->map(function ($medicine) {
             return [
                 'id' => $medicine->id,
                 'name' => $medicine->name,
                 'dosage' => $medicine->dosage,
                 'stock' => $medicine->stock,
+            ];
+        });
+        
+        // Prepare list of all pets for selection
+        $patientsList = $allPatients->map(function ($p) use ($appointment) {
+            $hasPrescription = Prescription::where('appointment_id', $appointment->id)
+                ->where('patient_id', $p->id)
+                ->exists();
+            
+            return [
+                'id' => $p->id,
+                'pet_name' => $p->pet_name,
+                'pet_breed' => $p->pet_breed,
+                'pet_type' => $p->petType->name ?? 'N/A',
+                'has_prescription' => $hasPrescription,
             ];
         });
         
@@ -743,6 +806,7 @@ class AppointmentController extends Controller
                 'pet_type' => $patient->petType->name ?? 'N/A',
                 'pet_birth_date' => $patient->pet_birth_date ? $patient->pet_birth_date->format('Y-m-d') : null,
             ],
+            'patients' => $patientsList, // All pets in the appointment
             'medicines' => $medicines,
             'symptoms' => $symptoms,
             'instructions' => $instructions,
@@ -756,6 +820,7 @@ class AppointmentController extends Controller
     {
         $request->validate([
             'pet_current_weight' => 'required|numeric|min:0',
+            'patient_id' => 'required|exists:patients,id', // Patient ID for the prescription
             'symptoms' => 'required|array|min:1',
             'symptoms.*' => 'required|string',
             'disease_ids' => 'required|array|min:1',
@@ -769,16 +834,37 @@ class AppointmentController extends Controller
             'follow_up_date' => 'nullable|date|after:today',
         ]);
 
-        $appointment = Appointment::with(['patient.user', 'patient.petType', 'appointment_type'])
+        $appointment = Appointment::with(['patient.user', 'patient.petType', 'appointment_type', 'patients'])
             ->where('is_approved', 1)
-            ->doesntHave('prescription')
             ->where('id', $id)
             ->firstOrFail();
         
-        return DB::transaction(function () use ($appointment, $request) {
+        // Get the patient for this prescription
+        $prescriptionPatientId = $request->patient_id;
+        
+        // Verify the patient belongs to this appointment
+        if (!$appointment->patients->contains('id', $prescriptionPatientId)) {
+            return back()->withErrors([
+                'patient_id' => ['The selected patient does not belong to this appointment.'],
+            ])->withInput();
+        }
+        
+        // Check if this specific patient already has a prescription for this appointment
+        $existingPrescription = Prescription::where('appointment_id', $appointment->id)
+            ->where('patient_id', $prescriptionPatientId)
+            ->first();
+        
+        if ($existingPrescription) {
+            $patient = $appointment->patients->firstWhere('id', $prescriptionPatientId);
+            return back()->withErrors([
+                'patient_id' => ["A prescription already exists for {$patient->pet_name} in this appointment."],
+            ])->withInput();
+        }
+        
+        return DB::transaction(function () use ($appointment, $request, $prescriptionPatientId) {
             $prescription = Prescription::create([
                 'appointment_id' => $appointment->id,
-                'patient_id' => $appointment->patient_id,
+                'patient_id' => $prescriptionPatientId, // Use the patient from request
                 'symptoms' => $request->symptoms ? implode(', ', array_map('ucwords', $request->symptoms)) : '',
                 'notes' => $request->notes ?? '',
                 'pet_weight' => $request->pet_current_weight,
@@ -787,7 +873,7 @@ class AppointmentController extends Controller
 
             // Save weight history
             PatientWeightHistory::create([
-                'patient_id' => $appointment->patient_id,
+                'patient_id' => $prescriptionPatientId, // Use the patient from request
                 'weight' => $request->pet_current_weight,
                 'recorded_at' => now(),
                 'prescription_id' => $prescription->id,
@@ -862,15 +948,25 @@ class AppointmentController extends Controller
                 $medicineModel->update(['stock' => $newStock]);
             }
 
-            // Generate appointment summary
-            $summary = $this->generateAppointmentSummary($appointment, $request, $prescription);
+            // Only mark appointment as completed if all pets have prescriptions
+            $allPatients = $appointment->patients;
+            $patientsWithPrescriptions = Prescription::where('appointment_id', $appointment->id)
+                ->whereIn('patient_id', $allPatients->pluck('id'))
+                ->distinct('patient_id')
+                ->count('patient_id');
             
-            $appointment->is_completed = true;
-            $appointment->summary = $summary;
-            $appointment->save();
+            // If all pets have prescriptions, mark appointment as completed
+            if ($patientsWithPrescriptions >= $allPatients->count()) {
+                // Generate appointment summary
+                $summary = $this->generateAppointmentSummary($appointment, $request, $prescription);
+                
+                $appointment->is_completed = true;
+                $appointment->summary = $summary;
+                $appointment->save();
+            }
 
             // Send prescription email notification to the owner (queued)
-            $patient = $appointment->patient;
+            $patient = $appointment->patients->firstWhere('id', $prescriptionPatientId);
             if ($patient && $patient->user && $patient->user->email) {
                 $patient->user->notify(new PrescriptionEmailNotification($prescription));
             }

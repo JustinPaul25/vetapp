@@ -6,7 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { Calendar, ArrowLeft, CheckCircle, FileText, Download, CalendarClock } from 'lucide-vue-next';
+import { Calendar, ArrowLeft, CheckCircle, FileText, Download, CalendarClock, CheckCircle2 } from 'lucide-vue-next';
 import { dashboard } from '@/routes';
 import { ref, computed, watch } from 'vue';
 import { CalendarDatePicker } from '@/components/ui/calendar-date-picker';
@@ -28,6 +28,7 @@ interface Patient {
     pet_birth_date: string | null;
     pet_allergies: string | null;
     pet_type: string;
+    has_prescription?: boolean;
     owner: Owner | null;
 }
 
@@ -179,6 +180,20 @@ const rescheduleReasons = [
 const availableTimes = ref<string[]>([]);
 const loadingTimes = ref(false);
 const rescheduleErrors = ref<Record<string, string[]>>({});
+
+// Create Prescription Dialog
+const createPrescriptionDialogOpen = ref(false);
+
+const createPrescriptionForPet = (petId: number) => {
+    // Check if pet already has a prescription
+    const pet = props.patients?.find(p => p.id === petId);
+    if (pet?.has_prescription) {
+        showError('Prescription Already Exists', `A prescription already exists for ${pet.pet_name}. Please select another pet.`);
+        return;
+    }
+    
+    router.visit(`/admin/appointments/${props.appointment.id}/prescription/create?patient_id=${petId}`);
+};
 
 // Get tomorrow's date as minimum date
 const minDate = computed(() => {
@@ -469,8 +484,62 @@ const handleReschedule = () => {
                                     </form>
                                 </DialogContent>
                             </Dialog>
+                            <!-- Create Prescription Button - Show dialog if multiple pets, direct link if single pet -->
+                            <Dialog v-if="isAdmin && appointment.is_approved && !appointment.is_completed && patients && patients.length > 1" v-model:open="createPrescriptionDialogOpen">
+                                <DialogTrigger as-child>
+                                    <Button>
+                                        <FileText class="h-4 w-4 mr-2" />
+                                        Create Prescription
+                                    </Button>
+                                </DialogTrigger>
+                                <DialogContent>
+                                    <DialogHeader>
+                                        <DialogTitle>Select Pet for Prescription</DialogTitle>
+                                        <DialogDescription>
+                                            This appointment has multiple pets. Select which pet to create a prescription for.
+                                        </DialogDescription>
+                                    </DialogHeader>
+                                    <div class="space-y-2 py-4">
+                                        <div
+                                            v-for="pet in patients"
+                                            :key="pet.id"
+                                            :class="[
+                                                'flex items-center justify-between p-3 border rounded-lg transition-colors',
+                                                pet.has_prescription 
+                                                    ? 'bg-green-50 dark:bg-green-950/20 border-green-300 dark:border-green-800 cursor-not-allowed opacity-75' 
+                                                    : 'hover:bg-muted cursor-pointer'
+                                            ]"
+                                            @click="!pet.has_prescription && createPrescriptionForPet(pet.id)"
+                                        >
+                                            <div class="flex-1">
+                                                <div class="font-medium flex items-center gap-2">
+                                                    {{ pet.pet_name || 'Unnamed Pet' }}
+                                                    <span
+                                                        v-if="pet.has_prescription"
+                                                        class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200"
+                                                    >
+                                                        <CheckCircle2 class="h-3 w-3" />
+                                                        Already Prescribed
+                                                    </span>
+                                                </div>
+                                                <div class="text-sm text-muted-foreground">{{ pet.pet_type }} - {{ pet.pet_breed }}</div>
+                                            </div>
+                                            <Button
+                                                type="button"
+                                                :variant="pet.has_prescription ? 'outline' : 'default'"
+                                                :disabled="pet.has_prescription"
+                                                size="sm"
+                                                @click.stop="!pet.has_prescription && createPrescriptionForPet(pet.id)"
+                                                :class="pet.has_prescription ? 'cursor-not-allowed opacity-50' : ''"
+                                            >
+                                                {{ pet.has_prescription ? 'Already Prescribed' : 'Create Prescription' }}
+                                            </Button>
+                                        </div>
+                                    </div>
+                                </DialogContent>
+                            </Dialog>
                             <Link
-                                v-if="isAdmin && appointment.is_approved && !appointment.is_completed"
+                                v-else-if="isAdmin && appointment.is_approved && !appointment.is_completed"
                                 :href="`/admin/appointments/${appointment.id}/prescription/create`"
                             >
                                 <Button>

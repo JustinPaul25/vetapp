@@ -92,21 +92,46 @@ class BrevoTransport extends AbstractTransport
             $contentDisposition = $headers->getHeaderBody('Content-Disposition');
             
             // Extract filename from Content-Disposition header
-            $filename = 'attachment';
+            $filename = 'attachment.pdf'; // Default with .pdf extension for Brevo API
             if ($contentDisposition && preg_match('/filename[^;=\n]*=(([\'"]).*?\2|[^;\n]*)/', $contentDisposition, $matches)) {
                 $filename = trim($matches[1], ' \'"');
+                // Ensure filename has an extension - if not, default to .pdf
+                if (!preg_match('/\.\w+$/', $filename)) {
+                    $filename .= '.pdf';
+                }
             } else {
-                $filename = $headers->getHeaderBody('Content-Name') ?: 'attachment';
+                $filename = $headers->getHeaderBody('Content-Name') ?: 'attachment.pdf';
+                // Ensure filename has an extension
+                if (!preg_match('/\.\w+$/', $filename)) {
+                    $filename .= '.pdf';
+                }
             }
 
-            $attachments[] = [
-                'name' => $filename,
-                'content' => base64_encode($attachment->getBody()),
-            ];
+            // Get attachment body content - handle both string and stream
+            $attachmentBody = $attachment->getBody();
+            $content = '';
+            
+            if (is_string($attachmentBody)) {
+                $content = $attachmentBody;
+            } elseif (is_resource($attachmentBody)) {
+                $content = stream_get_contents($attachmentBody);
+                rewind($attachmentBody); // Reset stream position
+            } else {
+                // Try to convert to string
+                $content = (string) $attachmentBody;
+            }
+
+            // Only add attachment if we have valid content
+            if (!empty($content)) {
+                $attachments[] = [
+                    'name' => $filename,
+                    'content' => base64_encode($content),
+                ];
+            }
         }
 
         if (!empty($attachments)) {
-            $payload['attachment'] = $attachments;
+            $payload['attachments'] = $attachments;
         }
 
         // Send the request

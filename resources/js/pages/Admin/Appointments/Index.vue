@@ -4,7 +4,7 @@ import { Head, Link, router } from '@inertiajs/vue3';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import { Calendar, Plus, Eye, Search, ArrowUpDown, ArrowUp, ArrowDown, ChevronDown, ChevronUp, Users } from 'lucide-vue-next';
+import { Calendar, Plus, Eye, Search, ArrowUpDown, ArrowUp, ArrowDown, ChevronDown, ChevronUp, Users, CheckCircle2 } from 'lucide-vue-next';
 import { computed, ref } from 'vue';
 import { dashboard } from '@/routes';
 
@@ -13,6 +13,7 @@ interface Pet {
     pet_name: string;
     pet_type: string;
     pet_breed: string;
+    has_prescription?: boolean;
 }
 
 interface Appointment {
@@ -333,11 +334,26 @@ const getStatusBadgeClass = (status: string) => {
                                                     <div
                                                         v-for="pet in appointment.all_pets"
                                                         :key="pet.id"
-                                                        class="p-3 bg-white dark:bg-neutral-800 rounded-lg border border-neutral-200 dark:border-neutral-700"
+                                                        class="p-3 bg-white dark:bg-neutral-800 rounded-lg border border-neutral-200 dark:border-neutral-700 relative"
+                                                        :class="pet.has_prescription ? 'border-green-500 dark:border-green-700' : ''"
                                                     >
-                                                        <div class="font-medium text-sm">{{ pet.pet_name }}</div>
-                                                        <div class="text-xs text-muted-foreground mt-1">
-                                                            {{ pet.pet_type }} • {{ pet.pet_breed }}
+                                                        <div class="flex items-center justify-between gap-2">
+                                                            <div class="flex-1">
+                                                                <div class="font-medium text-sm flex items-center gap-2">
+                                                                    {{ pet.pet_name }}
+                                                                    <span
+                                                                        v-if="pet.has_prescription"
+                                                                        class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200"
+                                                                        title="Has prescription"
+                                                                    >
+                                                                        <CheckCircle2 class="h-3 w-3" />
+                                                                        Prescribed
+                                                                    </span>
+                                                                </div>
+                                                                <div class="text-xs text-muted-foreground mt-1">
+                                                                    {{ pet.pet_type }} • {{ pet.pet_breed }}
+                                                                </div>
+                                                            </div>
                                                         </div>
                                                     </div>
                                                 </div>

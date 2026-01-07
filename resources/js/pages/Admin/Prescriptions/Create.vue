@@ -48,6 +48,14 @@ interface MedicineRow {
     disease_ids: number[]; // Track which diseases need this medicine
 }
 
+interface PatientOption {
+    id: number;
+    pet_name: string;
+    pet_breed: string;
+    pet_type: string;
+    has_prescription: boolean;
+}
+
 interface Props {
     appointment: {
         id: number;
@@ -62,6 +70,7 @@ interface Props {
         pet_type: string;
         pet_birth_date: string | null;
     };
+    patients?: PatientOption[]; // All pets in the appointment
     medicines: Medicine[];
     symptoms: Symptom[];
     instructions: string[];
@@ -80,6 +89,7 @@ const breadcrumbs = [
 
 const form = router.form({
     pet_current_weight: '',
+    patient_id: props.patient.id, // Include patient_id in form
     symptoms: [] as string[],
     disease_ids: [] as number[],
     medicines: [] as MedicineRow[],
@@ -154,12 +164,17 @@ const openSymptomsModal = () => {
 // Add initial medicine row
 const addMedicineRow = () => {
     const newId = medicineRowCounter.value++;
+    // Set default instruction value - user can modify it
+    const defaultInstruction = props.instructions && props.instructions.length > 0 
+        ? props.instructions[0] // Use first instruction from props if available
+        : 'After meals'; // Default fallback
+    
     medicineRows.value.push({
         id: newId,
         medicine_id: null,
         dosage: '',
-        instructions: '',
-        quantity: '',
+        instructions: defaultInstruction, // Set default instruction instead of empty string
+        quantity: '1 Pcs.', // Default quantity
         disease_ids: [], // No disease_ids for manually added medicines
     });
     // Mark as newly added so it shows even if empty
@@ -175,7 +190,7 @@ const removeMedicineRow = (rowId: number) => {
     }
 };
 
-// Search diseases by symptoms using ML
+// Search diseases by symptoms using ML with fallback to backend API
 const searchDiseasesBySymptoms = async () => {
     if (selectedSymptoms.value.length === 0) {
         searchedDiseases.value = [];
@@ -194,15 +209,39 @@ const searchDiseasesBySymptoms = async () => {
             return;
         }
 
-        // Use ML composable to predict diseases
-        const predictions = await predictDiseasesFromSymptoms(symptomIds, 10);
+        // Try ML prediction first
+        let predictions: any[] = [];
+        try {
+            const mlPredictions = await predictDiseasesFromSymptoms(symptomIds, 10);
+            predictions = mlPredictions.map(pred => ({
+                id: pred.disease_id,
+                name: pred.disease_name,
+                accuracy: parseFloat(pred.accuracy.replace('%', '')),
+            }));
+        } catch (mlError) {
+            console.warn('ML prediction failed, falling back to backend API:', mlError);
+        }
+
+        // If ML returns no results or fails, use backend API as fallback
+        if (predictions.length === 0) {
+            try {
+                const response = await axios.get('/admin/diseases/search-by-symptoms', {
+                    params: { symptoms: selectedSymptoms.value }
+                });
+                
+                if (response.data && Array.isArray(response.data)) {
+                    predictions = response.data.map((disease: any) => ({
+                        id: disease.id,
+                        name: disease.name,
+                        accuracy: disease.accuracy || 0,
+                    }));
+                }
+            } catch (apiError) {
+                console.error('Backend API fallback also failed:', apiError);
+            }
+        }
         
-        // Convert predictions to the format expected by the UI
-        searchedDiseases.value = predictions.map(pred => ({
-            id: pred.disease_id,
-            name: pred.disease_name,
-            accuracy: parseFloat(pred.accuracy.replace('%', '')),
-        }));
+        searchedDiseases.value = predictions;
     } catch (error) {
         console.error('Error searching diseases:', error);
         searchedDiseases.value = [];
@@ -312,11 +351,16 @@ const loadMedicinesForDisease = async (diseaseId: number) => {
             } else {
                 // Add new medicine row
                 const newId = medicineRowCounter.value++;
+                // Set default instruction value - user can modify it
+                const defaultInstruction = props.instructions && props.instructions.length > 0 
+                    ? props.instructions[0] // Use first instruction from props if available
+                    : 'After meals'; // Default fallback
+                
                 medicineRows.value.push({
                     id: newId,
                     medicine_id: medicine.id,
                     dosage: calculateDosage(medicine.dosage, form.pet_current_weight),
-                    instructions: '',
+                    instructions: defaultInstruction, // Set default instruction instead of empty string
                     quantity: '1 Pcs.',
                     disease_ids: [diseaseId], // Track which disease added this medicine
                 });
@@ -393,6 +437,22 @@ const filledMedicineRows = computed(() => {
     );
 });
 
+// Switch to different pet
+const switchPet = (petId: number) => {
+    // Check if this pet already has a prescription
+    const pet = props.patients?.find(p => p.id === petId);
+    if (pet?.has_prescription) {
+        showError('Prescription Already Exists', `A prescription already exists for ${pet.pet_name}. Please select another pet.`);
+        return;
+    }
+    
+    // Reload page with selected pet
+    router.visit(`/admin/appointments/${props.appointment.id}/prescription/create?patient_id=${petId}`, {
+        preserveState: false,
+        preserveScroll: false,
+    });
+};
+
 // Submit form
 const submit = () => {
     // Client-side validation before submission
@@ -411,12 +471,27 @@ const submit = () => {
     }
     
     // Prepare medicines data - filter out empty rows and newly added rows without medicine
-    const validMedicineRows = medicineRows.value.filter(row => 
-        row.medicine_id !== null && row.dosage && row.instructions && row.quantity
-    );
+    // Check for actual values (not just truthy - empty strings are falsy)
+    const validMedicineRows = medicineRows.value.filter(row => {
+        const hasMedicine = row.medicine_id !== null;
+        const hasDosage = row.dosage && row.dosage.trim() !== '';
+        const hasInstructions = row.instructions && row.instructions.trim() !== '';
+        const hasQuantity = row.quantity && row.quantity.trim() !== '';
+        
+        return hasMedicine && hasDosage && hasInstructions && hasQuantity;
+    });
     
     if (validMedicineRows.length === 0) {
-        validationErrors.push('Please add at least one medicine with dosage, instructions, and quantity');
+        // Check if there are medicines but with missing fields
+        const medicinesWithoutInstructions = medicineRows.value.filter(row => 
+            row.medicine_id !== null && (!row.instructions || row.instructions.trim() === '')
+        );
+        
+        if (medicinesWithoutInstructions.length > 0) {
+            validationErrors.push('Please fill in the instructions field for all medicines');
+        } else {
+            validationErrors.push('Please add at least one medicine with dosage, instructions, and quantity');
+        }
     }
     
     // If there are client-side validation errors, show them and don't submit
@@ -512,22 +587,64 @@ const submit = () => {
                 <CardContent>
                     <form @submit.prevent="submit" class="space-y-6">
                         <!-- Appointment & Patient Info -->
-                        <div class="grid grid-cols-2 gap-4 p-4 bg-muted rounded-lg">
-                            <div>
-                                <Label class="text-xs text-muted-foreground">Appointment Date</Label>
-                                <p class="font-medium">{{ appointment.appointment_date }} {{ appointment.appointment_time }}</p>
+                        <div class="space-y-4">
+                            <div class="grid grid-cols-2 gap-4 p-4 bg-muted rounded-lg">
+                                <div>
+                                    <Label class="text-xs text-muted-foreground">Appointment Date</Label>
+                                    <p class="font-medium">{{ appointment.appointment_date }} {{ appointment.appointment_time }}</p>
+                                </div>
+                                <div>
+                                    <Label class="text-xs text-muted-foreground">Appointment Type</Label>
+                                    <p class="font-medium">{{ appointment.appointment_type }}</p>
+                                </div>
                             </div>
-                            <div>
-                                <Label class="text-xs text-muted-foreground">Appointment Type</Label>
-                                <p class="font-medium">{{ appointment.appointment_type }}</p>
+                            
+                            <!-- Pet Selection (if multiple pets) -->
+                            <div v-if="patients && patients.length > 1" class="space-y-2">
+                                <Label>Select Pet for Prescription</Label>
+                                <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                    <div
+                                        v-for="pet in patients"
+                                        :key="pet.id"
+                                        :class="cn(
+                                            'p-3 border-2 rounded-lg cursor-pointer transition-all',
+                                            patient.id === pet.id
+                                                ? 'border-primary bg-primary/5'
+                                                : 'border-border hover:border-primary/50',
+                                            pet.has_prescription && 'opacity-60'
+                                        )"
+                                        @click="switchPet(pet.id)"
+                                    >
+                                        <div class="flex items-center justify-between">
+                                            <div>
+                                                <div class="font-medium flex items-center gap-2">
+                                                    {{ pet.pet_name || 'Unnamed Pet' }}
+                                                    <Badge v-if="patient.id === pet.id" variant="default" class="text-xs">
+                                                        Selected
+                                                    </Badge>
+                                                    <Badge v-if="pet.has_prescription" variant="outline" class="text-xs">
+                                                        Has Prescription
+                                                    </Badge>
+                                                </div>
+                                                <div class="text-sm text-muted-foreground mt-1">
+                                                    {{ pet.pet_type }} - {{ pet.pet_breed }}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
-                            <div>
-                                <Label class="text-xs text-muted-foreground">Pet Name</Label>
-                                <p class="font-medium">{{ patient.pet_name }}</p>
-                            </div>
-                            <div>
-                                <Label class="text-xs text-muted-foreground">Pet Type & Breed</Label>
-                                <p class="font-medium">{{ patient.pet_type }} - {{ patient.pet_breed }}</p>
+                            
+                            <!-- Current Pet Info -->
+                            <div class="grid grid-cols-2 gap-4 p-4 bg-muted rounded-lg">
+                                <div>
+                                    <Label class="text-xs text-muted-foreground">Pet Name</Label>
+                                    <p class="font-medium">{{ patient.pet_name }}</p>
+                                </div>
+                                <div>
+                                    <Label class="text-xs text-muted-foreground">Pet Type & Breed</Label>
+                                    <p class="font-medium">{{ patient.pet_type }} - {{ patient.pet_breed }}</p>
+                                </div>
                             </div>
                         </div>
 
@@ -653,6 +770,23 @@ const submit = () => {
                                     <div class="flex flex-col items-center justify-center gap-3">
                                         <Spinner class="h-8 w-8 text-primary" />
                                         <p class="text-sm text-muted-foreground">Analyzing symptoms and predicting diseases...</p>
+                                    </div>
+                                </CardContent>
+                            </Card>
+                        </div>
+
+                        <!-- No Diseases Found Message -->
+                        <div v-else-if="selectedSymptoms.length > 0 && !isSearchingDiseases && searchedDiseases.length === 0" class="space-y-2">
+                            <Label>Predicted Diseases (based on symptoms)</Label>
+                            <Card>
+                                <CardContent class="p-4">
+                                    <div class="text-center py-4">
+                                        <p class="text-sm text-muted-foreground mb-2">
+                                            No diseases found matching the selected symptoms.
+                                        </p>
+                                        <p class="text-xs text-muted-foreground">
+                                            Try selecting different symptoms or use the manual search below to add diseases.
+                                        </p>
                                     </div>
                                 </CardContent>
                             </Card>
