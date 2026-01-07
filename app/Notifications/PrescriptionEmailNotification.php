@@ -82,6 +82,13 @@ class PrescriptionEmailNotification extends Notification
         $pdfContent = $pdf->output();
         $fileName = 'prescription-' . $prescriptionNumber . '.pdf';
 
+        // Generate signed URL for public download (valid for 30 days)
+        $downloadUrl = \Illuminate\Support\Facades\URL::signedRoute(
+            'prescriptions.public.download',
+            ['id' => $this->prescription->id],
+            now()->addDays(30)
+        );
+
         $content = '<h2 style="margin: 0 0 20px 0; color: #1f2937; font-size: 22px; font-weight: 600;">Hello!</h2>' .
             '<p style="margin: 0 0 20px 0; color: #4b5563; font-size: 16px; line-height: 1.6;">' .
             'Your prescription for <strong>' . e($petName) . '</strong> has been prepared and is attached to this email.' .
@@ -93,7 +100,8 @@ class PrescriptionEmailNotification extends Notification
             '<li>Pet: ' . e($petName) . '</li>' .
             '</ul>' .
             '<p style="margin: 0 0 20px 0; color: #4b5563; font-size: 16px; line-height: 1.6;">' .
-            'Please find the complete prescription details in the attached PDF file.' .
+            'Please find the complete prescription details in the attached PDF file. You can also ' .
+            '<a href="' . e($downloadUrl) . '" style="color: #2563eb; text-decoration: underline; font-weight: 600;">download the prescription PDF here</a>.' .
             '</p>' .
             '<p style="margin: 0 0 20px 0; color: #4b5563; font-size: 16px; line-height: 1.6;">' .
             'If you have any questions about the prescription, please contact our clinic.' .

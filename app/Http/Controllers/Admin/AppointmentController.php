@@ -1101,6 +1101,52 @@ class AppointmentController extends Controller
     }
 
     /**
+     * Public download prescription PDF (no authentication required).
+     * Uses signed URL for security.
+     */
+    public function publicDownloadPrescription($id)
+    {
+        // Custom paper size: A5 landscape: 210mm × 148mm (8.27" × 5.83")
+        // 1 inch = 72 points, so 8.27" = 595pt, 5.83" = 420pt
+        $customPaper = [0, 0, 595, 420];
+        
+        $prescription = Prescription::with(
+            'medicines.medicine',
+            'appointment',
+            'patient.petType',
+            'patient.user',
+            'diagnoses.disease'
+        )->findOrFail($id);
+
+        $base64Logo = 'data:image/png;base64,' . base64_encode(file_get_contents(public_path('media/logo_for_print.png')));
+        $base64PanaboLogo = 'data:image/png;base64,' . base64_encode(file_get_contents(public_path('media/panabo.png')));
+        $base64PrescriptionLogo = 'data:image/png;base64,' . base64_encode(file_get_contents(public_path('media/prescription.png')));
+
+        // Get veterinarian information from settings
+        $veterinarianName = Setting::get('veterinarian_name', '');
+        $veterinarianLicense = Setting::get('veterinarian_license_number', '');
+
+        $prescriptionNumber = str_pad($prescription->id, 6, '0', STR_PAD_LEFT);
+        $fileName = 'prescription-' . $prescriptionNumber . '.pdf';
+
+        return Pdf::setOptions([
+            'isRemoteEnabled' => true,
+            'isHtml5ParserEnabled' => true,
+            'isPhpEnabled' => true,
+        ])
+        ->loadView('admin.appointments.pdf', compact(
+            'prescription',
+            'base64Logo',
+            'base64PanaboLogo',
+            'base64PrescriptionLogo',
+            'veterinarianName',
+            'veterinarianLicense'
+        ))
+        ->setPaper($customPaper, 'landscape')
+        ->download($fileName);
+    }
+
+    /**
      * Debug HTML view for prescription.
      */
     public function debugPrescription($id)

@@ -338,7 +338,7 @@
         <tr>
             <td>
                 <span class="patient-info-label">Clients Name:</span>
-                {{ $prescription->appointment->user ? trim(($prescription->appointment->user->first_name ?? '') . ' ' . ($prescription->appointment->user->last_name ?? '')) : 'N/A' }}
+                {{ $prescription->appointment->user ? (trim(($prescription->appointment->user->first_name ?? '') . ' ' . ($prescription->appointment->user->last_name ?? '')) ?: $prescription->appointment->user->name) : 'N/A' }}
             </td>
             <td>
                 <span class="patient-info-label">Date:</span>

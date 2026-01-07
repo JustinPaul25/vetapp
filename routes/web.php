@@ -31,6 +31,11 @@ Route::middleware(['auth'])->group(function () {
 // Public disease search route for landing page
 Route::get('/search-diseases', [\App\Http\Controllers\DiseaseSearchController::class, 'search'])->name('diseases.search');
 
+// Public prescription download route (signed URL for security)
+Route::get('/prescriptions/{id}/download', [\App\Http\Controllers\Admin\AppointmentController::class, 'publicDownloadPrescription'])
+    ->name('prescriptions.public.download')
+    ->middleware('signed');
+
 // Geocoding proxy route (to avoid CORS issues with Nominatim)
 Route::get('/api/geocode/search', [\App\Http\Controllers\GeocodingController::class, 'search'])->name('geocode.search');
 
