@@ -26,7 +26,7 @@ class FollowUpCheckupNotification extends Notification
      */
     public function via($notifiable)
     {
-        return ['mail'];
+        return ['mail', 'database'];
     }
 
     /**
@@ -89,5 +89,39 @@ class FollowUpCheckupNotification extends Notification
                 'subject' => 'Follow-Up Checkup Reminder for ' . $petName . ' - Prescription #' . $prescriptionNumber,
                 'content' => new \Illuminate\Support\HtmlString($content),
             ]);
+    }
+
+    /**
+     * Get the array representation of the notification.
+     *
+     * @return array<string, mixed>
+     */
+    public function toArray($notifiable)
+    {
+        // Refresh the prescription to ensure we have the latest data
+        $this->prescription->refresh();
+        
+        // Load necessary relationships
+        $this->prescription->load([
+            'patient.petType',
+            'patient.user',
+            'diagnoses.disease'
+        ]);
+
+        $patient = $this->prescription->patient;
+        $petName = $patient->pet_name ?? 'Your Pet';
+        $prescriptionNumber = str_pad($this->prescription->id, 6, '0', STR_PAD_LEFT);
+        $followUpDate = $this->prescription->follow_up_date->format('F d, Y');
+        
+        // Get disease names
+        $diseases = $this->prescription->diagnoses->pluck('disease.name')->filter()->implode(', ');
+
+        $message = "Follow-up checkup reminder for {$petName} (Prescription #{$prescriptionNumber}). Scheduled date: {$followUpDate}";
+
+        return [
+            'link' => url('/appointments'),
+            'subject' => 'Follow-Up Checkup Reminder for ' . $petName . ' - Prescription #' . $prescriptionNumber,
+            'message' => $message,
+        ];
     }
 }
