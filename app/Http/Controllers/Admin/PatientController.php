@@ -374,23 +374,14 @@ class PatientController extends Controller
             'notes' => 'nullable|string|max:500',
         ]);
 
-        $weightHistory = PatientWeightHistory::create([
+        PatientWeightHistory::create([
             'patient_id' => $patient->id,
             'weight' => $validated['weight'],
             'recorded_at' => $validated['recorded_at'] ?? now(),
             'notes' => $validated['notes'] ?? null,
         ]);
 
-        return response()->json([
-            'success' => true,
-            'message' => 'Weight entry added successfully.',
-            'data' => [
-                'id' => $weightHistory->id,
-                'weight' => (float) $weightHistory->weight,
-                'recorded_at' => $weightHistory->recorded_at->toISOString(),
-                'notes' => $weightHistory->notes,
-            ],
-        ]);
+        return back()->with('success', 'Weight entry added successfully.');
     }
 
     /**

@@ -148,9 +148,12 @@ class AppointmentController extends Controller
             $ownerEmail = $firstPatient && $firstPatient->user ? $firstPatient->user->email ?? 'N/A' : 'N/A';
             $ownerMobile = $firstPatient && $firstPatient->user ? $firstPatient->user->mobile_number ?? 'N/A' : 'N/A';
             
+            // Get appointment type name
+            $appointmentTypeName = $appointment->appointment_type->name ?? 'N/A';
+            
             // Get all pets details for this appointment
             // Check if each pet has a prescription for this appointment
-            $allPets = $patients->map(function ($patient) use ($appointment) {
+            $allPets = $patients->map(function ($patient) use ($appointment, $appointmentTypeName) {
                 // Check if this pet has a prescription for this appointment
                 $hasPrescription = Prescription::where('appointment_id', $appointment->id)
                     ->where('patient_id', $patient->id)
@@ -161,6 +164,7 @@ class AppointmentController extends Controller
                     'pet_name' => $patient->pet_name ?? 'N/A',
                     'pet_type' => $patient->petType->name ?? 'N/A',
                     'pet_breed' => $patient->pet_breed ?? 'N/A',
+                    'appointment_type' => $appointmentTypeName,
                     'has_prescription' => $hasPrescription,
                 ];
             })->toArray();

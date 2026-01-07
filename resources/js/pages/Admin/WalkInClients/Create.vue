@@ -794,7 +794,7 @@ const submit = () => {
                                 <Button type="button" variant="outline">Cancel</Button>
                             </Link>
                             <Button type="submit" :disabled="form.processing">
-                                Proceed to Prescription
+                                Approve
                             </Button>
                         </div>
                     </Form>

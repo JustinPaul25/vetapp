@@ -13,6 +13,7 @@ interface Pet {
     pet_name: string;
     pet_type: string;
     pet_breed: string;
+    appointment_type: string;
     has_prescription?: boolean;
 }
 
@@ -328,32 +329,35 @@ const getStatusBadgeClass = (status: string) => {
                                         class="border-b bg-muted/30"
                                     >
                                         <td class="p-3" colspan="6">
-                                            <div class="pl-8 space-y-2">
-                                                <div class="text-xs font-semibold text-muted-foreground mb-2">Pets in this appointment:</div>
-                                                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                                                    <div
-                                                        v-for="pet in appointment.all_pets"
-                                                        :key="pet.id"
-                                                        class="p-3 bg-white dark:bg-neutral-800 rounded-lg border border-neutral-200 dark:border-neutral-700 relative"
-                                                        :class="pet.has_prescription ? 'border-green-500 dark:border-green-700' : ''"
-                                                    >
-                                                        <div class="flex items-center justify-between gap-2">
-                                                            <div class="flex-1">
-                                                                <div class="font-medium text-sm flex items-center gap-2">
-                                                                    {{ pet.pet_name }}
-                                                                    <span
-                                                                        v-if="pet.has_prescription"
-                                                                        class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200"
-                                                                        title="Has prescription"
-                                                                    >
-                                                                        <CheckCircle2 class="h-3 w-3" />
-                                                                        Prescribed
-                                                                    </span>
-                                                                </div>
-                                                                <div class="text-xs text-muted-foreground mt-1">
-                                                                    {{ pet.pet_type }} • {{ pet.pet_breed }}
-                                                                </div>
-                                                            </div>
+                                            <div class="pl-8 space-y-3">
+                                                <div class="text-sm font-semibold mb-2">Pets in this appointment:</div>
+                                                <div
+                                                    v-for="pet in appointment.all_pets"
+                                                    :key="pet.id"
+                                                    class="flex items-center justify-between p-3 bg-muted/30 rounded-lg"
+                                                >
+                                                    <div class="flex-1 grid grid-cols-3 gap-4">
+                                                        <div>
+                                                            <span class="text-xs text-muted-foreground">Pet Name</span>
+                                                            <p class="text-sm font-medium flex items-center gap-2">
+                                                                {{ pet.pet_name }}
+                                                                <span
+                                                                    v-if="pet.has_prescription"
+                                                                    class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200"
+                                                                    title="Has prescription"
+                                                                >
+                                                                    <CheckCircle2 class="h-3 w-3" />
+                                                                    Prescribed
+                                                                </span>
+                                                            </p>
+                                                        </div>
+                                                        <div>
+                                                            <span class="text-xs text-muted-foreground">Pet Type</span>
+                                                            <p class="text-sm">{{ pet.pet_type }}</p>
+                                                        </div>
+                                                        <div>
+                                                            <span class="text-xs text-muted-foreground">Appointment Type</span>
+                                                            <p class="text-sm">{{ pet.appointment_type }}</p>
                                                         </div>
                                                     </div>
                                                 </div>

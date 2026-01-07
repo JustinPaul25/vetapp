@@ -956,19 +956,20 @@ const submit = () => {
                                                 />
                                             </td>
                                             <td class="p-2">
-                                                <Input
-                                                    v-model="row.instructions"
-                                                    type="text"
-                                                    placeholder="e.g., After meals"
-                                                    list="instructions-list"
-                                                />
-                                                <datalist id="instructions-list">
+                                                <select
+                                                    :value="row.instructions"
+                                                    @change="(e) => row.instructions = (e.target as HTMLSelectElement).value"
+                                                    class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                                                >
+                                                    <option value="">Select instruction...</option>
                                                     <option
                                                         v-for="instruction in instructions"
                                                         :key="instruction"
                                                         :value="instruction"
-                                                    />
-                                                </datalist>
+                                                    >
+                                                        {{ instruction }}
+                                                    </option>
+                                                </select>
                                             </td>
                                             <td class="p-2">
                                                 <Input
