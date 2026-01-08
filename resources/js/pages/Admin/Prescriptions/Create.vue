@@ -10,7 +10,6 @@ import { Badge } from '@/components/ui/badge';
 import { Spinner } from '@/components/ui/spinner';
 import { CalendarDatePicker } from '@/components/ui/calendar-date-picker';
 // Textarea component - using native textarea
-// Using native select element
 import InputError from '@/components/InputError.vue';
 import { FileText, ArrowLeft, Plus, Trash2, Search, ChevronDown, X } from 'lucide-vue-next';
 import { Link } from '@inertiajs/vue3';
@@ -112,6 +111,13 @@ const symptomSearchQuery = ref('');
 const manualDiseaseSearchQuery = ref('');
 const manualSearchedDiseases = ref<Disease[]>([]);
 const isSearchingManualDiseases = ref(false);
+const isMedicineModalOpen = ref(false);
+const medicineModalRowId = ref<number | null>(null);
+const medicineSearchQuery = ref('');
+const isInstructionsModalOpen = ref(false);
+const instructionsModalRowId = ref<number | null>(null);
+const instructionsSearchQuery = ref('');
+const customInstruction = ref('');
 
 // Computed property for filtered symptoms in modal
 const filteredSymptoms = computed(() => {
@@ -121,6 +127,29 @@ const filteredSymptoms = computed(() => {
     const query = symptomSearchQuery.value.toLowerCase();
     return props.symptoms.filter(symptom => 
         symptom.name.toLowerCase().includes(query)
+    );
+});
+
+// Computed property for filtered medicines in modal
+const filteredMedicines = computed(() => {
+    if (!medicineSearchQuery.value) {
+        return props.medicines;
+    }
+    const query = medicineSearchQuery.value.toLowerCase();
+    return props.medicines.filter(medicine => 
+        medicine.name.toLowerCase().includes(query) ||
+        medicine.dosage.toLowerCase().includes(query)
+    );
+});
+
+// Computed property for filtered instructions in modal
+const filteredInstructions = computed(() => {
+    if (!instructionsSearchQuery.value) {
+        return props.instructions;
+    }
+    const query = instructionsSearchQuery.value.toLowerCase();
+    return props.instructions.filter(instruction => 
+        instruction.toLowerCase().includes(query)
     );
 });
 
@@ -159,6 +188,76 @@ const removeSymptom = (symptomName: string, e: Event) => {
 const openSymptomsModal = () => {
     isSymptomsModalOpen.value = true;
     symptomSearchQuery.value = '';
+};
+
+// Open medicine modal for a specific row
+const openMedicineModal = (rowId: number) => {
+    medicineModalRowId.value = rowId;
+    isMedicineModalOpen.value = true;
+    medicineSearchQuery.value = '';
+};
+
+// Close medicine modal
+const closeMedicineModal = () => {
+    isMedicineModalOpen.value = false;
+    medicineModalRowId.value = null;
+    medicineSearchQuery.value = '';
+};
+
+// Select medicine from modal
+const selectMedicineFromModal = (medicine: Medicine) => {
+    if (medicineModalRowId.value === null) return;
+    
+    const row = medicineRows.value.find(r => r.id === medicineModalRowId.value);
+    if (row) {
+        onMedicineChange(medicineModalRowId.value, medicine.id);
+    }
+    
+    closeMedicineModal();
+};
+
+// Get selected medicine name for display
+const getSelectedMedicineName = (rowId: number): string => {
+    const row = medicineRows.value.find(r => r.id === rowId);
+    if (!row || !row.medicine_id) return '';
+    
+    const medicine = props.medicines.find(m => m.id === row.medicine_id);
+    return medicine ? `${medicine.name} (${medicine.dosage})` : '';
+};
+
+// Open instructions modal for a specific row
+const openInstructionsModal = (rowId: number) => {
+    instructionsModalRowId.value = rowId;
+    isInstructionsModalOpen.value = true;
+    instructionsSearchQuery.value = '';
+    const row = medicineRows.value.find(r => r.id === rowId);
+    customInstruction.value = row?.instructions || '';
+};
+
+// Close instructions modal
+const closeInstructionsModal = () => {
+    isInstructionsModalOpen.value = false;
+    instructionsModalRowId.value = null;
+    instructionsSearchQuery.value = '';
+    customInstruction.value = '';
+};
+
+// Select instruction from modal
+const selectInstructionFromModal = (instruction: string) => {
+    if (instructionsModalRowId.value === null) return;
+    
+    const row = medicineRows.value.find(r => r.id === instructionsModalRowId.value);
+    if (row) {
+        row.instructions = instruction;
+    }
+    
+    closeInstructionsModal();
+};
+
+// Apply custom instruction
+const applyCustomInstruction = () => {
+    if (!customInstruction.value.trim() || instructionsModalRowId.value === null) return;
+    selectInstructionFromModal(customInstruction.value.trim());
 };
 
 // Add initial medicine row
@@ -762,6 +861,142 @@ const submit = () => {
                             </Dialog>
                         </div>
 
+                        <!-- Medicine Selection Modal -->
+                        <Dialog v-model:open="isMedicineModalOpen">
+                            <DialogContent class="w-full md:w-2/3 max-w-none max-h-[600px] flex flex-col">
+                                <DialogHeader>
+                                    <DialogTitle>Select Medicine</DialogTitle>
+                                </DialogHeader>
+                                
+                                <!-- Search input -->
+                                <div class="relative">
+                                    <Search class="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                                    <Input
+                                        v-model="medicineSearchQuery"
+                                        type="text"
+                                        placeholder="Search medicines by name or dosage..."
+                                        class="pl-9"
+                                        autofocus
+                                    />
+                                </div>
+
+                                <!-- Medicines grid -->
+                                <div class="flex-1 overflow-y-auto border rounded-md p-4">
+                                    <div v-if="filteredMedicines.length === 0" class="text-center py-8 text-muted-foreground">
+                                        No medicines found
+                                    </div>
+                                    <div v-else class="grid grid-cols-1 gap-2">
+                                        <button
+                                            v-for="medicine in filteredMedicines"
+                                            :key="medicine.id"
+                                            type="button"
+                                            @click="selectMedicineFromModal(medicine)"
+                                            :disabled="medicine.stock <= 0"
+                                            :class="cn(
+                                                'flex items-center p-3 rounded-md border transition-colors text-left w-full',
+                                                medicine.stock <= 0
+                                                    ? 'border-destructive/50 bg-destructive/5 cursor-not-allowed opacity-60'
+                                                    : 'border-border hover:border-primary hover:bg-primary/5 cursor-pointer'
+                                            )"
+                                        >
+                                            <div class="flex-1">
+                                                <div class="font-medium">{{ medicine.name }}</div>
+                                                <div class="text-sm text-muted-foreground mt-1">
+                                                    Dosage: {{ medicine.dosage }}
+                                                </div>
+                                                <div class="text-xs text-muted-foreground mt-1">
+                                                    Stock: {{ medicine.stock }}
+                                                </div>
+                                            </div>
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <!-- Footer with close button -->
+                                <div class="flex items-center justify-end pt-4 border-t">
+                                    <Button 
+                                        type="button" 
+                                        variant="outline"
+                                        @click="closeMedicineModal"
+                                    >
+                                        Cancel
+                                    </Button>
+                                </div>
+                            </DialogContent>
+                        </Dialog>
+
+                        <!-- Instructions Selection Modal -->
+                        <Dialog v-model:open="isInstructionsModalOpen">
+                            <DialogContent class="w-full md:w-2/3 max-w-none max-h-[600px] flex flex-col">
+                                <DialogHeader>
+                                    <DialogTitle>Select Instruction</DialogTitle>
+                                </DialogHeader>
+                                
+                                <!-- Search input -->
+                                <div class="relative">
+                                    <Search class="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                                    <Input
+                                        v-model="instructionsSearchQuery"
+                                        type="text"
+                                        placeholder="Search instructions..."
+                                        class="pl-9"
+                                        autofocus
+                                    />
+                                </div>
+
+                                <!-- Instructions list -->
+                                <div class="flex-1 overflow-y-auto border rounded-md p-4">
+                                    <div v-if="filteredInstructions.length === 0" class="text-center py-8 text-muted-foreground">
+                                        No instructions found
+                                    </div>
+                                    <div v-else class="grid grid-cols-1 gap-2">
+                                        <button
+                                            v-for="(instruction, index) in filteredInstructions"
+                                            :key="index"
+                                            type="button"
+                                            @click="selectInstructionFromModal(instruction)"
+                                            :class="cn(
+                                                'flex items-center p-3 rounded-md border transition-colors text-left',
+                                                'border-border hover:border-primary hover:bg-primary/5 cursor-pointer'
+                                            )"
+                                        >
+                                            <span class="text-sm">{{ instruction }}</span>
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <!-- Custom instruction input -->
+                                <div class="pt-4 border-t space-y-2">
+                                    <Label for="custom_instruction">Or enter custom instruction:</Label>
+                                    <Input
+                                        id="custom_instruction"
+                                        v-model="customInstruction"
+                                        type="text"
+                                        placeholder="Type custom instruction..."
+                                        @keyup.enter="applyCustomInstruction"
+                                    />
+                                </div>
+
+                                <!-- Footer with close button -->
+                                <div class="flex items-center justify-end pt-4 border-t gap-2">
+                                    <Button 
+                                        type="button" 
+                                        variant="outline"
+                                        @click="closeInstructionsModal"
+                                    >
+                                        Cancel
+                                    </Button>
+                                    <Button
+                                        v-if="customInstruction.trim()"
+                                        type="button"
+                                        @click="applyCustomInstruction"
+                                    >
+                                        Use Custom
+                                    </Button>
+                                </div>
+                            </DialogContent>
+                        </Dialog>
+
                         <!-- Loading Indicator for Predicted Diseases -->
                         <div v-if="isSearchingDiseases" class="space-y-2">
                             <Label>Predicted Diseases (based on symptoms)</Label>
@@ -933,20 +1168,20 @@ const submit = () => {
                                             class="border-b"
                                         >
                                             <td class="p-2">
-                                                <select
-                                                    :value="row.medicine_id?.toString() || ''"
-                                                    @change="(e) => onMedicineChange(row.id, parseInt((e.target as HTMLSelectElement).value))"
-                                                    @blur="onMedicineBlur(row.id)"
-                                                    class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                                                <div
+                                                    @click="openMedicineModal(row.id)"
+                                                    :class="cn(
+                                                        'flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background',
+                                                        'cursor-pointer hover:ring-2 hover:ring-ring/50 transition-all',
+                                                        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
+                                                        'flex items-center justify-between'
+                                                    )"
                                                 >
-                                                    <option
-                                                        v-for="medicine in medicines"
-                                                        :key="medicine.id"
-                                                        :value="medicine.id.toString()"
-                                                    >
-                                                        {{ medicine.name }} ({{ medicine.dosage }})
-                                                    </option>
-                                                </select>
+                                                    <span :class="row.medicine_id ? 'text-foreground' : 'text-muted-foreground'">
+                                                        {{ row.medicine_id ? getSelectedMedicineName(row.id) : 'Select medicine...' }}
+                                                    </span>
+                                                    <ChevronDown class="h-4 w-4 text-muted-foreground shrink-0" />
+                                                </div>
                                             </td>
                                             <td class="p-2">
                                                 <Input
@@ -956,20 +1191,20 @@ const submit = () => {
                                                 />
                                             </td>
                                             <td class="p-2">
-                                                <select
-                                                    :value="row.instructions"
-                                                    @change="(e) => row.instructions = (e.target as HTMLSelectElement).value"
-                                                    class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                                                <div
+                                                    @click="openInstructionsModal(row.id)"
+                                                    :class="cn(
+                                                        'flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background',
+                                                        'cursor-pointer hover:ring-2 hover:ring-ring/50 transition-all',
+                                                        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
+                                                        'flex items-center justify-between'
+                                                    )"
                                                 >
-                                                    <option value="">Select instruction...</option>
-                                                    <option
-                                                        v-for="instruction in instructions"
-                                                        :key="instruction"
-                                                        :value="instruction"
-                                                    >
-                                                        {{ instruction }}
-                                                    </option>
-                                                </select>
+                                                    <span :class="row.instructions ? 'text-foreground' : 'text-muted-foreground'" class="flex-1 truncate">
+                                                        {{ row.instructions || 'Type or select instruction...' }}
+                                                    </span>
+                                                    <ChevronDown class="h-4 w-4 text-muted-foreground shrink-0 ml-2" />
+                                                </div>
                                             </td>
                                             <td class="p-2">
                                                 <Input

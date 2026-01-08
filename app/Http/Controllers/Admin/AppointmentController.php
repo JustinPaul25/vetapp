@@ -148,23 +148,44 @@ class AppointmentController extends Controller
             $ownerEmail = $firstPatient && $firstPatient->user ? $firstPatient->user->email ?? 'N/A' : 'N/A';
             $ownerMobile = $firstPatient && $firstPatient->user ? $firstPatient->user->mobile_number ?? 'N/A' : 'N/A';
             
-            // Get appointment type name
+            // Get appointment type name (for overall appointment display)
             $appointmentTypeName = $appointment->appointment_type->name ?? 'N/A';
             
             // Get all pets details for this appointment
             // Check if each pet has a prescription for this appointment
-            $allPets = $patients->map(function ($patient) use ($appointment, $appointmentTypeName) {
+            $allPets = $patients->map(function ($patient) use ($appointment) {
                 // Check if this pet has a prescription for this appointment
                 $hasPrescription = Prescription::where('appointment_id', $appointment->id)
                     ->where('patient_id', $patient->id)
                     ->exists();
+                
+                // Get appointment types for this specific pet from the pivot table
+                $petAppointmentTypes = DB::table('appointment_patient')
+                    ->where('appointment_id', $appointment->id)
+                    ->where('patient_id', $patient->id)
+                    ->join('appointment_types', 'appointment_patient.appointment_type_id', '=', 'appointment_types.id')
+                    ->pluck('appointment_types.name')
+                    ->toArray();
+                
+                // If no appointment types found in pivot, fallback to appointment's primary type
+                if (empty($petAppointmentTypes)) {
+                    if ($appointment->relationLoaded('appointment_type') && $appointment->appointment_type) {
+                        $petAppointmentTypes = [$appointment->appointment_type->name];
+                    } else {
+                        $petAppointmentTypes = ['N/A'];
+                    }
+                }
+                
+                $petAppointmentTypeDisplay = count($petAppointmentTypes) > 1 
+                    ? implode(', ', $petAppointmentTypes) 
+                    : ($petAppointmentTypes[0] ?? 'N/A');
                 
                 return [
                     'id' => $patient->id,
                     'pet_name' => $patient->pet_name ?? 'N/A',
                     'pet_type' => $patient->petType->name ?? 'N/A',
                     'pet_breed' => $patient->pet_breed ?? 'N/A',
-                    'appointment_type' => $appointmentTypeName,
+                    'appointment_type' => $petAppointmentTypeDisplay,
                     'has_prescription' => $hasPrescription,
                 ];
             })->toArray();

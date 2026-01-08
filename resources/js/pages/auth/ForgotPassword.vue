@@ -24,7 +24,7 @@ defineProps<{
 
         <div
             v-if="status"
-            class="mb-4 text-center text-sm font-medium text-green-600"
+            class="mb-4 rounded-md bg-green-50 p-4 text-center text-sm font-medium text-green-800"
         >
             {{ status }}
         </div>
@@ -37,11 +37,16 @@ defineProps<{
                         id="email"
                         type="email"
                         name="email"
-                        autocomplete="off"
+                        autocomplete="email"
                         autofocus
                         placeholder="email@example.com"
+                        required
+                        :class="{ 'border-red-500': errors.email }"
                     />
                     <InputError :message="errors.email" />
+                    <p v-if="!errors.email" class="text-xs text-muted-foreground">
+                        Enter the email address associated with your account to receive a password reset link.
+                    </p>
                 </div>
 
                 <div class="my-6 flex items-center justify-start">

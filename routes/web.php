@@ -71,8 +71,8 @@ Route::middleware(['auth', 'verified', \App\Http\Middleware\EnsureUserIsAdmin::c
     ->prefix('admin')
     ->name('admin.')
     ->group(function () {
-        Route::resource('users', \App\Http\Controllers\Admin\UserController::class);
         Route::get('users/export', [\App\Http\Controllers\Admin\UserController::class, 'export'])->name('users.export');
+        Route::resource('users', \App\Http\Controllers\Admin\UserController::class);
         Route::resource('roles', \App\Http\Controllers\Admin\RoleController::class);
         
         // Prescription creation routes (admin-only)

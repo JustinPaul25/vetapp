@@ -9,6 +9,7 @@ use Inertia\Inertia;
 use Spatie\Permission\Models\Role;
 use App\Traits\HasDateFiltering;
 use Barryvdh\DomPDF\Facade\Pdf;
+use Illuminate\Support\Facades\Log;
 
 class UserController extends Controller
 {
@@ -71,7 +72,7 @@ class UserController extends Controller
      */
     public function create()
     {
-        $roles = Role::all();
+        $roles = Role::whereIn('name', ['admin', 'staff'])->get();
 
         return Inertia::render('Admin/Users/Create', [
             'roles' => $roles,
@@ -98,7 +99,11 @@ class UserController extends Controller
         ]);
 
         if (isset($validated['roles'])) {
-            $user->syncRoles($validated['roles']);
+            // Filter out client and walk_in_client roles - only allow admin and staff
+            $allowedRoles = array_filter($validated['roles'], function($role) {
+                return in_array($role, ['admin', 'staff']);
+            });
+            $user->syncRoles($allowedRoles);
         }
 
         // Send email verification notification
@@ -114,7 +119,7 @@ class UserController extends Controller
     public function show(User $user)
     {
         $user->load('roles', 'permissions');
-        $roles = Role::all();
+        $roles = Role::whereIn('name', ['admin', 'staff'])->get();
 
         return Inertia::render('Admin/Users/Show', [
             'user' => $user,
@@ -128,7 +133,7 @@ class UserController extends Controller
     public function edit(User $user)
     {
         $user->load('roles');
-        $roles = Role::all();
+        $roles = Role::whereIn('name', ['admin', 'staff'])->get();
 
         return Inertia::render('Admin/Users/Edit', [
             'user' => [
@@ -166,7 +171,11 @@ class UserController extends Controller
         }
 
         if (isset($validated['roles'])) {
-            $user->syncRoles($validated['roles']);
+            // Filter out client and walk_in_client roles - only allow admin and staff
+            $allowedRoles = array_filter($validated['roles'], function($role) {
+                return in_array($role, ['admin', 'staff']);
+            });
+            $user->syncRoles($allowedRoles);
         }
 
         return redirect()->route('admin.users.index')
@@ -189,27 +198,38 @@ class UserController extends Controller
      */
     public function export(Request $request)
     {
-        $query = User::with('roles');
+        try {
+            $query = User::with('roles');
 
-        if ($request->has('search') && !empty($request->search)) {
-            $keyword = $request->search;
-            $query->where(function ($q) use ($keyword) {
-                $q->where('name', 'LIKE', "%{$keyword}%")
-                    ->orWhere('email', 'LIKE', "%{$keyword}%");
-            });
+            if ($request->has('search') && !empty($request->search)) {
+                $keyword = $request->search;
+                $query->where(function ($q) use ($keyword) {
+                    $q->where('name', 'LIKE', "%{$keyword}%")
+                        ->orWhere('email', 'LIKE', "%{$keyword}%");
+                });
+            }
+
+            $this->applyDateFilter($query, $request, 'created_at');
+
+            $users = $query->orderBy('created_at', 'desc')->get();
+
+            $format = $request->get('format', 'pdf');
+
+            if ($format === 'csv') {
+                return $this->exportCsv($users);
+            }
+
+            return $this->exportPdf($users, $request);
+        } catch (\Exception $e) {
+            Log::error('Users export failed: ' . $e->getMessage(), [
+                'exception' => $e,
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            return response()->json([
+                'message' => 'Failed to generate report: ' . $e->getMessage()
+            ], 500);
         }
-
-        $this->applyDateFilter($query, $request, 'created_at');
-
-        $users = $query->orderBy('created_at', 'desc')->get();
-
-        $format = $request->get('format', 'pdf');
-
-        if ($format === 'csv') {
-            return $this->exportCsv($users);
-        }
-
-        return $this->exportPdf($users, $request);
     }
 
     private function exportPdf($users, $request)
@@ -225,12 +245,16 @@ class UserController extends Controller
 
         $filterInfo = $this->getFilterInfo($request);
 
-        $pdf = Pdf::loadView('admin.reports.users', [
+        $pdf = Pdf::setOptions([
+            'isRemoteEnabled' => true,
+            'isHtml5ParserEnabled' => true,
+            'isPhpEnabled' => true,
+        ])->loadView('admin.reports.users', [
             'users' => $data,
             'title' => 'Users Report',
             'filterInfo' => $filterInfo,
             'total' => $data->count(),
-        ]);
+        ])->setPaper('a4', 'portrait');
 
         return $pdf->stream('users-report-' . date('Y-m-d') . '.pdf');
     }

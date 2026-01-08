@@ -333,12 +333,19 @@ class DiseaseController extends Controller
      */
     public function map()
     {
-        // Get all prescription diagnoses with appointment and user data
-        $cases = PrescriptionDiagnosis::with(['disease', 'appointment.user', 'appointment.patient'])
-            ->whereHas('appointment.user')
+        // Get all prescription diagnoses with prescription, patient, and user data
+        // Use prescription->patient->user instead of appointment->user to get the correct pet owner
+        $cases = PrescriptionDiagnosis::with(['disease', 'prescription.patient.user', 'appointment'])
+            ->whereHas('prescription.patient.user')
             ->get()
             ->map(function ($diagnosis) {
-                $user = $diagnosis->appointment->user;
+                // Get user from prescription's patient (the pet owner)
+                $user = $diagnosis->prescription->patient->user ?? null;
+                
+                if (!$user) {
+                    return null;
+                }
+                
                 return [
                     'disease_id' => $diagnosis->disease_id,
                     'disease_name' => $diagnosis->disease->name,
@@ -349,7 +356,7 @@ class DiseaseController extends Controller
                 ];
             })
             ->filter(function ($case) {
-                return $case['lat'] && $case['lng'];
+                return $case !== null && $case['lat'] && $case['lng'];
             });
 
         // Group by address (barangay) to find outbreak zones

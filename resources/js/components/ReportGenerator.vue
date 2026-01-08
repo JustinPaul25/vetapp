@@ -112,7 +112,22 @@ const generateReport = async (format: 'pdf' | 'csv') => {
         const response = await axios.get(props.exportUrl, {
             params,
             responseType: 'blob',
+            validateStatus: (status) => status < 500, // Don't throw for 4xx errors
         });
+
+        // Check if response is an error
+        const contentType = response.headers['content-type'] || '';
+        if (response.status !== 200 || contentType.includes('application/json')) {
+            // Response is an error, try to parse it
+            try {
+                const text = await response.data.text();
+                const errorData = JSON.parse(text);
+                showError(errorData.message || 'Failed to generate report. Please try again.');
+            } catch {
+                showError('Failed to generate report. Please try again.');
+            }
+            return;
+        }
 
         // Create a blob URL and trigger download
         const blob = new Blob([response.data], {
@@ -150,7 +165,19 @@ const generateReport = async (format: 'pdf' | 'csv') => {
         isOpen.value = false;
         resetFilters();
     } catch (error: any) {
-        showError(error.response?.data?.message || 'Failed to generate report. Please try again.');
+        // Handle axios errors
+        if (error.response?.data instanceof Blob) {
+            // Try to parse error from blob response
+            try {
+                const text = await error.response.data.text();
+                const errorData = JSON.parse(text);
+                showError(errorData.message || 'Failed to generate report. Please try again.');
+            } catch {
+                showError('Failed to generate report. Please try again.');
+            }
+        } else {
+            showError(error.response?.data?.message || 'Failed to generate report. Please try again.');
+        }
     }
 };
 
