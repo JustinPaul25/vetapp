@@ -28,6 +28,7 @@ interface Patient {
     pet_birth_date: string | null;
     pet_allergies: string | null;
     pet_type: string;
+    appointment_types?: string[];
     has_prescription?: boolean;
     owner: Owner | null;
 }
@@ -671,6 +672,19 @@ const handleReschedule = () => {
                                                 <div class="space-y-2">
                                                     <Label class="text-sm font-medium text-muted-foreground">Pet Type</Label>
                                                     <div class="text-lg font-semibold">{{ pet.pet_type }}</div>
+                                                </div>
+                                                <div class="space-y-2 md:col-span-2">
+                                                    <Label class="text-sm font-medium text-muted-foreground">Appointment Type(s)</Label>
+                                                    <div class="flex flex-wrap gap-2">
+                                                        <span
+                                                            v-for="(type, idx) in (pet.appointment_types || [])"
+                                                            :key="idx"
+                                                            class="px-3 py-1 bg-primary/10 text-primary rounded-full text-sm font-medium"
+                                                        >
+                                                            {{ type }}
+                                                        </span>
+                                                        <span v-if="!pet.appointment_types || pet.appointment_types.length === 0" class="text-lg font-semibold">—</span>
+                                                    </div>
                                                 </div>
                                                 <div class="space-y-2">
                                                     <Label class="text-sm font-medium text-muted-foreground">Breed</Label>

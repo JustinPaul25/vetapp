@@ -741,7 +741,24 @@ class ClientController extends Controller
         $patients = [];
         if ($appointment->patients && $appointment->patients->isNotEmpty()) {
             // New structure: multiple pets via pivot table
-            $patients = $appointment->patients->map(function ($pet) {
+            $patients = $appointment->patients->map(function ($pet) use ($appointment) {
+                // Get appointment types for this specific pet from the pivot table
+                $petAppointmentTypes = \DB::table('appointment_patient')
+                    ->where('appointment_id', $appointment->id)
+                    ->where('patient_id', $pet->id)
+                    ->join('appointment_types', 'appointment_patient.appointment_type_id', '=', 'appointment_types.id')
+                    ->pluck('appointment_types.name')
+                    ->toArray();
+                
+                // If no appointment types found in pivot, fallback to appointment's primary type
+                if (empty($petAppointmentTypes)) {
+                    if ($appointment->relationLoaded('appointment_type') && $appointment->appointment_type) {
+                        $petAppointmentTypes = [$appointment->appointment_type->name];
+                    } else {
+                        $petAppointmentTypes = ['N/A'];
+                    }
+                }
+                
                 return [
                     'id' => $pet->id,
                     'pet_name' => $pet->pet_name,
@@ -750,10 +767,24 @@ class ClientController extends Controller
                     'pet_birth_date' => $pet->pet_birth_date ? $pet->pet_birth_date->format('Y-m-d') : null,
                     'pet_allergies' => $pet->pet_allergies,
                     'pet_type' => $pet->petType ? $pet->petType->name : 'N/A',
+                    'appointment_types' => $petAppointmentTypes,
                 ];
             })->toArray();
         } elseif ($appointment->patient) {
             // Fallback: single pet via patient_id (backward compatibility)
+            $petAppointmentTypes = \DB::table('appointment_patient')
+                ->where('appointment_id', $appointment->id)
+                ->where('patient_id', $appointment->patient->id)
+                ->join('appointment_types', 'appointment_patient.appointment_type_id', '=', 'appointment_types.id')
+                ->pluck('appointment_types.name')
+                ->toArray();
+            
+            if (empty($petAppointmentTypes) && $appointment->appointment_type) {
+                $petAppointmentTypes = [$appointment->appointment_type->name];
+            } elseif (empty($petAppointmentTypes)) {
+                $petAppointmentTypes = ['N/A'];
+            }
+            
             $patients = [[
                 'id' => $appointment->patient->id,
                 'pet_name' => $appointment->patient->pet_name,
@@ -762,6 +793,7 @@ class ClientController extends Controller
                 'pet_birth_date' => $appointment->patient->pet_birth_date ? $appointment->patient->pet_birth_date->format('Y-m-d') : null,
                 'pet_allergies' => $appointment->patient->pet_allergies,
                 'pet_type' => $appointment->patient->petType ? $appointment->patient->petType->name : 'N/A',
+                'appointment_types' => $petAppointmentTypes,
             ]];
         }
 
@@ -1081,8 +1113,74 @@ class ClientController extends Controller
                 'reschedule_reason' => $request->reschedule_reason,
             ]);
 
-            // Reload appointment with relationships
-            $appointment->load('appointment_type', 'patient.petType', 'patient.user');
+            // Reload appointment with relationships including all patients
+            $appointment->load('appointment_type', 'patient.petType', 'patient.user', 'patients.petType', 'patients.user');
+
+            // Get all patients for this appointment
+            $patients = $appointment->patients;
+            if ($patients->isEmpty() && $appointment->patient) {
+                $patients = collect([$appointment->patient]);
+            }
+            
+            // Get the first patient's user for notifications (all pets should belong to the same user)
+            $firstPatient = $patients->first();
+            if (!$firstPatient || !$firstPatient->user) {
+                if ($isApiRequest) {
+                    return response()->json(['error' => 'Pet owner not found.'], 404);
+                }
+                return redirect()->route('client.appointments.show', $id)
+                    ->with('error', 'Pet owner not found.');
+            }
+
+            $patient_owner_full_name = $firstPatient->user ? 
+                trim(($firstPatient->user->first_name ?? '') . ' ' . ($firstPatient->user->last_name ?? '')) ?: $firstPatient->user->name : 'N/A';
+
+            // Build pet details with their appointment types for admin/staff notifications
+            $petDetailsHtml = '';
+            $petNamesList = [];
+            $allAppointmentTypes = [];
+            
+            foreach ($patients as $pet) {
+                $petNamesList[] = $pet->pet_name ?? 'Unnamed Pet';
+                
+                // Get appointment types for this specific pet from the pivot table
+                $petAppointmentTypes = \DB::table('appointment_patient')
+                    ->where('appointment_id', $appointment->id)
+                    ->where('patient_id', $pet->id)
+                    ->join('appointment_types', 'appointment_patient.appointment_type_id', '=', 'appointment_types.id')
+                    ->pluck('appointment_types.name')
+                    ->toArray();
+                
+                // If no appointment types found in pivot, fallback to appointment's primary type
+                if (empty($petAppointmentTypes)) {
+                    if ($appointment->appointment_type) {
+                        $petAppointmentTypes = [$appointment->appointment_type->name];
+                    } else {
+                        $petAppointmentTypes = ['N/A'];
+                    }
+                }
+                
+                $allAppointmentTypes = array_merge($allAppointmentTypes, $petAppointmentTypes);
+                $appointmentTypesList = implode(', ', $petAppointmentTypes);
+                
+                $petDetailsHtml .= "Pet Name: " . ($pet->pet_name ?? 'Unnamed Pet') . "<br>" .
+                    "Pet Type: " . ($pet->petType->name ?? 'N/A') . "<br>" .
+                    "Breed: " . ($pet->pet_breed ?? 'N/A') . "<br>" .
+                    "Appointment Type(s): {$appointmentTypesList}<br><br>";
+            }
+            
+            $petNamesListText = implode(', ', $petNamesList);
+            $allAppointmentTypes = array_unique($allAppointmentTypes);
+            $appointmentTypeName = implode(', ', $allAppointmentTypes);
+            if (empty($appointmentTypeName)) {
+                $appointmentTypeName = 'N/A';
+            }
+
+            // Format dates and times for user-friendly display
+            $oldDateFormatted = Carbon::createFromFormat('Y-m-d', $oldDate)->format('M d, Y');
+            $oldTimeFormatted = $oldTime; // Already in 12-hour format
+            $newTimeFormatted = Carbon::createFromFormat('H:i', $request->appointment_time)->format('h:i A');
+            $newDateFormatted = Carbon::createFromFormat('Y-m-d', $request->appointment_date)->format('M d, Y');
 
             // Notify Super Admins
             $adminUsers = User::select('users.*')
@@ -1100,27 +1198,14 @@ class ClientController extends Controller
                 ->distinct()
                 ->get();
 
-            $pet = $appointment->patient;
-            $patient_owner_full_name = $pet->user ? 
-                trim(($pet->user->first_name ?? '') . ' ' . ($pet->user->last_name ?? '')) ?: $pet->user->name : 'N/A';
-            $appointmentTypeName = $appointment->appointment_type->name ?? 'N/A';
-
-            // Format dates and times for user-friendly display
-            $oldDateFormatted = Carbon::createFromFormat('Y-m-d', $oldDate)->format('M d, Y');
-            $oldTimeFormatted = $oldTime; // Already in 12-hour format
-            $newTimeFormatted = Carbon::createFromFormat('H:i', $request->appointment_time)->format('h:i A');
-            $newDateFormatted = Carbon::createFromFormat('Y-m-d', $request->appointment_date)->format('M d, Y');
-
             $link = config('app.url') . '/admin/appointments/' . $appointment->id;
             $subject = sprintf("%s has rescheduled an appointment.", $patient_owner_full_name ?? '');
             $message = "Hi, an appointment has been rescheduled<br><br>" .
                 "Appointment Details.<br><br>" .
                 "Full Name: " . $patient_owner_full_name . "<br>" .
-                "Mobile Number: " . ($pet->user ? ($pet->user->mobile_number ?? 'N/A') : 'N/A') . "<br>" .
-                "Email Address: " . ($pet->user ? ($pet->user->email ?? 'N/A') : 'N/A') . "<br>" .
-                "Pet Type: " . ($pet->petType->name ?? 'N/A') . "<br>" .
-                "Breed: " . ($pet->pet_breed ?? 'N/A') . "<br>" .
-                "Appointment Type: " . $appointmentTypeName . "<br>" .
+                "Mobile Number: " . ($firstPatient->user ? ($firstPatient->user->mobile_number ?? 'N/A') : 'N/A') . "<br>" .
+                "Email Address: " . ($firstPatient->user ? ($firstPatient->user->email ?? 'N/A') : 'N/A') . "<br><br>" .
+                $petDetailsHtml .
                 "Previous Date: " . $oldDateFormatted . "<br>" .
                 "Previous Time: " . $oldTimeFormatted . "<br>" .
                 "New Date: " . $newDateFormatted . "<br>" .
@@ -1140,7 +1225,7 @@ class ClientController extends Controller
                     'subject' => $subject,
                     'message' => $appointmentMessage,
                     'link' => $link,
-                    'patient_name' => $pet->pet_name,
+                    'patient_name' => count($petNamesList) > 1 ? $petNamesListText : ($petNamesList[0] ?? 'N/A'),
                     'owner_name' => $patient_owner_full_name,
                     'old_date' => $oldDateFormatted,
                     'old_time' => $oldTimeFormatted,
@@ -1159,7 +1244,7 @@ class ClientController extends Controller
                     'subject' => $subject,
                     'message' => $appointmentMessage,
                     'link' => $link,
-                    'patient_name' => $pet->pet_name,
+                    'patient_name' => count($petNamesList) > 1 ? $petNamesListText : ($petNamesList[0] ?? 'N/A'),
                     'owner_name' => $patient_owner_full_name,
                     'old_date' => $oldDateFormatted,
                     'old_time' => $oldTimeFormatted,
@@ -1174,7 +1259,7 @@ class ClientController extends Controller
                 'subject' => $subject,
                 'message' => $appointmentMessage,
                 'link' => $link,
-                'patient_name' => $pet->pet_name,
+                'patient_name' => count($petNamesList) > 1 ? $petNamesListText : ($petNamesList[0] ?? 'N/A'),
                 'owner_name' => $patient_owner_full_name,
                 'old_date' => $oldDateFormatted,
                 'old_time' => $oldTimeFormatted,
@@ -1188,7 +1273,7 @@ class ClientController extends Controller
                 'subject' => $subject,
                 'message' => $appointmentMessage,
                 'link' => $link,
-                'patient_name' => $pet->pet_name,
+                'patient_name' => count($petNamesList) > 1 ? $petNamesListText : ($petNamesList[0] ?? 'N/A'),
                 'owner_name' => $patient_owner_full_name,
                 'old_date' => $oldDateFormatted,
                 'old_time' => $oldTimeFormatted,
@@ -1197,14 +1282,41 @@ class ClientController extends Controller
             ]);
 
             // Send notification to client confirming reschedule
-            if ($pet->user) {
+            if ($firstPatient->user) {
                 $clientLink = config('app.url') . '/appointments/' . $appointment->id;
                 $clientSubject = 'Your appointment has been rescheduled';
+                $rescheduleReason = $request->reschedule_reason;
+                
+                // Build pet details HTML for client email
+                $clientPetDetailsHtml = '';
+                foreach ($patients as $pet) {
+                    // Get appointment types for this specific pet from the pivot table
+                    $petAppointmentTypes = \DB::table('appointment_patient')
+                        ->where('appointment_id', $appointment->id)
+                        ->where('patient_id', $pet->id)
+                        ->join('appointment_types', 'appointment_patient.appointment_type_id', '=', 'appointment_types.id')
+                        ->pluck('appointment_types.name')
+                        ->toArray();
+                    
+                    // If no appointment types found in pivot, fallback to appointment's primary type
+                    if (empty($petAppointmentTypes)) {
+                        if ($appointment->appointment_type) {
+                            $petAppointmentTypes = [$appointment->appointment_type->name];
+                        } else {
+                            $petAppointmentTypes = ['N/A'];
+                        }
+                    }
+                    
+                    $appointmentTypesList = implode(', ', $petAppointmentTypes);
+                    $clientPetDetailsHtml .= "Pet Name: " . ($pet->pet_name ?? 'Unnamed Pet') . "<br>" .
+                        "Appointment Type(s): {$appointmentTypesList}<br><br>";
+                }
+                
                 $clientMessage = "Hi {$patient_owner_full_name},<br><br>" .
                     "Your appointment has been successfully rescheduled.<br><br>" .
+                    "Reason for Rescheduling: {$rescheduleReason}<br><br>" .
                     "Appointment Details:<br><br>" .
-                    "Pet Name: {$pet->pet_name}<br>" .
-                    "Appointment Type: {$appointmentTypeName}<br>" .
+                    $clientPetDetailsHtml .
                     "Previous Date: {$oldDateFormatted}<br>" .
                     "Previous Time: {$oldTimeFormatted}<br>" .
                     "New Date: {$newDateFormatted}<br>" .
@@ -1213,8 +1325,8 @@ class ClientController extends Controller
                     "<p style='text-align:center'><a href='" . $clientLink . "' style='background-color: #4CAF50; border: none; color: white; padding: 15px 32px; text-align: center; text-decoration: none; font-size: 12px; border-radius: 15px;'>View Appointment</a></p>";
 
                 // Send email notification to client
-                if ($pet->user->email) {
-                    Notification::route('mail', $pet->user->email)
+                if ($firstPatient->user->email) {
+                    Notification::route('mail', $firstPatient->user->email)
                         ->notify(new \App\Notifications\ClientEmailNotification([
                             'subject' => $clientSubject,
                             'body' => $clientMessage,
@@ -1223,16 +1335,16 @@ class ClientController extends Controller
 
                 // Send database notification (in-app notification) to client
                 $databaseMessage = "Your {$appointmentTypeName} appointment has been rescheduled from {$oldDateFormatted} at {$oldTimeFormatted} to {$newDateFormatted} at {$newTimeFormatted}.";
-                $pet->user->notify(new \App\Notifications\DatabaseNotification($clientSubject, $databaseMessage, $clientLink));
+                $firstPatient->user->notify(new \App\Notifications\DatabaseNotification($clientSubject, $databaseMessage, $clientLink));
 
                 // Send real-time notification to client via Ably
                 $clientAppointmentMessage = "Your {$appointmentTypeName} appointment has been rescheduled from {$oldDateFormatted} at {$oldTimeFormatted} to {$newDateFormatted} at {$newTimeFormatted}";
-                $ablyService->publishToUser($pet->user->id, 'appointment.rescheduled', [
+                $ablyService->publishToUser($firstPatient->user->id, 'appointment.rescheduled', [
                     'appointment_id' => $appointment->id,
                     'subject' => $clientSubject,
                     'message' => $clientAppointmentMessage,
                     'link' => $clientLink,
-                    'patient_name' => $pet->pet_name,
+                    'patient_name' => count($petNamesList) > 1 ? $petNamesListText : ($petNamesList[0] ?? 'N/A'),
                     'old_date' => $oldDateFormatted,
                     'old_time' => $oldTimeFormatted,
                     'new_date' => $newDateFormatted,

@@ -26,6 +26,10 @@ Route::middleware(['auth'])->group(function () {
     Route::post('/register/password', [\App\Http\Controllers\Auth\RegistrationController::class, 'storePassword'])->name('register.password.store');
     Route::get('/register/review', [\App\Http\Controllers\Auth\RegistrationController::class, 'showReview'])->name('register.review');
     Route::post('/register/finalize', [\App\Http\Controllers\Auth\RegistrationController::class, 'finalize'])->name('register.finalize');
+
+    // General email verification routes (for non-registration flows)
+    Route::post('/email/verify-code', [\App\Http\Controllers\Auth\EmailVerificationController::class, 'verifyCode'])->name('email.verify-code');
+    Route::post('/email/resend-verification', [\App\Http\Controllers\Auth\EmailVerificationController::class, 'resendVerificationCode'])->name('email.resend-verification');
 });
 
 // Public disease search route for landing page

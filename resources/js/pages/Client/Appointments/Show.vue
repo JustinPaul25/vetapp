@@ -50,6 +50,7 @@ interface Patient {
     pet_birth_date: string | null;
     pet_allergies: string | null;
     pet_type: string;
+    appointment_types?: string[];
 }
 
 interface Appointment {
@@ -556,11 +557,23 @@ const cancelAppointment = () => {
                                     class="border"
                                 >
                                     <CardContent class="p-4">
-                                        <div class="flex items-center justify-between">
+                                        <div class="space-y-3">
                                             <div>
                                                 <div class="text-base font-semibold">{{ pet.pet_name || 'Unnamed Pet' }}</div>
                                                 <div class="text-sm text-muted-foreground mt-1">
                                                     {{ pet.pet_type }} · {{ pet.pet_breed || '—' }}
+                                                </div>
+                                            </div>
+                                            <div v-if="pet.appointment_types && pet.appointment_types.length > 0">
+                                                <Label class="text-sm font-medium text-muted-foreground">Appointment Type(s)</Label>
+                                                <div class="flex flex-wrap gap-2 mt-1">
+                                                    <span
+                                                        v-for="(type, idx) in pet.appointment_types"
+                                                        :key="idx"
+                                                        class="px-3 py-1 bg-primary/10 text-primary rounded-full text-sm font-medium"
+                                                    >
+                                                        {{ type }}
+                                                    </span>
                                                 </div>
                                             </div>
                                         </div>
@@ -579,6 +592,18 @@ const cancelAppointment = () => {
                                 <div class="space-y-2">
                                     <Label class="text-sm font-medium text-muted-foreground">Pet Type</Label>
                                     <div class="text-lg font-semibold">{{ patient.pet_type }}</div>
+                                </div>
+                                <div class="space-y-2 md:col-span-2" v-if="patient.appointment_types && patient.appointment_types.length > 0">
+                                    <Label class="text-sm font-medium text-muted-foreground">Appointment Type(s)</Label>
+                                    <div class="flex flex-wrap gap-2">
+                                        <span
+                                            v-for="(type, idx) in patient.appointment_types"
+                                            :key="idx"
+                                            class="px-3 py-1 bg-primary/10 text-primary rounded-full text-sm font-medium"
+                                        >
+                                            {{ type }}
+                                        </span>
+                                    </div>
                                 </div>
                                 <div class="space-y-2">
                                     <Label class="text-sm font-medium text-muted-foreground">Breed</Label>
