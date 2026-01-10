@@ -293,16 +293,26 @@ class UserController extends Controller
         
         switch ($filterType) {
             case 'date':
-                return 'Date: ' . $request->get('date');
+                $date = $request->get('date');
+                return !empty($date) ? 'Date: ' . $date : 'All Records';
             case 'month':
                 $month = $request->get('month');
                 $year = $request->get('year');
-                $monthName = date('F', mktime(0, 0, 0, (int)$month, 1));
-                return "Month: {$monthName} {$year}";
+                if (!empty($month) && !empty($year)) {
+                    $monthName = date('F', mktime(0, 0, 0, (int)$month, 1));
+                    return "Month: {$monthName} {$year}";
+                }
+                return 'All Records';
             case 'year':
-                return 'Year: ' . $request->get('year');
+                $year = $request->get('year');
+                return !empty($year) ? 'Year: ' . $year : 'All Records';
             case 'range':
-                return 'Range: ' . $request->get('date_from') . ' to ' . $request->get('date_to');
+                $dateFrom = $request->get('date_from');
+                $dateTo = $request->get('date_to');
+                if (!empty($dateFrom) && !empty($dateTo)) {
+                    return 'Range: ' . $dateFrom . ' to ' . $dateTo;
+                }
+                return 'All Records';
             default:
                 return 'All Records';
         }

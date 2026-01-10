@@ -15,13 +15,15 @@ import axios from 'axios';
 import { useToast } from '@/composables/useToast';
 
 interface Appointment {
-    id: number;
+    id: number | string;
     appointment_type: string;
     appointment_date: string | null;
     appointment_time: string | null;
     status: string;
     pet_type: string;
     pet_name: string;
+    is_followup?: boolean;
+    prescription_id?: number;
 }
 
 interface DisabledDate {
@@ -97,26 +99,50 @@ const events = computed<EventInput[]>(() => {
             return true;
         })
         .map((apt) => {
-            if (!apt.appointment_date || !apt.appointment_time) return null;
+            if (!apt.appointment_date) return null;
 
-            // Parse date and time
+            // Check if this is a follow-up appointment (no time required)
+            const isFollowUp = apt.is_followup === true;
+
+            // Parse date
             const [year, month, day] = apt.appointment_date.split('-').map(Number);
-            const [hours, minutes] = apt.appointment_time.split(':').map(Number);
+            let start: Date;
+            let end: Date;
+            let allDay = false;
 
-            // Create start date
-            const start = new Date(year, month - 1, day, hours, minutes);
-            
-            // Default duration: 30 minutes
-            const end = new Date(start.getTime() + 30 * 60 * 1000);
+            if (isFollowUp) {
+                // Follow-up appointments are all-day events
+                start = new Date(year, month - 1, day);
+                start.setHours(0, 0, 0, 0);
+                end = new Date(start);
+                end.setDate(end.getDate() + 1);
+                allDay = true;
+            } else {
+                // Regular appointments need a time
+                if (!apt.appointment_time) return null;
+                const [hours, minutes] = apt.appointment_time.split(':').map(Number);
+                start = new Date(year, month - 1, day, hours, minutes);
+                // Default duration: 30 minutes
+                end = new Date(start.getTime() + 30 * 60 * 1000);
+            }
 
-            // Get status color
-            const statusColor = getStatusColor(apt.status);
+            // Get status color - follow-ups have a distinct color
+            const statusColor = isFollowUp 
+                ? {
+                    backgroundColor: '#e7d5ff',
+                    borderColor: '#9333ea',
+                    textColor: '#581c87',
+                }
+                : getStatusColor(apt.status);
 
             return {
                 id: apt.id.toString(),
-                title: `${apt.pet_name} - ${apt.appointment_type}`,
+                title: isFollowUp 
+                    ? `${apt.pet_name} - Follow-up Check-up`
+                    : `${apt.pet_name} - ${apt.appointment_type}`,
                 start: start.toISOString(),
                 end: end.toISOString(),
+                allDay: allDay,
                 backgroundColor: statusColor.backgroundColor,
                 borderColor: statusColor.borderColor,
                 textColor: statusColor.textColor,
@@ -126,7 +152,9 @@ const events = computed<EventInput[]>(() => {
                     appointmentType: apt.appointment_type,
                     petType: apt.pet_type,
                     status: apt.status,
-                    time: formatTime(apt.appointment_time),
+                    time: isFollowUp ? null : formatTime(apt.appointment_time),
+                    isFollowUp: isFollowUp,
+                    prescriptionId: apt.prescription_id || null,
                 },
             };
         })
@@ -208,9 +236,27 @@ const handleEventClick = (clickInfo: EventClickArg) => {
         return;
     }
     
-    // Otherwise, handle as appointment click
+    // Check if this is a follow-up appointment
+    if (clickInfo.event.extendedProps.isFollowUp) {
+        const prescriptionId = clickInfo.event.extendedProps.prescriptionId;
+        if (prescriptionId) {
+            // Navigate to prescription page - handle both admin and client routes
+            const isAdminRoute = props.routePrefix.includes('/admin');
+            if (isAdminRoute) {
+                router.visit(`/admin/prescriptions/${prescriptionId}`);
+            } else {
+                // For clients, just show a toast or don't navigate (prescriptions may not be directly viewable)
+                // Alternatively, we could navigate to the appointment if available
+                console.log('Follow-up check-up date clicked for prescription:', prescriptionId);
+                // For now, don't navigate for clients - they'll see the follow-up date on the calendar
+            }
+        }
+        return;
+    }
+    
+    // Otherwise, handle as regular appointment click
     const appointmentId = clickInfo.event.extendedProps.appointmentId;
-    if (appointmentId) {
+    if (appointmentId && typeof appointmentId !== 'string' || !appointmentId.toString().startsWith('followup-')) {
         router.visit(`${props.routePrefix}/${appointmentId}`);
     }
 };

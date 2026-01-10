@@ -202,35 +202,134 @@ onMounted(() => {
         maxZoom: 19,
     }).addTo(map.value);
 
-    // Add hotspot zones
+    // Create a map of hotspot locations to avoid placing disease markers on them
+    const hotspotLocations = new Map<string, { lat: number; lng: number; address: string }>();
+    const hotspotTolerance = 0.001; // Tolerance for matching hotspot locations (increased for better matching)
+    const hotspotMarkers: L.Marker[] = []; // Store hotspot markers to bring them to front later
+    
+    // Add hotspot zones first (we'll bring them to front after all markers are added)
     props.outbreakZones.forEach((zone) => {
-        // Add marker for zone center
-        L.marker([zone.lat, zone.lng], {
-            icon: L.icon({
-                iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-red.png',
-                shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png',
-                iconSize: [25, 41],
-                iconAnchor: [12, 41],
-                popupAnchor: [1, -34],
-                shadowSize: [41, 41],
-            }),
-        })
+        const hotspotKey = `${Math.round(zone.lat / hotspotTolerance) * hotspotTolerance},${Math.round(zone.lng / hotspotTolerance) * hotspotTolerance}`;
+        hotspotLocations.set(hotspotKey, { lat: zone.lat, lng: zone.lng, address: zone.address });
+        
+        // Create a custom red marker icon (larger, more visible red circle)
+        const redMarkerIcon = L.divIcon({
+            className: 'hotspot-marker',
+            html: `
+                <div style="
+                    background-color: #dc2626;
+                    width: 24px;
+                    height: 24px;
+                    border-radius: 50%;
+                    border: 4px solid white;
+                    box-shadow: 0 3px 10px rgba(0,0,0,0.6), 0 0 0 3px rgba(220, 38, 38, 0.4);
+                    position: relative;
+                    z-index: 1000;
+                ">
+                    <div style="
+                        position: absolute;
+                        top: 50%;
+                        left: 50%;
+                        transform: translate(-50%, -50%);
+                        width: 10px;
+                        height: 10px;
+                        background-color: white;
+                        border-radius: 50%;
+                        box-shadow: inset 0 1px 2px rgba(0,0,0,0.2);
+                    "></div>
+                </div>
+            `,
+            iconSize: [24, 24],
+            iconAnchor: [12, 12],
+            popupAnchor: [0, -12],
+        });
+        
+        // Add red marker for hotspot with higher z-index
+        const hotspotMarker = L.marker([zone.lat, zone.lng], {
+            icon: redMarkerIcon,
+            zIndexOffset: 1000, // Ensure hotspots appear on top
+        });
+        
+        // Collect diseases for this hotspot address
+        const hotspotDiseases = props.cases
+            .filter(caseItem => {
+                const caseKey = `${Math.round(caseItem.lat / hotspotTolerance) * hotspotTolerance},${Math.round(caseItem.lng / hotspotTolerance) * hotspotTolerance}`;
+                return caseKey === hotspotKey || caseItem.address === zone.address;
+            })
+            .map(c => c.disease_name);
+        
+        const uniqueHotspotDiseases = Array.from(new Set(hotspotDiseases));
+        
+        // Build popup content for hotspot
+        let hotspotPopupContent = `
+            <div style="min-width: 200px;">
+                <strong style="color: #dc2626;">🔥 Hotspot</strong><br/>
+                <div style="margin-top: 8px; font-size: 11px; color: #6b7280;">
+                    Address: ${zone.address}<br/>
+                    Cases: ${zone.count}
+                </div>
+        `;
+        
+        if (uniqueHotspotDiseases.length > 0) {
+            hotspotPopupContent += `
+                <div style="margin-top: 8px; border-top: 1px solid #e5e7eb; padding-top: 8px;">
+                    <strong style="font-size: 12px;">Diseases:</strong><br/>
+                    <div style="margin-top: 4px;">
+            `;
+            uniqueHotspotDiseases.forEach((disease, idx) => {
+                const color = props.diseaseColors[disease] || '#3388ff';
+                hotspotPopupContent += `
+                    <div style="margin-bottom: 4px;">
+                        <span style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; background-color: ${color}; margin-right: 6px;"></span>
+                        <span style="font-size: 12px;">${disease}</span>
+                    </div>
+                `;
+            });
+            hotspotPopupContent += `</div></div>`;
+        }
+        
+        hotspotPopupContent += `</div>`;
+        
+        hotspotMarker
             .addTo(map.value!)
-            .bindPopup(
-                `<strong>Hotspot</strong><br/>${zone.address}<br/>Cases: ${zone.count}`
-            )
-            .bindTooltip(`Hotspot: ${zone.address}`, {
+            .bindPopup(hotspotPopupContent, {
+                maxWidth: 300,
+                className: 'hotspot-popup-container'
+            })
+            .bindTooltip(`🔥 Hotspot: ${zone.address} (${zone.count} cases)`, {
                 permanent: false,
                 direction: 'top',
                 offset: [0, -6]
             });
+        
+        // Store marker to bring to front later
+        hotspotMarkers.push(hotspotMarker);
     });
 
     // Group cases by location
     const groupedLocations = groupCasesByLocation(props.cases);
     
-    // Add disease case markers (one per location)
+    // Helper function to check if a location is near a hotspot
+    const isNearHotspot = (lat: number, lng: number): boolean => {
+        for (const [key, hotspot] of hotspotLocations.entries()) {
+            const distance = Math.sqrt(
+                Math.pow(lat - hotspot.lat, 2) + Math.pow(lng - hotspot.lng, 2)
+            );
+            // If within 0.001 degrees (~100 meters), consider it a hotspot location
+            if (distance < hotspotTolerance) {
+                return true;
+            }
+        }
+        return false;
+    };
+    
+    // Add disease case markers (one per location), but skip locations that are hotspots
     groupedLocations.forEach((location, index) => {
+        // Check if this location is near a hotspot
+        if (isNearHotspot(location.lat, location.lng)) {
+            // Skip this location as it's already marked as a hotspot
+            return;
+        }
         const uniqueDiseases = Array.from(
             new Map(location.diseases.map(d => [d.disease_name, d])).values()
         );
@@ -281,6 +380,11 @@ onMounted(() => {
                 }
             }, 100);
         });
+    });
+    
+    // Bring all hotspot markers to the front to ensure they're visible above disease markers
+    hotspotMarkers.forEach(marker => {
+        marker.bringToFront();
     });
 });
 </script>
@@ -401,11 +505,26 @@ onMounted(() => {
     background: transparent !important;
     border: none !important;
 }
+
+.hotspot-marker {
+    background: transparent !important;
+    border: none !important;
+    z-index: 1000 !important;
+}
+
+.leaflet-marker-pane .hotspot-marker {
+    z-index: 1000 !important;
+}
 </style>
 
 <style>
 /* Global styles for Leaflet popups */
 .disease-popup-container .leaflet-popup-content {
+    margin: 12px;
+    font-size: 14px;
+}
+
+.hotspot-popup-container .leaflet-popup-content {
     margin: 12px;
     font-size: 14px;
 }
@@ -425,6 +544,17 @@ onMounted(() => {
 
 .disease-popup a:hover {
     opacity: 0.8;
+}
+
+/* Ensure hotspot markers are visible and on top */
+.leaflet-marker-icon[src*="marker-icon-red"] {
+    z-index: 1000 !important;
+}
+
+/* Custom marker styling */
+.custom-marker {
+    position: relative;
+    z-index: 100;
 }
 </style>
 

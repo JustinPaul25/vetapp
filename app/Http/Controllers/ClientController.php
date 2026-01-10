@@ -9,6 +9,7 @@ use App\Models\DisabledDate;
 use App\Models\Patient;
 use App\Models\PetBreed;
 use App\Models\PetType;
+use App\Models\Prescription;
 use App\Models\User;
 use App\Notifications\DatabaseNotification;
 use App\Services\AblyService;
@@ -217,6 +218,38 @@ class ClientController extends Controller
                         ? ($patients->first() ? $patients->first()->pet_name . ' (+' . ($petCount - 1) . ' more)' : 'N/A')
                         : ($patients->first() ? $patients->first()->pet_name : 'N/A'),
                     'pet_type' => $petTypeDisplay,
+                ];
+            }
+
+            // Fetch prescriptions with follow-up dates for this user's pets
+            $prescriptions = Prescription::whereHas('patient', function ($q) {
+                    $q->where('user_id', auth()->id());
+                })
+                ->whereNotNull('follow_up_date')
+                ->whereDate('follow_up_date', '>=', Carbon::today())
+                ->with(['patient.petType', 'appointment'])
+                ->get();
+
+            // Convert prescriptions to follow-up appointment format
+            foreach ($prescriptions as $prescription) {
+                $patient = $prescription->patient;
+                $result[] = [
+                    'id' => 'followup-' . $prescription->id,
+                    'appointment_date' => $prescription->follow_up_date->format('Y-m-d'),
+                    'appointment_time' => null, // Follow-ups don't have specific times
+                    'status' => 'Follow-up',
+                    'pet_count' => 1,
+                    'appointments' => [[
+                        'id' => $patient->id,
+                        'appointment_type' => 'Follow-up Check-up',
+                        'pet_type' => $patient->petType ? $patient->petType->name : 'N/A',
+                        'pet_name' => $patient->pet_name,
+                    ]],
+                    'appointment_type' => 'Follow-up Check-up',
+                    'pet_name' => $patient->pet_name,
+                    'pet_type' => $patient->petType ? $patient->petType->name : 'N/A',
+                    'is_followup' => true,
+                    'prescription_id' => $prescription->id,
                 ];
             }
 

@@ -222,7 +222,14 @@ const getSelectedMedicineName = (rowId: number): string => {
     if (!row || !row.medicine_id) return '';
     
     const medicine = props.medicines.find(m => m.id === row.medicine_id);
-    return medicine ? `${medicine.name} (${medicine.dosage})` : '';
+    if (!medicine) return '';
+    
+    // Only show dosage in parentheses if it exists and is meaningful
+    if (medicine.dosage && medicine.dosage.trim() !== '') {
+        return `${medicine.name} (${medicine.dosage})`;
+    }
+    
+    return medicine.name;
 };
 
 // Open instructions modal for a specific row
@@ -447,6 +454,14 @@ const loadMedicinesForDisease = async (diseaseId: number) => {
                 if (!existingRow.disease_ids.includes(diseaseId)) {
                     existingRow.disease_ids.push(diseaseId);
                 }
+                // Recalculate dosage in case weight was entered after medicine was added
+                // Find the medicine from props to get the latest dosage pattern
+                const medicineFromProps = props.medicines.find(m => m.id === medicine.id);
+                if (medicineFromProps) {
+                    existingRow.dosage = calculateDosage(medicineFromProps.dosage, form.pet_current_weight);
+                } else {
+                    existingRow.dosage = calculateDosage(medicine.dosage, form.pet_current_weight);
+                }
             } else {
                 // Add new medicine row
                 const newId = medicineRowCounter.value++;
@@ -472,22 +487,69 @@ const loadMedicinesForDisease = async (diseaseId: number) => {
 };
 
 // Calculate dosage based on weight
-const calculateDosage = (dosagePattern: string, weight: string): string => {
-    if (!weight || !dosagePattern) return '';
+const calculateDosage = (dosagePattern: string | null | undefined, weight: string): string => {
+    // Handle null, undefined, or empty dosage
+    if (!dosagePattern || typeof dosagePattern !== 'string' || dosagePattern.trim() === '') {
+        return '';
+    }
+    
+    const trimmedPattern = dosagePattern.trim();
+    
+    // Check if dosage pattern is a placeholder/non-calculable value
+    const lowerPattern = trimmedPattern.toLowerCase();
+    const nonCalculablePatterns = ['as prescribed', 'as per prescription', 'per prescription'];
+    
+    // For non-calculable patterns, return the original pattern so user can see it
+    // but understand it's not auto-calculated - they can edit it if needed
+    if (nonCalculablePatterns.includes(lowerPattern)) {
+        return trimmedPattern;
+    }
+    
+    // If weight is not provided, return the original pattern to show what's in the database
+    // User can still edit it manually
+    if (!weight || weight.trim() === '') {
+        return trimmedPattern;
+    }
     
     const weightNum = parseFloat(weight);
-    if (isNaN(weightNum)) return '';
-
-    // Pattern: "1ml/10 Kg" or "1ml/10Kg"
-    const match = dosagePattern.match(/(\d+(?:\.\d+)?)\s*ml\s*\/\s*(\d+(?:\.\d+)?)\s*Kg/i);
-    if (match) {
-        const ml = parseFloat(match[1]);
-        const perKg = parseFloat(match[2]);
-        const calculated = (weightNum / perKg) * ml;
-        return `${calculated.toFixed(2)}ml`;
+    if (isNaN(weightNum) || weightNum <= 0) {
+        return trimmedPattern;
     }
 
-    return dosagePattern;
+    // Pattern: "1ml/10 Kg", "1ml/10Kg", "1ml/10 Kg body weight", "1ml/10kg", etc. - this is calculable
+    // Match: (number)ml / (number)Kg (case-insensitive, allows optional text after Kg)
+    // Try multiple pattern variations to handle different formats with flexible spacing
+    let match = trimmedPattern.match(/(\d+(?:\.\d+)?)\s*ml\s*\/\s*(\d+(?:\.\d+)?)\s*kg/i);
+    
+    // If first pattern doesn't match, try without requiring space before ml
+    if (!match) {
+        match = trimmedPattern.match(/(\d+(?:\.\d+)?)ml\s*\/\s*(\d+(?:\.\d+)?)\s*kg/i);
+    }
+    
+    // If still no match, try with very flexible spacing (allows any whitespace)
+    if (!match) {
+        match = trimmedPattern.match(/(\d+(?:\.\d+)?)\s*ml\s*\/\s*(\d+(?:\.\d+)?)\s*k\s*g/i);
+    }
+    
+    // If still no match, try without requiring "kg" at all (just match the pattern structure)
+    if (!match) {
+        match = trimmedPattern.match(/(\d+(?:\.\d+)?)\s*ml\s*\/\s*(\d+(?:\.\d+)?)/i);
+    }
+    
+    if (match && match.length >= 3) {
+        const ml = parseFloat(match[1]);
+        const perKg = parseFloat(match[2]);
+        if (!isNaN(ml) && !isNaN(perKg) && perKg > 0 && ml > 0) {
+            const calculated = (weightNum / perKg) * ml;
+            // Round to 2 decimal places, but remove trailing zeros for cleaner display
+            const rounded = parseFloat(calculated.toFixed(2));
+            return `${rounded}ml`;
+        }
+    }
+
+    // If pattern doesn't match calculation format but has actual content, return it
+    // This covers cases like "1 tablet", "2mg", etc. that aren't weight-based calculations
+    return trimmedPattern;
 };
 
 // Watch weight changes and recalculate dosages
@@ -510,8 +572,13 @@ const onMedicineChange = (rowId: number, medicineId: number) => {
         // Remove from newly added set once medicine is selected
         newlyAddedRowIds.value.delete(rowId);
         const medicine = props.medicines.find(m => m.id === medicineId);
-        if (medicine && form.pet_current_weight) {
+        if (medicine) {
+            // Always call calculateDosage - it will handle "As prescribed", 
+            // missing weight, and calculable patterns appropriately
             row.dosage = calculateDosage(medicine.dosage, form.pet_current_weight);
+        } else {
+            // If medicine not found, clear dosage
+            row.dosage = '';
         }
     }
 };
@@ -552,20 +619,36 @@ const switchPet = (petId: number) => {
     });
 };
 
+// Check if fields should be optional based on appointment type
+const optionalFieldsTypes = ['Deworming', 'Consultation', 'Vaccination'];
+const hasOptionalFields = computed(() => {
+    return optionalFieldsTypes.includes(props.appointment.appointment_type);
+});
+
 // Submit form
 const submit = () => {
     // Client-side validation before submission
     const validationErrors: string[] = [];
     
-    if (!form.pet_current_weight || parseFloat(form.pet_current_weight) <= 0) {
-        validationErrors.push('Pet weight is required and must be greater than 0');
+    // Weight validation - optional for DEWORMING, CONSULTATION, VACCINATION
+    if (!hasOptionalFields.value) {
+        if (!form.pet_current_weight || parseFloat(form.pet_current_weight) <= 0) {
+            validationErrors.push('Pet weight is required and must be greater than 0');
+        }
+    } else {
+        // For optional types, only validate if weight is provided
+        if (form.pet_current_weight && parseFloat(form.pet_current_weight) <= 0) {
+            validationErrors.push('Pet weight must be greater than 0 if provided');
+        }
     }
     
-    if (selectedSymptoms.value.length === 0) {
+    // Symptoms validation - optional for DEWORMING, CONSULTATION, VACCINATION
+    if (!hasOptionalFields.value && selectedSymptoms.value.length === 0) {
         validationErrors.push('Please select at least one symptom');
     }
     
-    if (selectedDiseases.value.length === 0) {
+    // Diseases validation - optional for DEWORMING, CONSULTATION, VACCINATION
+    if (!hasOptionalFields.value && selectedDiseases.value.length === 0) {
         validationErrors.push('Please select at least one disease/diagnosis');
     }
     
@@ -599,7 +682,7 @@ const submit = () => {
         return;
     }
     
-    // Sync disease_ids from selectedDiseases before submission
+    // Sync disease_ids from selectedDiseases before submission (can be empty for optional types)
     form.disease_ids = selectedDiseases.value.map(d => d.id);
     
     // Map to the structure expected by the backend
@@ -749,21 +832,26 @@ const submit = () => {
 
                         <!-- Pet Weight -->
                         <div class="space-y-2">
-                            <Label for="pet_weight">Pet Current Weight (Kg) *</Label>
+                            <Label for="pet_weight">
+                                Pet Current Weight (Kg) <span v-if="!hasOptionalFields">*</span>
+                            </Label>
                             <Input
                                 id="pet_weight"
                                 v-model="form.pet_current_weight"
                                 type="number"
                                 step="0.1"
-                                required
+                                :required="!hasOptionalFields"
                                 placeholder="e.g., 10.5"
                             />
                             <InputError :message="form.errors.pet_current_weight" />
+                            <p v-if="hasOptionalFields" class="text-xs text-muted-foreground">
+                                Weight is optional for this appointment type. If not provided, you can manually enter medicine dosages.
+                            </p>
                         </div>
 
                         <!-- Symptoms Selection -->
                         <div class="space-y-2">
-                            <Label>Symptoms *</Label>
+                            <Label>Symptoms <span v-if="!hasOptionalFields">*</span></Label>
                             
                             <!-- Multi-select input trigger -->
                             <div
@@ -1120,7 +1208,7 @@ const submit = () => {
 
                         <!-- Selected Diseases -->
                         <div v-if="selectedDiseases.length > 0" class="space-y-2">
-                            <Label>Selected Diagnoses *</Label>
+                            <Label>Selected Diagnoses <span v-if="!hasOptionalFields">*</span></Label>
                             <div class="flex flex-wrap gap-2">
                                 <div
                                     v-for="disease in selectedDiseases"
@@ -1139,6 +1227,14 @@ const submit = () => {
                                 </div>
                             </div>
                             <InputError :message="form.errors.disease_ids" />
+                        </div>
+                        
+                        <!-- Show message if diseases are optional but none selected -->
+                        <div v-if="hasOptionalFields && selectedDiseases.length === 0" class="space-y-2">
+                            <Label>Selected Diagnoses (Optional)</Label>
+                            <p class="text-sm text-muted-foreground">
+                                No diseases selected. You can proceed without selecting diseases for this appointment type.
+                            </p>
                         </div>
 
                         <!-- Medicines Table -->
@@ -1187,7 +1283,7 @@ const submit = () => {
                                                 <Input
                                                     v-model="row.dosage"
                                                     type="text"
-                                                    placeholder="Auto-calculated"
+                                                    placeholder="Enter dosage (auto-calculated if pattern matches)"
                                                 />
                                             </td>
                                             <td class="p-2">

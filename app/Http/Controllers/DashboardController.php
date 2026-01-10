@@ -5,6 +5,8 @@ namespace App\Http\Controllers;
 use App\Models\Appointment;
 use App\Models\DisabledDate;
 use App\Models\Patient;
+use App\Models\Prescription;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
@@ -80,6 +82,30 @@ class DashboardController extends Controller
                     'pet_name' => $petNames ?: 'N/A',
                 ];
             })->toArray();
+
+            // Fetch prescriptions with follow-up dates
+            $prescriptions = Prescription::whereNotNull('follow_up_date')
+                ->whereDate('follow_up_date', '>=', Carbon::today())
+                ->with(['patient.petType'])
+                ->get();
+
+            // Convert prescriptions to follow-up appointment format
+            foreach ($prescriptions as $prescription) {
+                $patient = $prescription->patient;
+                if ($patient) {
+                    $appointments[] = [
+                        'id' => 'followup-' . $prescription->id,
+                        'appointment_type' => 'Follow-up Check-up',
+                        'appointment_date' => $prescription->follow_up_date->format('Y-m-d'),
+                        'appointment_time' => null,
+                        'status' => 'Follow-up',
+                        'pet_type' => $patient->petType ? $patient->petType->name : 'N/A',
+                        'pet_name' => $patient->pet_name,
+                        'is_followup' => true,
+                        'prescription_id' => $prescription->id,
+                    ];
+                }
+            }
         }
 
         // Fetch disabled dates for admin and staff

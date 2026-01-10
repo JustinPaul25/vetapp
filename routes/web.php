@@ -178,6 +178,7 @@ Route::middleware(['auth', 'verified', \App\Http\Middleware\EnsureUserIsAdminOrS
         Route::get('patients/{patient}/weight-history', [\App\Http\Controllers\Admin\PatientController::class, 'getWeightHistory'])->name('patients.weight-history');
         Route::post('patients/{patient}/weight-history', [\App\Http\Controllers\Admin\PatientController::class, 'storeWeightHistory'])->name('patients.weight-history.store');
         Route::get('medicines/export', [\App\Http\Controllers\Admin\MedicineController::class, 'export'])->name('medicines.export');
+        Route::post('medicines/bulk-update-stock', [\App\Http\Controllers\Admin\MedicineController::class, 'bulkUpdateStock'])->name('medicines.bulk-update-stock');
         Route::resource('medicines', \App\Http\Controllers\Admin\MedicineController::class);
         
         // Reference Data - accessible to both admin and staff

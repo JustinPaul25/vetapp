@@ -364,13 +364,47 @@ const formatDate = (dateString: string | null) => {
 
 const formatTime = (timeString: string | null) => {
     if (!timeString) return '—';
-    // Check if time already contains AM/PM (already formatted)
-    if (timeString.includes('AM') || timeString.includes('PM')) {
-        return timeString;
+    
+    const trimmed = timeString.trim();
+    
+    // Check if it's already properly formatted in 12-hour format (e.g., "3:00 PM")
+    // Only accept if there's exactly one AM/PM indicator at the end
+    const proper12HourFormat = /^\d{1,2}:\d{2}\s*(AM|PM)$/i.test(trimmed);
+    if (proper12HourFormat) {
+        return trimmed;
     }
-    // Otherwise, format from 24-hour format
-    const [hours, minutes] = timeString.split(':');
-    const hour = parseInt(hours);
+    
+    // If it has AM/PM but is malformed (e.g., "3:00 PM AM" or "15:00 PM")
+    // Extract the time part and any valid AM/PM indicator
+    if (/AM|PM/i.test(trimmed)) {
+        // Try to extract a valid 12-hour format
+        const match12 = trimmed.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)/i);
+        if (match12) {
+            // Return the properly formatted version (first AM/PM found)
+            return `${match12[1]}:${match12[2]} ${match12[3].toUpperCase()}`;
+        }
+        
+        // If we have something like "15:00 PM", strip AM/PM and treat as 24-hour
+        const cleaned = trimmed.replace(/\s*(AM|PM)\s*/gi, '').trim();
+        const timeMatch = cleaned.match(/^(\d{1,2}):(\d{2})(?::\d{2})?$/);
+        if (timeMatch) {
+            const hour = parseInt(timeMatch[1]);
+            const minutes = timeMatch[2];
+            const ampm = hour >= 12 ? 'PM' : 'AM';
+            const hour12 = hour % 12 || 12;
+            return `${hour12}:${minutes} ${ampm}`;
+        }
+    }
+    
+    // Parse as 24-hour format (HH:mm or H:mm)
+    const timeMatch = trimmed.match(/^(\d{1,2}):(\d{2})(?::\d{2})?$/);
+    if (!timeMatch) {
+        // If format is unrecognized, return as-is
+        return trimmed;
+    }
+    
+    const hour = parseInt(timeMatch[1]);
+    const minutes = timeMatch[2];
     const ampm = hour >= 12 ? 'PM' : 'AM';
     const hour12 = hour % 12 || 12;
     return `${hour12}:${minutes} ${ampm}`;
@@ -1057,7 +1091,7 @@ onUnmounted(() => {
                                 </div>
                                 <div class="text-sm">
                                     <template v-if="appointment.pet_count > 1">
-                                        <span class="text-muted-foreground">Click to view</span>
+                                        <span>{{ appointment.appointments?.map(pet => pet.pet_name).join(', ') || 'N/A' }}</span>
                                     </template>
                                     <span v-else>{{ appointment.pet_name }}</span>
                                 </div>

@@ -30,15 +30,18 @@ const breadcrumbs = [
     { title: 'Edit Medicine', href: '#' },
 ];
 
+// Initialize form with medicine data - ensure values are properly set
 const form = router.form({
-    name: props.medicine.name,
-    stock: props.medicine.stock,
-    dosage: props.medicine.dosage,
-    route: props.medicine.route,
+    name: props.medicine?.name || '',
+    stock: props.medicine?.stock ?? 0,
+    dosage: props.medicine?.dosage || '',
+    route: props.medicine?.route || '',
 });
 
 const submit = () => {
-    form.put(`/admin/medicines/${props.medicine.id}`);
+    if (props.medicine?.id) {
+        form.put(`/admin/medicines/${props.medicine.id}`);
+    }
 };
 </script>
 

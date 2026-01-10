@@ -162,6 +162,30 @@ class MedicineController extends Controller
     }
 
     /**
+     * Bulk update stock for multiple medicines.
+     */
+    public function bulkUpdateStock(Request $request)
+    {
+        $validated = $request->validate([
+            'medicine_ids' => 'required|array|min:1',
+            'medicine_ids.*' => 'required|integer|exists:medicines,id',
+            'stock' => 'required|integer|min:0',
+        ]);
+
+        $medicineIds = $validated['medicine_ids'];
+        $stock = $validated['stock'];
+
+        // Update all selected medicines
+        $updatedCount = Medicine::whereIn('id', $medicineIds)->update([
+            'stock' => $stock,
+            'updated_at' => now(),
+        ]);
+
+        return redirect()->route('admin.medicines.index')
+            ->with('success', "Stock updated successfully for {$updatedCount} medicine(s).");
+    }
+
+    /**
      * Export medicines report.
      */
     public function export(Request $request)

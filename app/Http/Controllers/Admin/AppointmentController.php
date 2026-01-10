@@ -1002,13 +1002,20 @@ class AppointmentController extends Controller
      */
     public function prescribe(Request $request, $id)
     {
-        $request->validate([
-            'pet_current_weight' => 'required|numeric|min:0',
+        // First, get the appointment to check its type for conditional validation
+        $appointment = Appointment::with(['patient.user', 'patient.petType', 'appointment_type', 'patients'])
+            ->where('is_approved', 1)
+            ->where('id', $id)
+            ->firstOrFail();
+
+        // Appointment types where weight, symptoms, and diseases are optional
+        $optionalFieldsTypes = ['Deworming', 'Consultation', 'Vaccination'];
+        $appointmentTypeName = $appointment->appointment_type->name ?? null;
+        $hasOptionalFields = in_array($appointmentTypeName, $optionalFieldsTypes);
+
+        // Build validation rules conditionally
+        $validationRules = [
             'patient_id' => 'required|exists:patients,id', // Patient ID for the prescription
-            'symptoms' => 'required|array|min:1',
-            'symptoms.*' => 'required|string',
-            'disease_ids' => 'required|array|min:1',
-            'disease_ids.*' => 'required|exists:diseases,id',
             'medicines' => 'required|array|min:1',
             'medicines.*.id' => 'required|exists:medicines,id',
             'medicines.*.dosage' => 'required|string',
@@ -1016,12 +1023,24 @@ class AppointmentController extends Controller
             'medicines.*.quantity' => 'required|string',
             'notes' => 'nullable|string',
             'follow_up_date' => 'nullable|date|after:today',
-        ]);
+        ];
 
-        $appointment = Appointment::with(['patient.user', 'patient.petType', 'appointment_type', 'patients'])
-            ->where('is_approved', 1)
-            ->where('id', $id)
-            ->firstOrFail();
+        // Make weight, symptoms, and diseases optional for specific appointment types
+        if ($hasOptionalFields) {
+            $validationRules['pet_current_weight'] = 'nullable|numeric|min:0';
+            $validationRules['symptoms'] = 'nullable|array';
+            $validationRules['symptoms.*'] = 'required_with:symptoms|string';
+            $validationRules['disease_ids'] = 'nullable|array';
+            $validationRules['disease_ids.*'] = 'required_with:disease_ids|exists:diseases,id';
+        } else {
+            $validationRules['pet_current_weight'] = 'required|numeric|min:0';
+            $validationRules['symptoms'] = 'required|array|min:1';
+            $validationRules['symptoms.*'] = 'required|string';
+            $validationRules['disease_ids'] = 'required|array|min:1';
+            $validationRules['disease_ids.*'] = 'required|exists:diseases,id';
+        }
+
+        $request->validate($validationRules);
         
         // Get the patient for this prescription
         $prescriptionPatientId = $request->patient_id;
@@ -1045,67 +1064,79 @@ class AppointmentController extends Controller
             ])->withInput();
         }
         
-        return DB::transaction(function () use ($appointment, $request, $prescriptionPatientId) {
+        return DB::transaction(function () use ($appointment, $request, $prescriptionPatientId, $hasOptionalFields) {
+            // Prepare symptoms string - handle null or empty arrays
+            $symptomsString = '';
+            if (is_array($request->symptoms) && count($request->symptoms) > 0) {
+                $symptomsString = implode(', ', array_map('ucwords', $request->symptoms));
+            }
+
             $prescription = Prescription::create([
                 'appointment_id' => $appointment->id,
                 'patient_id' => $prescriptionPatientId, // Use the patient from request
-                'symptoms' => $request->symptoms ? implode(', ', array_map('ucwords', $request->symptoms)) : '',
+                'symptoms' => $symptomsString,
                 'notes' => $request->notes ?? '',
-                'pet_weight' => $request->pet_current_weight,
+                'pet_weight' => $request->pet_current_weight ?? null,
                 'follow_up_date' => $request->follow_up_date,
             ]);
 
-            // Save weight history
-            PatientWeightHistory::create([
-                'patient_id' => $prescriptionPatientId, // Use the patient from request
-                'weight' => $request->pet_current_weight,
-                'recorded_at' => now(),
-                'prescription_id' => $prescription->id,
-                'notes' => 'Recorded during appointment',
-            ]);
-
-            // Create prescription diagnoses
-            foreach ($request->disease_ids as $disease_id) {
-                PrescriptionDiagnosis::create([
-                    'appointment_id' => $appointment->id,
+            // Save weight history only if weight is provided
+            if ($request->pet_current_weight && $request->pet_current_weight > 0) {
+                PatientWeightHistory::create([
+                    'patient_id' => $prescriptionPatientId, // Use the patient from request
+                    'weight' => $request->pet_current_weight,
+                    'recorded_at' => now(),
                     'prescription_id' => $prescription->id,
-                    'disease_id' => $disease_id,
+                    'notes' => 'Recorded during appointment',
                 ]);
+            }
 
-                // Create disease-medicine relationships for machine learning
-                foreach ($request->medicines as $medicine) {
-                    DB::table('disease_medicines')->updateOrInsert(
-                        [
-                            'medicine_id' => $medicine['id'],
-                            'disease_id' => $disease_id,
-                        ],
-                        [
-                            'created_at' => now(),
-                            'updated_at' => now(),
-                        ]
-                    );
-                }
-                
-                // Create disease-symptom relationships for machine learning
-                $data_symptoms = $request->symptoms;
-                foreach ($data_symptoms as $symptom) {
-                    $symptom_data = ucfirst(trim($symptom));
-                    $symptomModel = Symptom::firstOrCreate(
-                        ['name' => $symptom_data],
-                        ['name' => $symptom_data]
-                    );
+            // Create prescription diagnoses only if disease_ids are provided
+            if (is_array($request->disease_ids) && count($request->disease_ids) > 0) {
+                foreach ($request->disease_ids as $disease_id) {
+                    PrescriptionDiagnosis::create([
+                        'appointment_id' => $appointment->id,
+                        'prescription_id' => $prescription->id,
+                        'disease_id' => $disease_id,
+                    ]);
 
-                    // Create record for machine learning
-                    DB::table('disease_symptoms')->updateOrInsert(
-                        [
-                            'disease_id' => $disease_id,
-                            'symptom_id' => $symptomModel->id,
-                        ],
-                        [
-                            'created_at' => now(),
-                            'updated_at' => now(),
-                        ]
-                    );
+                    // Create disease-medicine relationships for machine learning
+                    foreach ($request->medicines as $medicine) {
+                        DB::table('disease_medicines')->updateOrInsert(
+                            [
+                                'medicine_id' => $medicine['id'],
+                                'disease_id' => $disease_id,
+                            ],
+                            [
+                                'created_at' => now(),
+                                'updated_at' => now(),
+                            ]
+                        );
+                    }
+                    
+                    // Create disease-symptom relationships for machine learning only if symptoms are provided
+                    if (is_array($request->symptoms) && count($request->symptoms) > 0) {
+                        $data_symptoms = $request->symptoms;
+                        foreach ($data_symptoms as $symptom) {
+                            $symptom_data = ucfirst(trim($symptom));
+                            $symptomModel = Symptom::firstOrCreate(
+                                ['name' => $symptom_data],
+                                ['name' => $symptom_data]
+                            );
+
+                            // Create record for machine learning
+                            DB::table('disease_symptoms')->updateOrInsert(
+                                [
+                                    'disease_id' => $disease_id,
+                                    'symptom_id' => $symptomModel->id,
+                                ],
+                                [
+                                    'created_at' => now(),
+                                    'updated_at' => now(),
+                                ]
+                            );
+                        }
+                    }
                 }
             }
             

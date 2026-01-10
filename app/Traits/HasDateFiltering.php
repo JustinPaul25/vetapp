@@ -27,23 +27,23 @@ trait HasDateFiltering
                 break;
 
             case 'month':
-                if ($request->has('month') && $request->has('year')) {
-                    $month = $request->month;
-                    $year = $request->year;
+                if ($request->has('month') && !empty($request->month) && $request->has('year') && !empty($request->year)) {
+                    $month = (int) $request->month;
+                    $year = (int) $request->year;
                     $query->whereYear($dateColumn, $year)
                           ->whereMonth($dateColumn, $month);
                 }
                 break;
 
             case 'year':
-                if ($request->has('year')) {
-                    $year = $request->year;
+                if ($request->has('year') && !empty($request->year)) {
+                    $year = (int) $request->year;
                     $query->whereYear($dateColumn, $year);
                 }
                 break;
 
             case 'range':
-                if ($request->has('date_from') && $request->has('date_to')) {
+                if ($request->has('date_from') && !empty($request->date_from) && $request->has('date_to') && !empty($request->date_to)) {
                     $dateFrom = Carbon::parse($request->date_from)->startOfDay();
                     $dateTo = Carbon::parse($request->date_to)->endOfDay();
                     $query->whereBetween($dateColumn, [$dateFrom, $dateTo]);
