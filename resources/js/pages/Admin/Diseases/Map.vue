@@ -55,6 +55,133 @@ const formatDate = (dateString: string | null) => {
     return date.toLocaleDateString();
 };
 
+// Group cases by location (round coordinates to handle slight variations)
+interface GroupedLocation {
+    lat: number;
+    lng: number;
+    address: string;
+    diseases: Array<{
+        disease_id: number;
+        disease_name: string;
+        appointment_date: string | null;
+    }>;
+}
+
+const groupCasesByLocation = (cases: DiseaseCase[]): GroupedLocation[] => {
+    // Use a map with rounded coordinates as key to group nearby cases
+    const locationMap = new Map<string, GroupedLocation>();
+    const tolerance = 0.0001; // Small tolerance for coordinate differences
+    
+    cases.forEach((caseItem) => {
+        // Round coordinates to group nearby cases
+        const roundedLat = Math.round(caseItem.lat / tolerance) * tolerance;
+        const roundedLng = Math.round(caseItem.lng / tolerance) * tolerance;
+        const key = `${roundedLat.toFixed(6)},${roundedLng.toFixed(6)}`;
+        
+        if (!locationMap.has(key)) {
+            locationMap.set(key, {
+                lat: roundedLat,
+                lng: roundedLng,
+                address: caseItem.address,
+                diseases: []
+            });
+        }
+        
+        const location = locationMap.get(key)!;
+        // Add disease if not already added (to handle duplicates)
+        const existingDisease = location.diseases.find(
+            d => d.disease_id === caseItem.disease_id && 
+                 d.appointment_date === caseItem.appointment_date
+        );
+        
+        if (!existingDisease) {
+            location.diseases.push({
+                disease_id: caseItem.disease_id,
+                disease_name: caseItem.disease_name,
+                appointment_date: caseItem.appointment_date
+            });
+        }
+    });
+    
+    return Array.from(locationMap.values());
+};
+
+// Generate a unique popup ID
+const generatePopupId = (index: number, lat: number, lng: number): string => {
+    return `popup_${index}_${Math.abs(lat).toFixed(6)}_${Math.abs(lng).toFixed(6)}`.replace(/\./g, '_').replace(/[^a-zA-Z0-9_]/g, '_');
+};
+
+// Generate popup content with expandable disease list
+const generatePopupContent = (location: GroupedLocation, diseaseColors: Record<string, string>, index: number): string => {
+    const uniqueDiseases = Array.from(
+        new Map(location.diseases.map(d => [d.disease_name, d])).values()
+    );
+    // Create a unique ID using index and coordinates (sanitized)
+    const popupId = generatePopupId(index, location.lat, location.lng);
+    const hasMultipleDiseases = uniqueDiseases.length > 1;
+    const firstDisease = uniqueDiseases[0];
+    const remainingDiseases = uniqueDiseases.slice(1);
+    
+    let content = `
+        <div class="disease-popup" style="min-width: 200px;">
+            <div class="disease-item" style="margin-bottom: 8px;">
+                <strong style="color: ${diseaseColors[firstDisease.disease_name] || '#3388ff'};">
+                    ${firstDisease.disease_name}
+                </strong>
+            </div>
+    `;
+    
+    if (hasMultipleDiseases) {
+        content += `
+            <div id="${popupId}_more" style="display: none;">
+        `;
+        
+        remainingDiseases.forEach((disease) => {
+            content += `
+                <div class="disease-item" style="margin-bottom: 8px;">
+                    <strong style="color: ${diseaseColors[disease.disease_name] || '#3388ff'};">
+                        ${disease.disease_name}
+                    </strong>
+                </div>
+            `;
+        });
+        
+        content += `</div>`;
+        content += `
+            <div style="margin-top: 8px; border-top: 1px solid #e5e7eb; padding-top: 8px;">
+                <a href="#" 
+                   id="${popupId}_toggle" 
+                   onclick="
+                       const moreDiv = document.getElementById('${popupId}_more');
+                       const toggleLink = document.getElementById('${popupId}_toggle');
+                       if (moreDiv.style.display === 'none') {
+                           moreDiv.style.display = 'block';
+                           toggleLink.textContent = 'Hide';
+                       } else {
+                           moreDiv.style.display = 'none';
+                           toggleLink.textContent = 'See more (${remainingDiseases.length} more)';
+                       }
+                       return false;
+                   "
+                   style="color: #3b82f6; text-decoration: none; font-size: 12px; cursor: pointer;"
+                   onmouseover="this.style.textDecoration='underline'"
+                   onmouseout="this.style.textDecoration='none'">
+                    See more (${remainingDiseases.length} more)
+                </a>
+            </div>
+        `;
+    }
+    
+    content += `
+            <div style="margin-top: 8px; font-size: 11px; color: #6b7280;">
+                Address: ${location.address}
+            </div>
+        </div>
+    `;
+    
+    return content;
+};
+
 // Fix for default marker icons in Leaflet with Vite
 delete (L.Icon.Default.prototype as any)._getIconUrl;
 L.Icon.Default.mergeOptions({
@@ -99,9 +226,16 @@ onMounted(() => {
             });
     });
 
-    // Add disease case markers
-    props.cases.forEach((caseItem) => {
-        const color = props.diseaseColors[caseItem.disease_name] || '#3388ff';
+    // Group cases by location
+    const groupedLocations = groupCasesByLocation(props.cases);
+    
+    // Add disease case markers (one per location)
+    groupedLocations.forEach((location, index) => {
+        const uniqueDiseases = Array.from(
+            new Map(location.diseases.map(d => [d.disease_name, d])).values()
+        );
+        const firstDisease = uniqueDiseases[0];
+        const color = props.diseaseColors[firstDisease.disease_name] || '#3388ff';
         
         // Create custom colored marker
         const customIcon = L.divIcon({
@@ -111,22 +245,42 @@ onMounted(() => {
             iconAnchor: [6, 6],
         });
 
-        const popupContent = `
-            <div>
-                <strong>${caseItem.disease_name}</strong><br/>
-                Address: ${caseItem.address}<br/>
-                ${caseItem.appointment_date ? `Date: ${formatDate(caseItem.appointment_date)}` : ''}
-            </div>
-        `;
+        // Generate popup content with expandable disease list
+        const popupContent = generatePopupContent(location, props.diseaseColors, index);
+        
+        // Create tooltip text - show first disease and indicator for multiple
+        let tooltipText = firstDisease.disease_name;
+        if (uniqueDiseases.length > 1) {
+            tooltipText += ` (+${uniqueDiseases.length - 1} more)`;
+        }
 
-        L.marker([caseItem.lat, caseItem.lng], { icon: customIcon })
+        const marker = L.marker([location.lat, location.lng], { icon: customIcon })
             .addTo(map.value!)
-            .bindPopup(popupContent)
-            .bindTooltip(caseItem.disease_name, {
+            .bindPopup(popupContent, {
+                maxWidth: 300,
+                className: 'disease-popup-container'
+            })
+            .bindTooltip(tooltipText, {
                 permanent: false,
                 direction: 'top',
                 offset: [0, -6]
             });
+        
+        // Attach event listener to handle popup open for proper rendering of expandable content
+        marker.on('popupopen', () => {
+            // Small delay to ensure popup content is rendered
+            setTimeout(() => {
+                const popupId = generatePopupId(index, location.lat, location.lng);
+                const moreDiv = document.getElementById(`${popupId}_more`);
+                if (moreDiv) {
+                    moreDiv.style.display = 'none';
+                }
+                const toggleLink = document.getElementById(`${popupId}_toggle`);
+                if (toggleLink && uniqueDiseases.length > 1) {
+                    toggleLink.textContent = `See more (${uniqueDiseases.length - 1} more)`;
+                }
+            }, 100);
+        });
     });
 });
 </script>
@@ -246,6 +400,31 @@ onMounted(() => {
 .custom-marker {
     background: transparent !important;
     border: none !important;
+}
+</style>
+
+<style>
+/* Global styles for Leaflet popups */
+.disease-popup-container .leaflet-popup-content {
+    margin: 12px;
+    font-size: 14px;
+}
+
+.disease-popup {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+}
+
+.disease-item {
+    padding: 4px 0;
+}
+
+.disease-popup a {
+    display: inline-block;
+    margin-top: 4px;
+}
+
+.disease-popup a:hover {
+    opacity: 0.8;
 }
 </style>
 

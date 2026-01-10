@@ -76,7 +76,7 @@ class PrescriptionController extends Controller
                 'owner_name' => $user ? (trim(($user->first_name ?? '') . ' ' . ($user->last_name ?? '')) ?: $user->name) : 'N/A',
                 'owner_mobile' => $user->mobile_number ?? 'N/A',
                 'owner_email' => $user->email ?? 'N/A',
-                'issued_on' => $prescription->created_at->format('Y-m-d H:i'),
+                'issued_on' => $prescription->created_at->format('Y-m-d g:i A'),
                 'created_at' => $prescription->created_at->toISOString(),
                 'follow_up_date' => $prescription->follow_up_date ? $prescription->follow_up_date->format('Y-m-d') : null,
                 'follow_up_notified_at' => $prescription->follow_up_notified_at ? $prescription->follow_up_notified_at->format('Y-m-d H:i') : null,
@@ -209,7 +209,7 @@ class PrescriptionController extends Controller
                 'owner_name' => $user ? (trim(($user->first_name ?? '') . ' ' . ($user->last_name ?? '')) ?: $user->name) : 'N/A',
                 'owner_email' => $user->email ?? 'N/A',
                 'symptoms' => $prescription->symptoms ?? 'N/A',
-                'issued_on' => $prescription->created_at->format('Y-m-d H:i'),
+                'issued_on' => $prescription->created_at->format('Y-m-d g:i A'),
             ];
         });
 
@@ -251,7 +251,7 @@ class PrescriptionController extends Controller
                     $user ? (trim(($user->first_name ?? '') . ' ' . ($user->last_name ?? '')) ?: $user->name) : 'N/A',
                     $user->email ?? 'N/A',
                     $prescription->symptoms ?? 'N/A',
-                    $prescription->created_at->format('Y-m-d H:i'),
+                    $prescription->created_at->format('Y-m-d g:i A'),
                 ]);
             }
 

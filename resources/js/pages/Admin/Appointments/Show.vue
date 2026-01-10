@@ -470,7 +470,7 @@ const handleReschedule = () => {
                                     <DialogHeader>
                                         <DialogTitle>Approve Appointment</DialogTitle>
                                         <DialogDescription>
-                                            Update appointment details and approve the appointment
+                                            Review appointment details and approve the appointment
                                         </DialogDescription>
                                     </DialogHeader>
                                     <form @submit.prevent="approveAppointment" class="space-y-4">
@@ -483,6 +483,8 @@ const handleReschedule = () => {
                                                     type="date"
                                                     :min="new Date().toISOString().split('T')[0]"
                                                     required
+                                                    disabled
+                                                    class="disabled:opacity-50 disabled:cursor-not-allowed"
                                                 />
                                             </div>
                                             <div class="space-y-2">
@@ -492,6 +494,8 @@ const handleReschedule = () => {
                                                     v-model="approveForm.appointment_time"
                                                     type="time"
                                                     required
+                                                    disabled
+                                                    class="disabled:opacity-50 disabled:cursor-not-allowed"
                                                 />
                                             </div>
                                             <div class="space-y-2">
@@ -499,7 +503,8 @@ const handleReschedule = () => {
                                                 <select
                                                     id="pet_gender"
                                                     v-model="approveForm.pet_gender"
-                                                    class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                                                    class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-50"
+                                                    disabled
                                                 >
                                                     <option value="">Select Gender</option>
                                                     <option value="Male">Male</option>
@@ -513,6 +518,8 @@ const handleReschedule = () => {
                                                     v-model="approveForm.pet_allergies"
                                                     type="text"
                                                     placeholder="e.g., Peanuts, Pollen"
+                                                    disabled
+                                                    class="disabled:opacity-50 disabled:cursor-not-allowed"
                                                 />
                                             </div>
                                         </div>

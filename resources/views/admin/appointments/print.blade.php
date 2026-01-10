@@ -264,6 +264,18 @@
             line-height: 1.4;
             padding: 8px 6px;
         }
+
+        /* Follow-up Section */
+        .followup-table {
+            margin-top: 15px;
+            width: 100%;
+        }
+        
+        .followup-table td {
+            border: none;
+            line-height: 1.4;
+            padding: 8px 6px;
+        }
         
         /* Footer Section */
         .footer-table {
@@ -431,7 +443,16 @@
     @if($prescription->notes)
     <table class="notes-table noborder-table">
         <tr>
-            <td><strong>Reminder: </strong>{{ $prescription->notes }}</td>
+            <td><strong>Notes: </strong>{{ $prescription->notes }}</td>
+        </tr>
+    </table>
+    @endif
+    
+    <!-- Follow-up Check-up Section -->
+    @if($prescription->follow_up_date)
+    <table class="followup-table noborder-table">
+        <tr>
+            <td><strong>Follow-up Check-up: </strong>{{ $prescription->follow_up_date->format('F d, Y') }}</td>
         </tr>
     </table>
     @endif

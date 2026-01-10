@@ -575,6 +575,21 @@ class AppointmentController extends Controller
         $firstPatient = $patients->first();
         $owner = $firstPatient && $firstPatient->user ? $firstPatient->user : null;
 
+        // Format appointment time to 12-hour format (once for all notifications)
+        $formattedTime = $request->appointment_time;
+        try {
+            // Try parsing with seconds first
+            $formattedTime = Carbon::createFromFormat('H:i:s', $request->appointment_time)->format('g:i A');
+        } catch (\Exception $e) {
+            try {
+                // Try parsing without seconds
+                $formattedTime = Carbon::createFromFormat('H:i', $request->appointment_time)->format('g:i A');
+            } catch (\Exception $e) {
+                // If both fail, keep the original value
+                $formattedTime = $request->appointment_time;
+            }
+        }
+
         // Send email notification
         if ($owner && $owner->email) {
             $ownerName = trim(($owner->first_name ?? '') . ' ' . ($owner->last_name ?? '')) ?: $owner->name;
@@ -586,7 +601,7 @@ class AppointmentController extends Controller
                 'subject' => 'Your appointment has been approved!',
                 'body' => "Hi {$ownerName},<br><br>Your appointment {$petInfo} has been approved.<br><br>" .
                     "Appointment Date: {$request->appointment_date}<br>" .
-                    "Appointment Time: {$request->appointment_time}"
+                    "Appointment Time: {$formattedTime}"
             ];
 
             Notification::route('mail', $owner->email)
@@ -600,7 +615,7 @@ class AppointmentController extends Controller
             $petInfo = $petCount > 1 
                 ? "for {$petCount} pets"
                 : "for {$petNamesList}";
-            $message = "Your {$appointmentTypeName} appointment {$petInfo} scheduled for {$request->appointment_date} at {$request->appointment_time} has been approved.";
+            $message = "Your {$appointmentTypeName} appointment {$petInfo} scheduled for {$request->appointment_date} at {$formattedTime} has been approved.";
             
             $owner->notify(new DatabaseNotification($subject, $message, $link));
         }
@@ -613,7 +628,7 @@ class AppointmentController extends Controller
             $petInfo = $petCount > 1 
                 ? "for {$petCount} pets"
                 : "for {$petNamesList}";
-            $message = "Your {$appointmentTypeName} appointment {$petInfo} scheduled for {$request->appointment_date} at {$request->appointment_time} has been approved.";
+            $message = "Your {$appointmentTypeName} appointment {$petInfo} scheduled for {$request->appointment_date} at {$formattedTime} has been approved.";
 
             // Send to client's user channel
             $ablyService->publishToUser($owner->id, 'appointment.approved', [
@@ -1348,7 +1363,7 @@ class AppointmentController extends Controller
     {
         $prescription = Prescription::with(
             'medicines.medicine',
-            'appointment',
+            'appointment.user',
             'patient.petType',
             'diagnoses.disease'
         )->where('appointment_id', $id)->firstOrFail();
