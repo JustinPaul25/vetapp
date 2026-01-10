@@ -121,11 +121,11 @@ const calculateAge = (birthDate: string | null) => {
 };
 
 const downloadPrescription = () => {
-    window.open(`/admin/appointments/${props.prescription.appointment_id}/prescription`, '_blank');
+    window.open(`/admin/prescriptions/${props.prescription.id}/download`, '_blank');
 };
 
 const printPrescription = () => {
-    window.open(`/admin/appointments/${props.prescription.appointment_id}/prescription/print`, '_blank');
+    window.open(`/admin/prescriptions/${props.prescription.id}/print`, '_blank');
 };
 </script>
 

@@ -1273,6 +1273,53 @@ class AppointmentController extends Controller
     /**
      * Download prescription PDF.
      */
+    /**
+     * Download prescription PDF by appointment ID (backward compatibility).
+     * Gets the first prescription for the appointment.
+     * @param int $id The appointment ID
+     */
+    public function downloadPrescriptionByAppointment($id)
+    {
+        // Custom paper size: 8.5" × 5.5" (half-letter landscape)
+        // 1 inch = 72 points, so 8.5" = 612pt, 5.5" = 396pt
+        $customPaper = [0, 0, 612, 396];
+        
+        $prescription = Prescription::with(
+            'medicines.medicine',
+            'appointment.user',
+            'patient.petType',
+            'diagnoses.disease'
+        )->where('appointment_id', $id)->firstOrFail();
+
+        $base64Logo = 'data:image/png;base64,' . base64_encode(file_get_contents(public_path('media/logo_for_print.png')));
+        $base64PanaboLogo = 'data:image/png;base64,' . base64_encode(file_get_contents(public_path('media/panabo.png')));
+        $base64PrescriptionLogo = 'data:image/png;base64,' . base64_encode(file_get_contents(public_path('media/prescription.png')));
+
+        // Get veterinarian information from settings
+        $veterinarianName = Setting::get('veterinarian_name', '');
+        $veterinarianLicense = Setting::get('veterinarian_license_number', '');
+
+        return Pdf::setOptions([
+            'isRemoteEnabled' => true,
+            'isHtml5ParserEnabled' => true,
+            'isPhpEnabled' => true,
+        ])
+        ->loadView('admin.appointments.pdf', compact(
+            'prescription',
+            'base64Logo',
+            'base64PanaboLogo',
+            'base64PrescriptionLogo',
+            'veterinarianName',
+            'veterinarianLicense'
+        ))
+        ->setPaper($customPaper, 'landscape')
+        ->stream('prescription-' . $prescription->id . '.pdf');
+    }
+
+    /**
+     * Download prescription PDF.
+     * @param int $id The prescription ID
+     */
     public function downloadPrescription($id)
     {
         // Custom paper size: 8.5" × 5.5" (half-letter landscape)
@@ -1281,10 +1328,10 @@ class AppointmentController extends Controller
         
         $prescription = Prescription::with(
             'medicines.medicine',
-            'appointment',
-            'patient',
+            'appointment.user',
+            'patient.petType',
             'diagnoses.disease'
-        )->where('appointment_id', $id)->firstOrFail();
+        )->findOrFail($id);
 
         $base64Logo = 'data:image/png;base64,' . base64_encode(file_get_contents(public_path('media/logo_for_print.png')));
         $base64PanaboLogo = 'data:image/png;base64,' . base64_encode(file_get_contents(public_path('media/panabo.png')));
@@ -1388,7 +1435,40 @@ class AppointmentController extends Controller
     }
 
     /**
+     * Print-friendly HTML view for prescription by appointment ID (backward compatibility).
+     * Gets the first prescription for the appointment.
+     * @param int $id The appointment ID
+     */
+    public function printPrescriptionByAppointment($id)
+    {
+        $prescription = Prescription::with(
+            'medicines.medicine',
+            'appointment.user',
+            'patient.petType',
+            'diagnoses.disease'
+        )->where('appointment_id', $id)->firstOrFail();
+
+        $base64Logo = 'data:image/png;base64,' . base64_encode(file_get_contents(public_path('media/logo_for_print.png')));
+        $base64PanaboLogo = 'data:image/png;base64,' . base64_encode(file_get_contents(public_path('media/panabo.png')));
+        $base64PrescriptionLogo = 'data:image/png;base64,' . base64_encode(file_get_contents(public_path('media/prescription.png')));
+
+        // Get veterinarian information from settings
+        $veterinarianName = Setting::get('veterinarian_name', '');
+        $veterinarianLicense = Setting::get('veterinarian_license_number', '');
+
+        return view('admin.appointments.print', compact(
+            'prescription',
+            'base64Logo',
+            'base64PanaboLogo',
+            'base64PrescriptionLogo',
+            'veterinarianName',
+            'veterinarianLicense'
+        ));
+    }
+
+    /**
      * Print-friendly HTML view for prescription.
+     * @param int $id The prescription ID
      */
     public function printPrescription($id)
     {
@@ -1397,7 +1477,7 @@ class AppointmentController extends Controller
             'appointment.user',
             'patient.petType',
             'diagnoses.disease'
-        )->where('appointment_id', $id)->firstOrFail();
+        )->findOrFail($id);
 
         $base64Logo = 'data:image/png;base64,' . base64_encode(file_get_contents(public_path('media/logo_for_print.png')));
         $base64PanaboLogo = 'data:image/png;base64,' . base64_encode(file_get_contents(public_path('media/panabo.png')));

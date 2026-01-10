@@ -194,7 +194,13 @@ const approveAppointment = () => {
 };
 
 const downloadPrescription = () => {
-    window.open(`/admin/appointments/${props.appointment.id}/prescription`, '_blank');
+    // Use prescription.id if available (more accurate), otherwise fall back to appointment route
+    if (props.prescription?.id) {
+        window.open(`/admin/prescriptions/${props.prescription.id}/download`, '_blank');
+    } else {
+        // Fallback for backward compatibility (gets first prescription for appointment)
+        window.open(`/admin/appointments/${props.appointment.id}/prescription`, '_blank');
+    }
 };
 
 // Reschedule functionality

@@ -106,12 +106,12 @@ const getSortIcon = (column: string) => {
     return sortDirection.value === 'asc' ? ArrowUp : ArrowDown;
 };
 
-const downloadPrescription = (appointmentId: number) => {
-    window.open(`/admin/appointments/${appointmentId}/prescription`, '_blank');
+const downloadPrescription = (prescriptionId: number) => {
+    window.open(`/admin/prescriptions/${prescriptionId}/download`, '_blank');
 };
 
-const printPrescription = (appointmentId: number) => {
-    window.open(`/admin/appointments/${appointmentId}/prescription/print`, '_blank');
+const printPrescription = (prescriptionId: number) => {
+    window.open(`/admin/prescriptions/${prescriptionId}/print`, '_blank');
 };
 </script>
 
@@ -221,7 +221,7 @@ const printPrescription = (appointmentId: number) => {
                                             <Button
                                                 variant="outline"
                                                 size="sm"
-                                                @click="printPrescription(prescription.appointment_id)"
+                                                @click="printPrescription(prescription.id)"
                                             >
                                                 <Printer class="h-4 w-4 mr-2" />
                                                 Print
@@ -229,7 +229,7 @@ const printPrescription = (appointmentId: number) => {
                                             <Button
                                                 variant="outline"
                                                 size="sm"
-                                                @click="downloadPrescription(prescription.appointment_id)"
+                                                @click="downloadPrescription(prescription.id)"
                                             >
                                                 <Download class="h-4 w-4 mr-2" />
                                                 Download

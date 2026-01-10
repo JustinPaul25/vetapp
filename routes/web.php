@@ -191,6 +191,9 @@ Route::middleware(['auth', 'verified', \App\Http\Middleware\EnsureUserIsAdminOrS
         Route::prefix('prescriptions')->name('prescriptions.')->group(function () {
             Route::get('/', [\App\Http\Controllers\Admin\PrescriptionController::class, 'index'])->name('all');
             Route::get('/export', [\App\Http\Controllers\Admin\PrescriptionController::class, 'export'])->name('export');
+            // Prescription print and download routes (using prescription_id directly) - must come before /{id}
+            Route::get('/{id}/print', [\App\Http\Controllers\Admin\AppointmentController::class, 'printPrescription'])->name('print');
+            Route::get('/{id}/download', [\App\Http\Controllers\Admin\AppointmentController::class, 'downloadPrescription'])->name('download');
             Route::get('/{id}', [\App\Http\Controllers\Admin\PrescriptionController::class, 'show'])->name('show');
         });
         
@@ -208,8 +211,10 @@ Route::middleware(['auth', 'verified', \App\Http\Middleware\EnsureUserIsAdminOrS
             Route::patch('/{id}/approve', [\App\Http\Controllers\Admin\AppointmentController::class, 'approve'])->name('approve');
             Route::patch('/{id}/reschedule', [\App\Http\Controllers\Admin\AppointmentController::class, 'reschedule'])->name('reschedule');
             // Prescription viewing routes (admin and staff can view/download prescriptions)
-            Route::get('/{id}/prescription', [\App\Http\Controllers\Admin\AppointmentController::class, 'downloadPrescription'])->name('prescription');
-            Route::get('/{id}/prescription/print', [\App\Http\Controllers\Admin\AppointmentController::class, 'printPrescription'])->name('prescription.print');
+            // Note: These routes use appointment_id and get the first prescription for backward compatibility
+            // For specific prescriptions, use /admin/prescriptions/{id}/print or /admin/prescriptions/{id}/download
+            Route::get('/{id}/prescription', [\App\Http\Controllers\Admin\AppointmentController::class, 'downloadPrescriptionByAppointment'])->name('prescription');
+            Route::get('/{id}/prescription/print', [\App\Http\Controllers\Admin\AppointmentController::class, 'printPrescriptionByAppointment'])->name('prescription.print');
             Route::get('/{id}/prescription/debug', [\App\Http\Controllers\Admin\AppointmentController::class, 'debugPrescription'])->name('prescription.debug');
             
             // Disabled dates management routes
