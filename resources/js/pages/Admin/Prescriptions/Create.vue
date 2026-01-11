@@ -454,13 +454,12 @@ const loadMedicinesForDisease = async (diseaseId: number) => {
                 if (!existingRow.disease_ids.includes(diseaseId)) {
                     existingRow.disease_ids.push(diseaseId);
                 }
-                // Recalculate dosage in case weight was entered after medicine was added
-                // Find the medicine from props to get the latest dosage pattern
+                // Set dosage from medicine (no auto-calculation)
                 const medicineFromProps = props.medicines.find(m => m.id === medicine.id);
                 if (medicineFromProps) {
-                    existingRow.dosage = calculateDosage(medicineFromProps.dosage, form.pet_current_weight);
+                    existingRow.dosage = medicineFromProps.dosage || '';
                 } else {
-                    existingRow.dosage = calculateDosage(medicine.dosage, form.pet_current_weight);
+                    existingRow.dosage = medicine.dosage || '';
                 }
             } else {
                 // Add new medicine row
@@ -473,7 +472,7 @@ const loadMedicinesForDisease = async (diseaseId: number) => {
                 medicineRows.value.push({
                     id: newId,
                     medicine_id: medicine.id,
-                    dosage: calculateDosage(medicine.dosage, form.pet_current_weight),
+                    dosage: medicine.dosage || '', // No auto-calculation, just use medicine's dosage
                     instructions: defaultInstruction, // Set default instruction instead of empty string
                     quantity: '1 Pcs.',
                     disease_ids: [diseaseId], // Track which disease added this medicine
@@ -552,19 +551,10 @@ const calculateDosage = (dosagePattern: string | null | undefined, weight: strin
     return trimmedPattern;
 };
 
-// Watch weight changes and recalculate dosages
-watch(() => form.pet_current_weight, (newWeight) => {
-    medicineRows.value.forEach(row => {
-        if (row.medicine_id) {
-            const medicine = props.medicines.find(m => m.id === row.medicine_id);
-            if (medicine) {
-                row.dosage = calculateDosage(medicine.dosage, newWeight);
-            }
-        }
-    });
-});
+// Weight changes no longer auto-calculate dosages
+// Users can manually edit dosages as needed
 
-// Watch medicine selection and calculate dosage
+// Handle medicine selection
 const onMedicineChange = (rowId: number, medicineId: number) => {
     const row = medicineRows.value.find(r => r.id === rowId);
     if (row) {
@@ -573,9 +563,8 @@ const onMedicineChange = (rowId: number, medicineId: number) => {
         newlyAddedRowIds.value.delete(rowId);
         const medicine = props.medicines.find(m => m.id === medicineId);
         if (medicine) {
-            // Always call calculateDosage - it will handle "As prescribed", 
-            // missing weight, and calculable patterns appropriately
-            row.dosage = calculateDosage(medicine.dosage, form.pet_current_weight);
+            // Just use the medicine's dosage without calculation
+            row.dosage = medicine.dosage || '';
         } else {
             // If medicine not found, clear dosage
             row.dosage = '';
