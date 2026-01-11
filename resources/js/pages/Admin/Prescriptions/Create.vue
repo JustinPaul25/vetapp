@@ -894,6 +894,9 @@ const submit = () => {
                             </div>
                             
                             <InputError :message="form.errors.symptoms" />
+                            <p v-if="hasOptionalFields" class="text-xs text-muted-foreground">
+                                Symptoms are optional for this appointment type. You can proceed without selecting symptoms.
+                            </p>
 
                             <!-- Symptoms Modal -->
                             <Dialog v-model:open="isSymptomsModalOpen">

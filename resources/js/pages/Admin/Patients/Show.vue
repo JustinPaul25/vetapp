@@ -96,6 +96,11 @@ const formatDate = (dateString: string | null) => {
 
 const formatTime = (timeString: string | null) => {
     if (!timeString) return '—';
+    // Check if time already contains AM/PM (already formatted)
+    if (timeString.includes('AM') || timeString.includes('PM')) {
+        return timeString;
+    }
+    // Otherwise, format from 24-hour format
     const [hours, minutes] = timeString.split(':');
     const hour = parseInt(hours);
     const ampm = hour >= 12 ? 'PM' : 'AM';
