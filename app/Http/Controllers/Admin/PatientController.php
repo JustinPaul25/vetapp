@@ -214,7 +214,16 @@ class PatientController extends Controller
      */
     public function show(Patient $patient)
     {
-        $patient->load(['petType', 'user', 'appointments.appointment_type', 'prescriptions', 'weightHistory']);
+        $patient->load(['petType', 'user', 'appointments.appointment_type', 'appointmentPatients.appointment_type', 'prescriptions', 'weightHistory']);
+
+        // Merge appointments from both relationships (hasMany and belongsToMany)
+        // This ensures we get all appointments for this patient, whether they're the primary patient
+        // or linked via the many-to-many relationship
+        $allAppointments = $patient->appointments
+            ->merge($patient->appointmentPatients)
+            ->unique('id')
+            ->sortByDesc('appointment_date')
+            ->values();
 
         return Inertia::render('Admin/Patients/Show', [
             'patient' => [
@@ -235,7 +244,7 @@ class PatientController extends Controller
                     'mobile_number' => $patient->user->mobile_number ?? null,
                     'address' => $patient->user->address ?? null,
                 ] : null,
-                'appointments' => $patient->appointments->map(function ($appointment) {
+                'appointments' => $allAppointments->map(function ($appointment) {
                     // Format appointment time to 12-hour format
                     $formattedTime = $appointment->appointment_time;
                     try {

@@ -44,6 +44,8 @@ interface Appointment {
     pet_name: string;
     pet_count?: number;
     appointments?: AppointmentItem[]; // Pets in this appointment
+    is_followup?: boolean;
+    prescription_id?: number;
 }
 
 interface Pet {
@@ -1106,7 +1108,7 @@ onUnmounted(() => {
                                 </div>
                                 <div class="flex justify-end gap-2">
                                     <Link
-                                        v-if="appointment.pet_count === 1"
+                                        v-if="appointment.pet_count === 1 && !appointment.is_followup && typeof appointment.id === 'number'"
                                         :href="`/appointments/${appointment.id}`"
                                         @click.stop
                                     >
@@ -1118,7 +1120,7 @@ onUnmounted(() => {
                                         </Button>
                                     </Link>
                                     <Button
-                                        v-else
+                                        v-else-if="appointment.pet_count > 1"
                                         variant="outline"
                                         size="sm"
                                         @click.stop="toggleGroupExpansion(appointment.id)"
@@ -1159,7 +1161,10 @@ onUnmounted(() => {
                                         </div>
                                     </div>
                                     <div class="pt-2 border-t">
-                                        <Link :href="`/appointments/${appointment.id}`">
+                                        <Link
+                                            v-if="!appointment.is_followup && typeof appointment.id === 'number'"
+                                            :href="`/appointments/${appointment.id}`"
+                                        >
                                             <Button
                                                 variant="outline"
                                                 size="sm"

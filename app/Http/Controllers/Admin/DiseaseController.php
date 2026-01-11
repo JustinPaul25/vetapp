@@ -184,11 +184,16 @@ class DiseaseController extends Controller
             'home_remedy' => $validated['home_remedy'] ?? null,
         ]);
 
-        // Sync symptoms
-        $disease->symptoms()->sync($validated['symptoms'] ?? []);
+        // Sync symptoms - only if explicitly provided in request
+        if ($request->has('symptoms')) {
+            $disease->symptoms()->sync($validated['symptoms'] ?? []);
+        }
 
-        // Sync medicines
-        $disease->medicines()->sync($validated['medicines'] ?? []);
+        // Sync medicines - only if explicitly provided in request
+        // This prevents accidentally removing all medicines if the field is missing
+        if ($request->has('medicines')) {
+            $disease->medicines()->sync($validated['medicines'] ?? []);
+        }
 
         return redirect()->route('admin.diseases.show', $disease->id)
             ->with('success', 'Disease has been updated successfully.');
@@ -366,7 +371,6 @@ class DiseaseController extends Controller
                 ];
             })
             ->sortByDesc('count')
-            ->take(5)
             ->values();
 
         // Get top 5 diseases

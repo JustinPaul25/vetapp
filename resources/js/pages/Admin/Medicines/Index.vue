@@ -8,7 +8,7 @@ import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Pill, Plus, Edit, Trash2, Eye, Search, ArrowUpDown, ArrowUp, ArrowDown, Package } from 'lucide-vue-next';
-import { ref, computed } from 'vue';
+import { ref, computed, watch } from 'vue';
 import { dashboard } from '@/routes';
 import ReportGenerator from '@/components/ReportGenerator.vue';
 import InputError from '@/components/InputError.vue';
@@ -48,41 +48,79 @@ const searchQuery = ref(props.filters?.search || '');
 const sortBy = ref(props.filters?.sort_by || 'created_at');
 const sortDirection = ref(props.filters?.sort_direction || 'desc');
 
-// Bulk edit functionality
-const selectedMedicines = ref<Set<number>>(new Set());
+// Bulk edit functionality - using a reactive object instead of Set
+const selectedMedicines = ref<Record<number, boolean>>({});
 const showBulkEditDialog = ref(false);
 const bulkStockValue = ref<number | ''>('');
 const bulkStockError = ref<string>('');
+const individualStockValues = ref<Record<number, number | ''>>({});
 
 const isAllSelected = computed(() => {
-    return props.medicines.data.length > 0 && selectedMedicines.value.size === props.medicines.data.length;
+    if (props.medicines.data.length === 0) return false;
+    return props.medicines.data.every(medicine => selectedMedicines.value[medicine.id] === true);
 });
 
 const hasSelectedMedicines = computed(() => {
-    return selectedMedicines.value.size > 0;
+    return Object.values(selectedMedicines.value).some(selected => selected === true);
+});
+
+const selectedCount = computed(() => {
+    return Object.values(selectedMedicines.value).filter(selected => selected === true).length;
 });
 
 const toggleSelectAll = (checked: boolean) => {
+    console.log('[DEBUG] toggleSelectAll called:', checked);
+    
     if (checked) {
+        // Select all medicines
         props.medicines.data.forEach((medicine) => {
-            selectedMedicines.value.add(medicine.id);
+            selectedMedicines.value[medicine.id] = true;
         });
     } else {
-        selectedMedicines.value.clear();
+        // Deselect all medicines
+        selectedMedicines.value = {};
     }
+    
+    console.log('[DEBUG] toggleSelectAll - after:', Object.keys(selectedMedicines.value).filter(k => selectedMedicines.value[Number(k)]));
 };
 
 const toggleSelectMedicine = (medicineId: number, checked: boolean) => {
+    console.log('[DEBUG] toggleSelectMedicine called:', medicineId, checked);
+    
     if (checked) {
-        selectedMedicines.value.add(medicineId);
+        selectedMedicines.value[medicineId] = true;
     } else {
-        selectedMedicines.value.delete(medicineId);
+        delete selectedMedicines.value[medicineId];
     }
+    
+    console.log('[DEBUG] toggleSelectMedicine - after:', Object.keys(selectedMedicines.value).filter(k => selectedMedicines.value[Number(k)]));
 };
 
+// Watch selectedMedicines for debugging
+watch(selectedMedicines, (newVal) => {
+    const selectedIds = Object.keys(newVal).filter(k => newVal[Number(k)]);
+    console.log('[DEBUG] selectedMedicines changed:', selectedIds);
+}, { deep: true });
+
 const openBulkEditDialog = () => {
+    const selectedIds = Object.keys(selectedMedicines.value)
+        .map(Number)
+        .filter(id => selectedMedicines.value[id]);
+    
+    console.log('[DEBUG] openBulkEditDialog called:', selectedIds);
+    
     bulkStockValue.value = '';
     bulkStockError.value = '';
+    
+    // Initialize individual stock values for selected medicines
+    individualStockValues.value = {};
+    selectedIds.forEach(medicineId => {
+        const medicine = props.medicines.data.find(m => m.id === medicineId);
+        if (medicine) {
+            individualStockValues.value[medicineId] = medicine.stock;
+        }
+    });
+    
     showBulkEditDialog.value = true;
 };
 
@@ -90,47 +128,67 @@ const closeBulkEditDialog = () => {
     showBulkEditDialog.value = false;
     bulkStockValue.value = '';
     bulkStockError.value = '';
+    individualStockValues.value = {};
 };
 
 const bulkUpdateStock = () => {
-    // Validate input
-    if (bulkStockValue.value === '' || bulkStockValue.value === null || bulkStockValue.value === undefined) {
-        bulkStockError.value = 'Stock value is required.';
-        return;
-    }
-
-    const stockValue = Number(bulkStockValue.value);
+    const selectedIds = Object.keys(selectedMedicines.value)
+        .map(Number)
+        .filter(id => selectedMedicines.value[id]);
     
-    if (isNaN(stockValue)) {
-        bulkStockError.value = 'Stock must be a valid number.';
-        return;
-    }
-
-    if (stockValue < 0) {
-        bulkStockError.value = 'Stock cannot be negative.';
-        return;
-    }
-
-    if (selectedMedicines.value.size === 0) {
+    // Validate that we have selected medicines
+    if (selectedIds.length === 0) {
         bulkStockError.value = 'Please select at least one medicine.';
+        return;
+    }
+
+    // Validate all individual stock values
+    const updates: Array<{ id: number; stock: number }> = [];
+    let hasError = false;
+
+    selectedIds.forEach(medicineId => {
+        const stockValue = individualStockValues.value[medicineId];
+        
+        if (stockValue === '' || stockValue === null || stockValue === undefined) {
+            bulkStockError.value = 'All stock values are required.';
+            hasError = true;
+            return;
+        }
+
+        const numericValue = Number(stockValue);
+        
+        if (isNaN(numericValue)) {
+            bulkStockError.value = 'All stock values must be valid numbers.';
+            hasError = true;
+            return;
+        }
+
+        if (numericValue < 0) {
+            bulkStockError.value = 'Stock values cannot be negative.';
+            hasError = true;
+            return;
+        }
+
+        updates.push({ id: medicineId, stock: numericValue });
+    });
+
+    if (hasError) {
         return;
     }
 
     bulkStockError.value = '';
 
-    // Submit bulk update
+    // Submit bulk update with individual values
     router.post('/admin/medicines/bulk-update-stock', {
-        medicine_ids: Array.from(selectedMedicines.value),
-        stock: stockValue,
+        updates: updates,
     }, {
-        preserveState: true,
         preserveScroll: true,
         onSuccess: () => {
-            selectedMedicines.value.clear();
+            selectedMedicines.value = {};
             closeBulkEditDialog();
         },
         onError: (errors) => {
-            bulkStockError.value = errors.stock?.[0] || errors.medicine_ids?.[0] || 'An error occurred while updating stock.';
+            bulkStockError.value = errors.updates?.[0] || 'An error occurred while updating stock.';
         },
     });
 };
@@ -230,10 +288,10 @@ const getSortIcon = (column: string) => {
                             <Button
                                 v-if="hasSelectedMedicines"
                                 variant="default"
-                                @click="openBulkEditDialog"
+                                @click="() => { console.log('[DEBUG] Bulk Edit button clicked'); openBulkEditDialog(); }"
                             >
                                 <Package class="h-4 w-4 mr-2" />
-                                Bulk Edit Stock ({{ selectedMedicines.size }})
+                                Bulk Edit Stock ({{ selectedCount }})
                             </Button>
                             <Link :href="adminMedicinesRoute('/create')">
                                 <Button>
@@ -270,10 +328,12 @@ const getSortIcon = (column: string) => {
                             <thead>
                                 <tr class="border-b">
                                     <th class="text-left p-3 font-semibold w-12">
-                                        <Checkbox
+                                        <input
+                                            type="checkbox"
                                             :checked="isAllSelected"
-                                            @update:checked="(checked: boolean) => toggleSelectAll(checked)"
+                                            @change="(e) => toggleSelectAll((e.target as HTMLInputElement).checked)"
                                             aria-label="Select all medicines"
+                                            class="h-4 w-4 rounded border-gray-300 cursor-pointer"
                                         />
                                     </th>
                                     <th class="text-left p-3 font-semibold">
@@ -331,10 +391,11 @@ const getSortIcon = (column: string) => {
                                     class="border-b hover:bg-muted/50"
                                 >
                                     <td class="p-3">
-                                        <Checkbox
-                                            :checked="selectedMedicines.has(medicine.id)"
-                                            @update:checked="(checked: boolean) => toggleSelectMedicine(medicine.id, checked)"
+                                        <input
+                                            type="checkbox"
+                                            v-model="selectedMedicines[medicine.id]"
                                             :aria-label="`Select ${medicine.name}`"
+                                            class="h-4 w-4 rounded border-gray-300 cursor-pointer"
                                         />
                                     </td>
                                     <td class="p-3 font-medium">{{ medicine.name }}</td>
@@ -406,37 +467,48 @@ const getSortIcon = (column: string) => {
 
             <!-- Bulk Edit Stock Dialog -->
             <Dialog v-model:open="showBulkEditDialog">
-                <DialogContent class="sm:max-w-[500px]">
+                <DialogContent class="sm:max-w-[600px] max-h-[80vh] overflow-y-auto">
                     <DialogHeader>
                         <DialogTitle class="flex items-center gap-2">
                             <Package class="h-5 w-5" />
                             Bulk Edit Stock
                         </DialogTitle>
                         <DialogDescription>
-                            Update stock for {{ selectedMedicines.size }} selected {{ selectedMedicines.size === 1 ? 'medicine' : 'medicines' }}.
+                            Update stock for {{ selectedCount }} selected {{ selectedCount === 1 ? 'medicine' : 'medicines' }}.
                         </DialogDescription>
                     </DialogHeader>
 
                     <div class="space-y-4 py-4">
-                        <div class="space-y-2">
-                            <Label for="bulk_stock">
-                                New Stock Value <span class="text-destructive">*</span>
-                            </Label>
-                            <Input
-                                id="bulk_stock"
-                                v-model.number="bulkStockValue"
-                                type="number"
-                                min="0"
-                                step="1"
-                                placeholder="Enter stock quantity"
-                                required
-                                autocomplete="off"
-                                @keyup.enter="bulkUpdateStock"
-                            />
-                            <InputError :message="bulkStockError" />
-                            <p class="text-sm text-muted-foreground">
-                                This will set the stock to the same value for all selected medicines.
-                            </p>
+                        <InputError :message="bulkStockError" />
+                        
+                        <div class="space-y-3">
+                            <div 
+                                v-for="medicineId in Object.keys(selectedMedicines).map(Number).filter(id => selectedMedicines[id])" 
+                                :key="medicineId"
+                                class="flex items-center gap-3 p-3 border rounded-lg"
+                            >
+                                <div class="flex-1">
+                                    <Label :for="`stock_${medicineId}`" class="font-medium">
+                                        {{ medicines.data.find(m => m.id === medicineId)?.name }}
+                                    </Label>
+                                    <p class="text-xs text-muted-foreground">
+                                        Current: {{ medicines.data.find(m => m.id === medicineId)?.stock }}
+                                    </p>
+                                </div>
+                                <div class="w-32">
+                                    <Input
+                                        :id="`stock_${medicineId}`"
+                                        v-model.number="individualStockValues[medicineId]"
+                                        type="number"
+                                        min="0"
+                                        step="1"
+                                        placeholder="New stock"
+                                        required
+                                        autocomplete="off"
+                                        class="text-right"
+                                    />
+                                </div>
+                            </div>
                         </div>
                     </div>
 
@@ -444,7 +516,7 @@ const getSortIcon = (column: string) => {
                         <Button variant="outline" @click="closeBulkEditDialog">
                             Cancel
                         </Button>
-                        <Button @click="bulkUpdateStock" :disabled="!bulkStockValue || bulkStockValue < 0">
+                        <Button @click="bulkUpdateStock">
                             Update Stock
                         </Button>
                     </DialogFooter>

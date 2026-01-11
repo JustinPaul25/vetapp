@@ -23,9 +23,9 @@ interface PrescriptionMedicine {
 interface Prescription {
     id: number;
     appointment_id: number;
-    symptoms: string;
-    notes: string;
-    pet_weight: string;
+    symptoms: string | null;
+    notes: string | null;
+    pet_weight: string | null;
     follow_up_date: string | null;
     created_at: string;
     updated_at: string;
@@ -185,7 +185,7 @@ const printPrescription = () => {
                                 </div>
                                 <div class="space-y-2">
                                     <Label class="text-sm font-medium text-muted-foreground">Pet Weight</Label>
-                                    <div class="text-lg font-semibold">{{ prescription.pet_weight }} kg</div>
+                                    <div class="text-lg font-semibold">{{ prescription.pet_weight ? prescription.pet_weight + ' kg' : '—' }}</div>
                                 </div>
                                 <div class="space-y-2" v-if="prescription.follow_up_date">
                                     <Label class="text-sm font-medium text-muted-foreground">Follow-up Date</Label>

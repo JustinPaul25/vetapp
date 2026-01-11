@@ -387,48 +387,46 @@
                     </td>
                     <td>
                         <div class="dosage-value">{{ $prescriptionMedicine->dosage }}</div>
-                        <div class="dosage-frequency">
-                            @php
-                                // Try to extract frequency from instructions if it contains frequency info
-                                $instructions = strtolower($prescriptionMedicine->instructions ?? '');
-                                $frequency = '';
-                                if (strpos($instructions, 'once') !== false || strpos($instructions, 'daily') !== false) {
-                                    $frequency = 'Once a day';
-                                } elseif (strpos($instructions, 'twice') !== false) {
-                                    $frequency = 'Twice a day';
-                                } elseif (strpos($instructions, 'three') !== false) {
-                                    $frequency = 'Three times a day';
-                                } elseif (strpos($instructions, 'every') !== false) {
-                                    // Extract "every X hours" pattern
-                                    if (preg_match('/every\s+(\d+)\s+hours?/i', $instructions, $matches)) {
-                                        $frequency = 'Every ' . $matches[1] . ' hours';
-                                    } else {
-                                        $frequency = 'As directed';
-                                    }
-                                } else {
-                                    $frequency = 'As directed';
+                        @php
+                            // Try to extract frequency from instructions if it contains frequency info
+                            $instructions = strtolower($prescriptionMedicine->instructions ?? '');
+                            $frequency = '';
+                            if (strpos($instructions, 'once') !== false || strpos($instructions, 'daily') !== false) {
+                                $frequency = 'Once a day';
+                            } elseif (strpos($instructions, 'twice') !== false) {
+                                $frequency = 'Twice a day';
+                            } elseif (strpos($instructions, 'three') !== false) {
+                                $frequency = 'Three times a day';
+                            } elseif (strpos($instructions, 'every') !== false) {
+                                // Extract "every X hours" pattern
+                                if (preg_match('/every\s+(\d+)\s+hours?/i', $instructions, $matches)) {
+                                    $frequency = 'Every ' . $matches[1] . ' hours';
                                 }
-                            @endphp
-                            {{ $frequency }}
-                        </div>
+                            }
+                        @endphp
+                        @if(!empty($frequency))
+                            <div class="dosage-frequency">
+                                {{ $frequency }}
+                            </div>
+                        @endif
                     </td>
                     <td>
                         <div class="quantity-value">{{ $prescriptionMedicine->quantity }}</div>
-                        <div class="quantity-time">
-                            @php
-                                // Try to extract time from instructions
-                                $instructions = $prescriptionMedicine->instructions ?? '';
-                                $time = '';
-                                if (preg_match('/(\d{1,2}(?::\d{2})?\s*(?:am|pm|AM|PM))/i', $instructions, $matches)) {
-                                    $time = $matches[1];
-                                } elseif (preg_match('/(\d{1,2}:\d{2})/i', $instructions, $matches)) {
-                                    $time = $matches[1];
-                                } else {
-                                    $time = 'As directed';
-                                }
-                            @endphp
-                            {{ $time }}
-                        </div>
+                        @php
+                            // Try to extract time from instructions
+                            $instructions = $prescriptionMedicine->instructions ?? '';
+                            $time = '';
+                            if (preg_match('/(\d{1,2}(?::\d{2})?\s*(?:am|pm|AM|PM))/i', $instructions, $matches)) {
+                                $time = $matches[1];
+                            } elseif (preg_match('/(\d{1,2}:\d{2})/i', $instructions, $matches)) {
+                                $time = $matches[1];
+                            }
+                        @endphp
+                        @if(!empty($time))
+                            <div class="quantity-time">
+                                {{ $time }}
+                            </div>
+                        @endif
                     </td>
                 </tr>
             @empty

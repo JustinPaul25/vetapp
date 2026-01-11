@@ -48,9 +48,9 @@ interface PrescriptionMedicine {
 
 interface Prescription {
     id: number;
-    symptoms: string;
-    notes: string;
-    pet_weight: string;
+    symptoms: string | null;
+    notes: string | null;
+    pet_weight: string | null;
     diagnoses: Diagnosis[];
     medicines: PrescriptionMedicine[];
 }
@@ -818,7 +818,7 @@ const handleReschedule = () => {
                                     </div>
                                     <div class="space-y-2">
                                         <Label class="text-sm font-medium text-muted-foreground">Pet Weight</Label>
-                                        <div class="text-lg font-semibold">{{ prescription.pet_weight }} kg</div>
+                                        <div class="text-lg font-semibold">{{ prescription.pet_weight ? prescription.pet_weight + ' kg' : '—' }}</div>
                                     </div>
                                     <div class="space-y-2 md:col-span-2" v-if="prescription.notes">
                                         <Label class="text-sm font-medium text-muted-foreground">Notes</Label>
