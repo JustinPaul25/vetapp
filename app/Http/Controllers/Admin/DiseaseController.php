@@ -303,14 +303,6 @@ class DiseaseController extends Controller
      */
     public function getMedicines($id)
     {
-        // Check if KNN prediction is enabled
-        $knnEnabled = \App\Models\Setting::get('enable_knn_prediction', true);
-        
-        if (!$knnEnabled) {
-            // Return empty array if KNN is disabled
-            return response()->json([]);
-        }
-        
         $disease = Disease::findOrFail($id);
         
         $medicines = $disease->medicines()
