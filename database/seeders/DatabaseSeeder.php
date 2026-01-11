@@ -40,6 +40,9 @@ class DatabaseSeeder extends Seeder
         // Associate vomiting types with relevant diseases for ML training
         $this->call(VomitingTypesDiseaseAssociationSeeder::class);
 
+        // Create disease-medicine relationships for ALL diseases
+        $this->call(DiseaseMedicineSeeder::class);
+
         // Seed historical data (patients, appointments, prescriptions, etc.)
         $this->call(HistoricalDataSeeder::class);
 

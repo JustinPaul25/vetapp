@@ -585,9 +585,11 @@ class HistoricalDataSeeder extends Seeder
     private function createDiseaseMedicines($diseases, $medicines): void
     {
         $count = 0;
-        foreach ($diseases->take(50) as $disease) { // Link first 50 diseases
-            $medicineCount = rand(1, 3);
-            $selectedMedicines = $medicines->random($medicineCount);
+        // Link ALL diseases with medicines (not just first 50)
+        foreach ($diseases as $disease) {
+            // Assign 1-4 medicines per disease for better coverage
+            $medicineCount = rand(1, 4);
+            $selectedMedicines = $medicines->random(min($medicineCount, $medicines->count()));
 
             foreach ($selectedMedicines as $medicine) {
                 DB::table('disease_medicines')->insertOrIgnore([
@@ -600,7 +602,7 @@ class HistoricalDataSeeder extends Seeder
             }
         }
 
-        $this->command->info("Created {$count} disease-medicine relationships.");
+        $this->command->info("Created {$count} disease-medicine relationships for {$diseases->count()} diseases.");
     }
 
     /**
