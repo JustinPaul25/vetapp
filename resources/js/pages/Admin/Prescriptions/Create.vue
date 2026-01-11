@@ -454,12 +454,10 @@ const loadMedicinesForDisease = async (diseaseId: number) => {
                 if (!existingRow.disease_ids.includes(diseaseId)) {
                     existingRow.disease_ids.push(diseaseId);
                 }
-                // Set dosage from medicine (no auto-calculation)
-                const medicineFromProps = props.medicines.find(m => m.id === medicine.id);
-                if (medicineFromProps) {
-                    existingRow.dosage = medicineFromProps.dosage || '';
-                } else {
-                    existingRow.dosage = medicine.dosage || '';
+                // Keep dosage empty - vet will manually enter it
+                // Don't overwrite if user has already entered a dosage
+                if (!existingRow.dosage || existingRow.dosage.trim() === '') {
+                    existingRow.dosage = ''; // Ensure it's empty for vet to fill
                 }
             } else {
                 // Add new medicine row
@@ -472,7 +470,7 @@ const loadMedicinesForDisease = async (diseaseId: number) => {
                 medicineRows.value.push({
                     id: newId,
                     medicine_id: medicine.id,
-                    dosage: medicine.dosage || '', // No auto-calculation, just use medicine's dosage
+                    dosage: '', // Empty - vet will manually enter dosage
                     instructions: defaultInstruction, // Set default instruction instead of empty string
                     quantity: '1 Pcs.',
                     disease_ids: [diseaseId], // Track which disease added this medicine
@@ -561,12 +559,9 @@ const onMedicineChange = (rowId: number, medicineId: number) => {
         row.medicine_id = medicineId;
         // Remove from newly added set once medicine is selected
         newlyAddedRowIds.value.delete(rowId);
-        const medicine = props.medicines.find(m => m.id === medicineId);
-        if (medicine) {
-            // Just use the medicine's dosage without calculation
-            row.dosage = medicine.dosage || '';
-        } else {
-            // If medicine not found, clear dosage
+        // Keep dosage empty - vet will manually enter it
+        // Don't overwrite if user has already entered a dosage
+        if (!row.dosage || row.dosage.trim() === '') {
             row.dosage = '';
         }
     }
