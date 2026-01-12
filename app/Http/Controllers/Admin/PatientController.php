@@ -429,8 +429,10 @@ class PatientController extends Controller
             });
         }
 
-        // Apply date filtering
-        $this->applyDateFilter($query, $request, 'created_at');
+        // Apply date filtering only if filter_type is provided
+        if ($request->has('filter_type')) {
+            $this->applyDateFilter($query, $request, 'created_at');
+        }
 
         $patients = $query->orderBy('created_at', 'desc')->get();
 
@@ -505,6 +507,11 @@ class PatientController extends Controller
     private function getFilterInfo($request)
     {
         $filterType = $request->get('filter_type');
+        
+        // If no filter type is provided, return "All Records"
+        if (!$filterType) {
+            return 'All Records';
+        }
         
         switch ($filterType) {
             case 'date':

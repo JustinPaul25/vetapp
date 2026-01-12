@@ -171,6 +171,7 @@ const calculateAge = (birthDate: string | null) => {
                                 export-url="/admin/patients/export"
                                 report-title="Patients"
                                 :filters="{ search: searchQuery, sort_by: sortBy, sort_direction: sortDirection }"
+                                disable-date-filter
                             />
                             <Link :href="adminPatientsRoute('/create')">
                                 <Button>
