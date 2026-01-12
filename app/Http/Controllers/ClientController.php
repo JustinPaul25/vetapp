@@ -1212,7 +1212,7 @@ class ClientController extends Controller
             // Format dates and times for user-friendly display
             $oldDateFormatted = Carbon::createFromFormat('Y-m-d', $oldDate)->format('M d, Y');
             $oldTimeFormatted = $oldTime; // Already in 12-hour format
-            $newTimeFormatted = Carbon::createFromFormat('H:i', $request->appointment_time)->format('h:i A');
+            $newTimeFormatted = $time->format('h:i A'); // Use the $time variable already converted to Carbon on line 1128
             $newDateFormatted = Carbon::createFromFormat('Y-m-d', $request->appointment_date)->format('M d, Y');
 
             // Notify Super Admins
