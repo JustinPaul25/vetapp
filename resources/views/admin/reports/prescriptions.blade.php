@@ -18,58 +18,135 @@
         
         body {
             font-family: Arial, sans-serif;
-            font-size: 16px;
-            margin: 20px;
-            padding-right: 40px;
-        }
-        .header {
-            text-align: center;
-            margin-bottom: 20px;
-            border-bottom: 2px solid #333;
-            padding-bottom: 10px;
-        }
-        .header h1 {
+            font-size: 12px;
             margin: 0;
-            font-size: 28px;
+            padding: 0;
         }
-        .filter-info {
+        
+        /* Header Section */
+        .header-table {
+            width: 100%;
             margin-bottom: 15px;
-            font-size: 14px;
-            color: #666;
+            border-collapse: collapse;
         }
+
+        .header-table td {
+            vertical-align: top;
+            border: none;
+            padding: 5px;
+        }
+        
+        .header-left {
+            width: 15%;
+            text-align: left;
+        }
+        
+        .header-center {
+            width: 70%;
+            text-align: center;
+            line-height: 1.2;
+        }
+        
+        .header-right {
+            width: 15%;
+            text-align: right;
+        }
+        
+        .header-logo {
+            width: 50px;
+            height: auto;
+        }
+        
+        .header-org-name {
+            font-size: 16px;
+            font-weight: bold;
+            margin: 0;
+        }
+
+        .header-address {
+            font-size: 11px;
+        }
+        
+        .report-title {
+            text-align: center;
+            margin: 15px 0;
+            font-size: 20px;
+            font-weight: bold;
+        }
+        
+        .report-info {
+            margin-bottom: 15px;
+            font-size: 11px;
+            color: #666;
+            text-align: center;
+        }
+        
+        .report-date {
+            margin-bottom: 15px;
+            font-size: 11px;
+            color: #666;
+            text-align: center;
+        }
+        
         table {
             width: 100%;
             border-collapse: collapse;
             margin-top: 10px;
         }
+        
         th, td {
             border: 1px solid #ddd;
             padding: 12px;
             text-align: left;
-            font-size: 15px;
+            font-size: 11px;
         }
+        
         th {
             background-color: #f2f2f2;
             font-weight: bold;
-            font-size: 16px;
+            font-size: 12px;
         }
+        
         tr:nth-child(even) {
             background-color: #f9f9f9;
         }
+        
         .footer {
             margin-top: 20px;
             text-align: right;
-            font-size: 12px;
+            font-size: 10px;
             color: #666;
         }
     </style>
 </head>
 <body>
-    <div class="header">
-        <h1>{{ $title }}</h1>
-        <div class="filter-info">
-            Filter: {{ $filterInfo }} | Total Records: {{ $total }}
-        </div>
+    <!-- Header Section -->
+    <table class="header-table">
+        <tr>
+            <td class="header-left">
+                <img src="{{ $base64PanaboLogo }}" alt="Panabo Logo" class="header-logo">
+            </td>
+            <td class="header-center">
+                <p class="header-org-name">City of Panabo</p>
+                <p class="header-org-name">City Mayor's Office</p>
+            </td>
+            <td class="header-right">
+                <img src="{{ $base64Logo }}" alt="Logo" class="header-logo">
+            </td>
+        </tr>
+        <tr>
+            <td colspan="3" class="header-center" style="text-align: center; padding-top: 5px;">
+                <p class="header-address">Prk. 1 Along, National Highway, Brgy. Salvacion Panabo city</p>
+            </td>
+        </tr>
+    </table>
+    
+    <div class="report-title">{{ $title }}</div>
+    
+    <div class="report-date">Date: {{ $reportDate }}</div>
+    
+    <div class="report-info">
+        Filter: {{ $filterInfo }} | Total Records: {{ $total }}
     </div>
 
     <table>
@@ -108,10 +185,3 @@
     </div>
 </body>
 </html>
-
-
-
-
-
-
-

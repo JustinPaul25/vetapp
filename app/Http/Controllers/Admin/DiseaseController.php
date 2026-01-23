@@ -328,41 +328,53 @@ class DiseaseController extends Controller
     /**
      * Display the disease map.
      */
-    public function map()
+    public function map(Request $request)
     {
-        // Get all prescription diagnoses with prescription, patient, and user data
-        // Use prescription->patient->user instead of appointment->user to get the correct pet owner
-        $cases = PrescriptionDiagnosis::with(['disease', 'prescription.patient.user', 'appointment'])
-            ->whereHas('prescription.patient.user')
-            ->get()
+        $condition = $request->query('condition');
+
+        $baseQuery = PrescriptionDiagnosis::with(['disease', 'prescription.patient.user', 'appointment'])
+            ->whereHas('prescription.patient.user');
+
+        $totalCasesCount = (clone $baseQuery)->count();
+
+        if ($condition && $condition !== 'all') {
+            $baseQuery->where('condition', $condition);
+        }
+
+        $cases = $baseQuery->get()
             ->map(function ($diagnosis) {
-                // Get user from prescription's patient (the pet owner)
                 $user = $diagnosis->prescription->patient->user ?? null;
-                
+
                 if (!$user) {
                     return null;
                 }
-                
+
+                $lat = $user->lat ?? 7.322074145850032;
+                $lng = $user->long ?? 125.6865978240967;
+
                 return [
                     'disease_id' => $diagnosis->disease_id,
                     'disease_name' => $diagnosis->disease->name,
-                    'lat' => $user->lat ?? 7.322074145850032,
-                    'lng' => $user->long ?? 125.6865978240967,
+                    'lat' => is_numeric($lat) ? (float) $lat : 7.322074145850032,
+                    'lng' => is_numeric($lng) ? (float) $lng : 125.6865978240967,
                     'address' => $user->address ?? 'Unknown',
                     'appointment_date' => $diagnosis->appointment->appointment_date ?? null,
                 ];
             })
             ->filter(function ($case) {
-                return $case !== null && $case['lat'] && $case['lng'];
+                return $case !== null
+                    && isset($case['lat'], $case['lng'])
+                    && !is_nan($case['lat']) && !is_nan($case['lng']);
             });
 
-        // Group by address (barangay) to find outbreak zones
+        $filteredCount = $cases->count();
+
         $zones = $cases->groupBy('address')
             ->map(function ($zoneCases, $address) {
                 $latSum = $zoneCases->sum('lat');
                 $lngSum = $zoneCases->sum('lng');
                 $count = $zoneCases->count();
-                
+
                 return [
                     'address' => $address,
                     'lat' => $latSum / $count,
@@ -373,7 +385,6 @@ class DiseaseController extends Controller
             ->sortByDesc('count')
             ->values();
 
-        // Get top 5 diseases
         $topDiseases = $cases->groupBy('disease_name')
             ->map(function ($diseaseCases, $name) {
                 return [
@@ -385,7 +396,6 @@ class DiseaseController extends Controller
             ->take(5)
             ->values();
 
-        // Generate colors for diseases
         $diseaseColors = $topDiseases->mapWithKeys(function ($disease) {
             return [$disease['name'] => $this->generateColor($disease['name'])];
         })->toArray();
@@ -395,6 +405,9 @@ class DiseaseController extends Controller
             'cases' => $cases->values(),
             'topDiseases' => $topDiseases,
             'diseaseColors' => $diseaseColors,
+            'totalCases' => $totalCasesCount,
+            'filteredCases' => $filteredCount,
+            'conditionFilter' => $condition ?: null,
         ]);
     }
 

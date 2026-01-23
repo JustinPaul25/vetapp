@@ -54,6 +54,13 @@ interface WeightHistoryEntry {
     prescription_id: number | null;
 }
 
+interface VaccinationRecord {
+    type: string;
+    date: string;
+    next_due: string | null;
+    status: string;
+}
+
 interface Patient {
     id: number;
     pet_name: string | null;
@@ -66,6 +73,9 @@ interface Patient {
     appointments: Appointment[];
     prescriptions: Prescription[];
     weight_history: WeightHistoryEntry[];
+    vaccination_records: VaccinationRecord[];
+    last_anti_rabies_date: string | null;
+    next_anti_rabies_due_date: string | null;
     created_at: string;
     updated_at: string;
 }
@@ -446,6 +456,52 @@ const getWeightChange = () => {
                             </div>
                             <div v-else class="text-center text-muted-foreground py-8">
                                 No weight history recorded yet
+                            </div>
+                        </div>
+
+                        <!-- Vaccination Records -->
+                        <div>
+                            <h3 class="text-lg font-semibold mb-4">Vaccination Records</h3>
+                            <div v-if="patient.vaccination_records && patient.vaccination_records.length > 0" class="overflow-x-auto">
+                                <table class="w-full border-collapse">
+                                    <thead>
+                                        <tr class="border-b">
+                                            <th class="text-left p-3 font-semibold">Type</th>
+                                            <th class="text-left p-3 font-semibold">Date Given</th>
+                                            <th class="text-left p-3 font-semibold">Next Due</th>
+                                            <th class="text-left p-3 font-semibold">Status</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <tr
+                                            v-for="(record, index) in patient.vaccination_records"
+                                            :key="index"
+                                            class="border-b hover:bg-muted/50"
+                                        >
+                                            <td class="p-3 font-medium">{{ record.type }}</td>
+                                            <td class="p-3">{{ formatDate(record.date) }}</td>
+                                            <td class="p-3">{{ record.next_due ? formatDate(record.next_due) : '—' }}</td>
+                                            <td class="p-3">
+                                                <span
+                                                    :class="[
+                                                        record.status === 'Overdue'
+                                                            ? 'text-red-600 font-semibold'
+                                                            : record.status === 'Due Today'
+                                                              ? 'text-orange-600 font-semibold'
+                                                              : record.status === 'Up to Date'
+                                                                ? 'text-green-600'
+                                                                : 'text-muted-foreground',
+                                                    ]"
+                                                >
+                                                    {{ record.status }}
+                                                </span>
+                                            </td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                            <div v-else class="text-center text-muted-foreground py-8">
+                                No vaccination records found
                             </div>
                         </div>
 

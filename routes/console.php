@@ -10,3 +10,6 @@ Artisan::command('inspire', function () {
 
 // Schedule follow-up checkup reminders to run daily at 9:00 AM
 Schedule::command('followup:send-reminders')->dailyAt('09:00');
+
+// Schedule anti-rabies vaccination reminders to run daily at 9:30 AM
+Schedule::command('anti-rabies:send-reminders')->dailyAt('09:30');

@@ -271,6 +271,13 @@ const clientLinks = [
         description: 'View and manage your appointments',
         color: 'text-blue-600 dark:text-blue-400',
     },
+    {
+        title: 'My Prescriptions',
+        href: '/prescriptions',
+        icon: FileText,
+        description: 'View all prescriptions given to your pets',
+        color: 'text-teal-600 dark:text-teal-400',
+    },
 ];
 
 // Disease statistics

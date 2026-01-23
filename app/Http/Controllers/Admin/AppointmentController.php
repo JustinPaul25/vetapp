@@ -1140,6 +1140,9 @@ class AppointmentController extends Controller
                 }
             }
             
+            // Track if anti-rabies vaccination was given
+            $hasAntiRabies = false;
+            
             // Create prescription medicines and deduct stock
             foreach ($request->medicines as $medicine) {
                 PrescriptionMedicine::create([
@@ -1153,6 +1156,13 @@ class AppointmentController extends Controller
                 // Deduct stock from inventory
                 $medicineModel = Medicine::findOrFail($medicine['id']);
                 
+                // Check if this is an anti-rabies vaccination
+                $medicineName = strtolower($medicineModel->name);
+                if (str_contains($medicineName, 'anti-rabies') || str_contains($medicineName, 'antirabies') || 
+                    (str_contains($medicineName, 'rabies') && !str_contains($medicineName, 'test'))) {
+                    $hasAntiRabies = true;
+                }
+                
                 // Parse quantity string to extract numeric value (e.g., "1 Pcs." -> 1, "2 Bottles" -> 2)
                 $quantityString = $medicine['quantity'];
                 preg_match('/(\d+(?:\.\d+)?)/', $quantityString, $matches);
@@ -1161,6 +1171,19 @@ class AppointmentController extends Controller
                 // Deduct stock (ensure it doesn't go below 0)
                 $newStock = max(0, $medicineModel->stock - $quantityToDeduct);
                 $medicineModel->update(['stock' => $newStock]);
+            }
+            
+            // Update anti-rabies tracking if vaccination was given
+            if ($hasAntiRabies) {
+                $patient = Patient::findOrFail($prescriptionPatientId);
+                $vaccinationDate = $appointment->appointment_date;
+                $nextDueDate = $vaccinationDate->copy()->addYear();
+                
+                $patient->update([
+                    'last_anti_rabies_date' => $vaccinationDate,
+                    'next_anti_rabies_due_date' => $nextDueDate,
+                    'anti_rabies_notified_at' => null, // Reset notification flag for new vaccination
+                ]);
             }
 
             // Only mark appointment as completed if all pets have prescriptions

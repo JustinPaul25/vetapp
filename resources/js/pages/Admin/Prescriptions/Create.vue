@@ -280,7 +280,7 @@ const addMedicineRow = () => {
         medicine_id: null,
         dosage: '',
         instructions: defaultInstruction, // Set default instruction instead of empty string
-        quantity: '1 Pcs.', // Default quantity
+        quantity: '1pc/s', // Default quantity
         disease_ids: [], // No disease_ids for manually added medicines
     });
     // Mark as newly added so it shows even if empty
@@ -472,7 +472,7 @@ const loadMedicinesForDisease = async (diseaseId: number) => {
                     medicine_id: medicine.id,
                     dosage: '', // Empty - vet will manually enter dosage
                     instructions: defaultInstruction, // Set default instruction instead of empty string
-                    quantity: '1 Pcs.',
+                    quantity: '1pc/s',
                     disease_ids: [diseaseId], // Track which disease added this medicine
                 });
                 // Don't mark auto-added medicines as newly added since they already have medicine_id

@@ -68,6 +68,14 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::put('/{pet}', [\App\Http\Controllers\ClientController::class, 'updatePet'])->name('update');
         Route::delete('/{pet}', [\App\Http\Controllers\ClientController::class, 'destroyPet'])->name('destroy');
     });
+
+    // Prescription routes
+    Route::prefix('prescriptions')->name('client.prescriptions.')->group(function () {
+        Route::get('/', [\App\Http\Controllers\ClientController::class, 'prescriptions'])->name('index');
+        Route::get('/{id}', [\App\Http\Controllers\ClientController::class, 'showPrescription'])->name('show');
+        Route::get('/{id}/download', [\App\Http\Controllers\ClientController::class, 'downloadPrescription'])->name('download');
+        Route::get('/{id}/print', [\App\Http\Controllers\ClientController::class, 'printPrescription'])->name('print');
+    });
 });
 
 // Admin-only routes

@@ -222,11 +222,13 @@ class WalkInClientController extends Controller
         $usingExistingRecords = $request->filled('existing_pet_id') && $request->filled('existing_owner_id');
 
         if ($usingExistingRecords) {
-            // Simplified validation for existing records
+            // Simplified validation for existing records - support multiple appointment types
             $validated = $request->validate([
                 'existing_owner_id' => 'required|exists:users,id',
                 'existing_pet_id' => 'required|exists:patients,id',
-                'appointment_type_id' => [
+                'appointment_type_id' => 'nullable|exists:appointment_types,id', // Keep for backward compatibility
+                'appointment_type_ids' => 'required_without:appointment_type_id|array|min:1',
+                'appointment_type_ids.*' => [
                     'required',
                     'exists:appointment_types,id',
                     function ($attribute, $value, $fail) {
@@ -239,7 +241,13 @@ class WalkInClientController extends Controller
                 'symptoms' => 'nullable|string|max:1825',
             ]);
 
-            return DB::transaction(function () use ($validated) {
+            // Normalize to use appointment_type_ids array
+            $appointmentTypeIds = $validated['appointment_type_ids'] ?? [];
+            if (empty($appointmentTypeIds) && !empty($validated['appointment_type_id'])) {
+                $appointmentTypeIds = [$validated['appointment_type_id']];
+            }
+
+            return DB::transaction(function () use ($validated, $appointmentTypeIds) {
                 $existingClient = User::findOrFail($validated['existing_owner_id']);
                 $existingPet = Patient::findOrFail($validated['existing_pet_id']);
 
@@ -248,45 +256,50 @@ class WalkInClientController extends Controller
                     $existingClient->assignRole('walk_in_client');
                 }
 
-                // Create appointment
+                // Create appointments for each appointment type
                 $appointmentDate = now()->toDateString();
                 $appointmentTime = now()->format('H:i');
-
-                // Validate daily appointment limits
                 $limitService = app(AppointmentLimitService::class);
-                $limitCheck = $limitService->checkDailyLimit($validated['appointment_type_id'], $appointmentDate);
-                
-                if (!$limitCheck['available']) {
-                    return back()->withErrors([
-                        'appointment_type_id' => sprintf(
-                            'Daily limit reached for %s appointments. Current: %d/%d',
-                            $limitCheck['appointment_type'],
-                            $limitCheck['current_count'],
-                            $limitCheck['limit']
-                        ),
-                    ])->withInput();
+                $createdAppointments = [];
+
+                foreach ($appointmentTypeIds as $appointmentTypeId) {
+                    // Validate daily appointment limits
+                    $limitCheck = $limitService->checkDailyLimit($appointmentTypeId, $appointmentDate);
+                    
+                    if (!$limitCheck['available']) {
+                        return back()->withErrors([
+                            'appointment_type_ids' => sprintf(
+                                'Daily limit reached for %s appointments. Current: %d/%d',
+                                $limitCheck['appointment_type'],
+                                $limitCheck['current_count'],
+                                $limitCheck['limit']
+                            ),
+                        ])->withInput();
+                    }
+
+                    $appointment = Appointment::create([
+                        'patient_id' => $existingPet->id,
+                        'appointment_type_id' => $appointmentTypeId,
+                        'appointment_date' => $appointmentDate,
+                        'appointment_time' => $appointmentTime,
+                        'symptoms' => $validated['symptoms'] ?? '',
+                        'is_approved' => true,
+                        'user_id' => $existingClient->id,
+                    ]);
+
+                    $appointment->patients()->sync([$existingPet->id]);
+                    $appointment->appointment_types()->sync([$appointmentTypeId]);
+                    $createdAppointments[] = $appointment;
                 }
 
-                $appointment = Appointment::create([
-                    'patient_id' => $existingPet->id,
-                    'appointment_type_id' => $validated['appointment_type_id'],
-                    'appointment_date' => $appointmentDate,
-                    'appointment_time' => $appointmentTime,
-                    'symptoms' => $validated['symptoms'] ?? '',
-                    'is_approved' => true,
-                    'user_id' => $existingClient->id,
-                ]);
-
-                $appointment->patients()->sync([$existingPet->id]);
-                $appointment->appointment_types()->sync([$validated['appointment_type_id']]);
-
                 // Redirect based on user role: admin can create prescription, staff goes to appointment show
+                $firstAppointment = $createdAppointments[0];
                 if (auth()->user()->hasRole('admin')) {
-                    return redirect()->route('admin.appointments.prescription.create', $appointment->id)
-                        ->with('success', 'Appointment created successfully for existing client and pet.');
+                    return redirect()->route('admin.appointments.prescription.create', $firstAppointment->id)
+                        ->with('success', count($createdAppointments) . ' appointment(s) created successfully for existing client and pet.');
                 } else {
-                    return redirect()->route('admin.appointments.show', $appointment->id)
-                        ->with('success', 'Appointment created successfully for existing client and pet.');
+                    return redirect()->route('admin.appointments.show', $firstAppointment->id)
+                        ->with('success', count($createdAppointments) . ' appointment(s) created successfully for existing client and pet.');
                 }
             });
         }
@@ -302,17 +315,18 @@ class WalkInClientController extends Controller
             'address' => 'nullable|string|max:500',
             'lat' => 'nullable|numeric|between:-90,90',
             'lng' => 'nullable|numeric|between:-180,180',
-            // Pet fields - pet_type_id is required unless custom_pet_type_name is provided
-            'pet_type_id' => 'required_without:custom_pet_type_name',
-            'custom_pet_type_name' => 'nullable|string|max:100',
-            'pet_name' => 'nullable|string|max:100',
-            'pet_breed' => 'required_without:custom_pet_breed_name|nullable|string|max:100',
-            'custom_pet_breed_name' => 'nullable|string|max:100',
-            'pet_gender' => 'nullable|in:Male,Female',
-            'pet_birth_date' => 'nullable|date',
-            'pet_allergies' => 'nullable|string',
-            // Appointment fields (always required for walk-in)
-            'appointment_type_id' => [
+            // Pets array
+            'pets' => 'required|array|min:1',
+            'pets.*.pet_type_id' => 'required_without:pets.*.custom_pet_type_name|nullable|string',
+            'pets.*.custom_pet_type_name' => 'nullable|string|max:100',
+            'pets.*.pet_name' => 'nullable|string|max:100',
+            'pets.*.pet_breed' => 'required_without:pets.*.custom_pet_breed_name|nullable|string|max:100',
+            'pets.*.custom_pet_breed_name' => 'nullable|string|max:100',
+            'pets.*.pet_gender' => 'nullable|in:Male,Female',
+            'pets.*.pet_birth_date' => 'nullable|date',
+            'pets.*.pet_allergies' => 'nullable|string',
+            'pets.*.appointment_type_ids' => 'required|array|min:1',
+            'pets.*.appointment_type_ids.*' => [
                 'required',
                 'exists:appointment_types,id',
                 function ($attribute, $value, $fail) {
@@ -325,58 +339,7 @@ class WalkInClientController extends Controller
             'symptoms' => 'nullable|string|max:1825',
         ]);
 
-        // Validate pet_type_id exists if not creating new
-        if (!empty($validated['pet_type_id']) && $validated['pet_type_id'] !== '__new__') {
-            $exists = PetType::where('id', $validated['pet_type_id'])->exists();
-            if (!$exists) {
-                return back()->withErrors(['pet_type_id' => 'The selected pet type is invalid.'])->withInput();
-            }
-        }
-
         return DB::transaction(function () use ($validated) {
-            // Handle custom pet type creation
-            $petTypeId = $validated['pet_type_id'];
-            if (!empty($validated['custom_pet_type_name']) && ($petTypeId === '__new__' || empty($petTypeId))) {
-                // Check if pet type with this name already exists (case-insensitive)
-                $existingPetType = PetType::whereRaw('LOWER(name) = ?', [strtolower($validated['custom_pet_type_name'])])->first();
-                
-                if ($existingPetType) {
-                    $petTypeId = $existingPetType->id;
-                } else {
-                    // Create new pet type
-                    $newPetType = PetType::create([
-                        'name' => ucfirst($validated['custom_pet_type_name']),
-                    ]);
-                    $petTypeId = $newPetType->id;
-                }
-            }
-            
-            // Update validated array with resolved pet_type_id
-            $validated['pet_type_id'] = $petTypeId;
-
-            // Handle custom breed creation
-            $petBreed = $validated['pet_breed'];
-            if (!empty($validated['custom_pet_breed_name']) && ($petBreed === '__new__' || empty($petBreed))) {
-                $breedName = ucfirst($validated['custom_pet_breed_name']);
-                
-                // Check if breed with this name already exists for this pet type (case-insensitive)
-                $existingBreed = PetBreed::where('pet_type_id', $petTypeId)
-                    ->whereRaw('LOWER(name) = ?', [strtolower($breedName)])
-                    ->first();
-                
-                if (!$existingBreed) {
-                    // Create new breed
-                    PetBreed::create([
-                        'name' => $breedName,
-                        'pet_type_id' => $petTypeId,
-                    ]);
-                }
-                
-                $petBreed = $breedName;
-            }
-            
-            // Update validated array with resolved breed
-            $validated['pet_breed'] = $petBreed;
             // Step 1: Check if client already exists
             // Check by email first (primary identifier)
             $existingClient = User::where('email', $validated['email'])->first();
@@ -416,94 +379,157 @@ class WalkInClientController extends Controller
                 }
             }
 
-            // Step 2: After client check, check if pet already exists for this client
-            $existingPet = null;
-            $petQuery = Patient::where('user_id', $existingClient->id)
-                ->where('pet_breed', $validated['pet_breed'])
-                ->where('pet_type_id', $validated['pet_type_id']);
-
-            // If pet_name is provided, also check by name
-            if (!empty($validated['pet_name'])) {
-                $petQuery->where('pet_name', $validated['pet_name']);
-            }
-
-            $existingPet = $petQuery->first();
-
-            $petCreated = false;
-            if (!$existingPet) {
-                // Step 2.2: Pet doesn't exist - create pet for the client
-                $existingPet = Patient::create([
-                    'pet_type_id' => $validated['pet_type_id'],
-                    'pet_name' => $validated['pet_name'] ?? null,
-                    'pet_breed' => $validated['pet_breed'],
-                    'pet_gender' => $validated['pet_gender'] ?? null,
-                    'pet_birth_date' => $validated['pet_birth_date'] ?? null,
-                    'pet_allergies' => $validated['pet_allergies'] ?? null,
-                    'user_id' => $existingClient->id,
-                ]);
-                $petCreated = true;
-            }
-
-            // Step 3: Create appointment (always for walk-in clients)
-            // Auto-fill date and time with current values
+            // Step 2: Process each pet
             $appointmentDate = now()->toDateString();
             $appointmentTime = now()->format('H:i');
-
-            // Validate daily appointment limits
             $limitService = app(AppointmentLimitService::class);
-            $limitCheck = $limitService->checkDailyLimit($validated['appointment_type_id'], $appointmentDate);
-            
-            if (!$limitCheck['available']) {
-                return back()->withErrors([
-                    'appointment_type_id' => sprintf(
-                        'Daily limit reached for %s appointments. Current: %d/%d',
-                        $limitCheck['appointment_type'],
-                        $limitCheck['current_count'],
-                        $limitCheck['limit']
-                    ),
-                ])->withInput();
-            }
-
-            $appointment = Appointment::create([
-                'patient_id' => $existingPet->id,
-                'appointment_type_id' => $validated['appointment_type_id'],
-                'appointment_date' => $appointmentDate,
-                'appointment_time' => $appointmentTime,
-                'symptoms' => $validated['symptoms'] ?? '',
-                'is_approved' => true, // Walk-in appointments are auto-approved
-                'user_id' => $existingClient->id,
-            ]);
-
-            // Sync many-to-many relationship for patients
-            $appointment->patients()->sync([$existingPet->id]);
-            
-            // Sync many-to-many relationship for appointment types
-            $appointment->appointment_types()->sync([$validated['appointment_type_id']]);
-            
-            $appointmentCreated = true;
-
-            // Prepare success message
+            $createdPets = [];
+            $createdAppointments = [];
             $messages = [];
+
             if ($clientCreated) {
                 $messages[] = 'Walk-in client created successfully.';
             } else {
                 $messages[] = 'Client already exists.';
             }
-            if ($petCreated) {
-                $messages[] = 'Pet registered successfully.';
-            } else {
-                $messages[] = 'Pet already registered for this client.';
+
+            foreach ($validated['pets'] as $petData) {
+                // Handle custom pet type creation
+                $petTypeId = $petData['pet_type_id'];
+                if (!empty($petData['custom_pet_type_name']) && ($petTypeId === '__new__' || empty($petTypeId))) {
+                    // Check if pet type with this name already exists (case-insensitive)
+                    $existingPetType = PetType::whereRaw('LOWER(name) = ?', [strtolower($petData['custom_pet_type_name'])])->first();
+                    
+                    if ($existingPetType) {
+                        $petTypeId = $existingPetType->id;
+                    } else {
+                        // Create new pet type
+                        $newPetType = PetType::create([
+                            'name' => ucfirst($petData['custom_pet_type_name']),
+                        ]);
+                        $petTypeId = $newPetType->id;
+                    }
+                }
+
+                // Validate pet_type_id exists if not creating new
+                if (!empty($petTypeId) && $petTypeId !== '__new__') {
+                    $exists = PetType::where('id', $petTypeId)->exists();
+                    if (!$exists) {
+                        return back()->withErrors(['pets' => 'One or more selected pet types are invalid.'])->withInput();
+                    }
+                }
+
+                // Handle custom breed creation
+                $petBreed = $petData['pet_breed'];
+                if (!empty($petData['custom_pet_breed_name']) && ($petBreed === '__new__' || empty($petBreed))) {
+                    $breedName = ucfirst($petData['custom_pet_breed_name']);
+                    
+                    // Check if breed with this name already exists for this pet type (case-insensitive)
+                    $existingBreed = PetBreed::where('pet_type_id', $petTypeId)
+                        ->whereRaw('LOWER(name) = ?', [strtolower($breedName)])
+                        ->first();
+                    
+                    if (!$existingBreed) {
+                        // Create new breed
+                        PetBreed::create([
+                            'name' => $breedName,
+                            'pet_type_id' => $petTypeId,
+                        ]);
+                    }
+                    
+                    $petBreed = $breedName;
+                }
+
+                // Check if pet already exists for this client
+                $petQuery = Patient::where('user_id', $existingClient->id)
+                    ->where('pet_breed', $petBreed)
+                    ->where('pet_type_id', $petTypeId);
+
+                // If pet_name is provided, also check by name
+                if (!empty($petData['pet_name'])) {
+                    $petQuery->where('pet_name', $petData['pet_name']);
+                }
+
+                $existingPet = $petQuery->first();
+                $petCreated = false;
+
+                if (!$existingPet) {
+                    // Pet doesn't exist - create pet for the client
+                    $existingPet = Patient::create([
+                        'pet_type_id' => $petTypeId,
+                        'pet_name' => $petData['pet_name'] ?? null,
+                        'pet_breed' => $petBreed,
+                        'pet_gender' => $petData['pet_gender'] ?? null,
+                        'pet_birth_date' => $petData['pet_birth_date'] ?? null,
+                        'pet_allergies' => $petData['pet_allergies'] ?? null,
+                        'user_id' => $existingClient->id,
+                    ]);
+                    $petCreated = true;
+                    $createdPets[] = $existingPet;
+                } else {
+                    $createdPets[] = $existingPet;
+                }
+
+                // Step 3: Create appointments for each appointment type selected for this pet
+                foreach ($petData['appointment_type_ids'] as $appointmentTypeId) {
+                    // Validate daily appointment limits
+                    $limitCheck = $limitService->checkDailyLimit($appointmentTypeId, $appointmentDate);
+                    
+                    if (!$limitCheck['available']) {
+                        return back()->withErrors([
+                            'pets' => sprintf(
+                                'Daily limit reached for %s appointments. Current: %d/%d',
+                                $limitCheck['appointment_type'],
+                                $limitCheck['current_count'],
+                                $limitCheck['limit']
+                            ),
+                        ])->withInput();
+                    }
+
+                    // Create appointment for this pet and appointment type
+                    $appointment = Appointment::create([
+                        'patient_id' => $existingPet->id,
+                        'appointment_type_id' => $appointmentTypeId,
+                        'appointment_date' => $appointmentDate,
+                        'appointment_time' => $appointmentTime,
+                        'symptoms' => $validated['symptoms'] ?? '',
+                        'is_approved' => true, // Walk-in appointments are auto-approved
+                        'user_id' => $existingClient->id,
+                    ]);
+
+                    // Sync many-to-many relationship for patients
+                    $appointment->patients()->sync([$existingPet->id]);
+                    
+                    // Sync many-to-many relationship for appointment types
+                    $appointment->appointment_types()->sync([$appointmentTypeId]);
+                    
+                    $createdAppointments[] = $appointment;
+                }
+
+                if ($petCreated) {
+                    $messages[] = 'Pet registered successfully.';
+                } else {
+                    $messages[] = 'Pet already registered for this client.';
+                }
             }
-            if ($appointmentCreated) {
-                $messages[] = 'Appointment created successfully.';
+
+            if (count($createdAppointments) > 0) {
+                $messages[] = count($createdAppointments) . ' appointment(s) created successfully.';
             }
 
             // Redirect based on user role: admin can create prescription, staff goes to appointment show
-            if (auth()->user()->hasRole('admin')) {
-                return redirect()->route('admin.appointments.prescription.create', $appointment->id)
-                    ->with('success', implode(' ', $messages));
+            // Use the first appointment for redirect
+            $firstAppointment = $createdAppointments[0] ?? null;
+            if ($firstAppointment) {
+                if (auth()->user()->hasRole('admin')) {
+                    return redirect()->route('admin.appointments.prescription.create', $firstAppointment->id)
+                        ->with('success', implode(' ', $messages));
+                } else {
+                    return redirect()->route('admin.appointments.show', $firstAppointment->id)
+                        ->with('success', implode(' ', $messages));
+                }
             } else {
-                return redirect()->route('admin.appointments.show', $appointment->id)
+                return redirect()->route('admin.walk_in_clients.index')
                     ->with('success', implode(' ', $messages));
             }
         });
@@ -682,11 +708,17 @@ class WalkInClientController extends Controller
 
         $filterInfo = $this->getFilterInfo($request);
 
+        $base64Logo = 'data:image/png;base64,' . base64_encode(file_get_contents(public_path('media/logo_for_print.png')));
+        $base64PanaboLogo = 'data:image/png;base64,' . base64_encode(file_get_contents(public_path('media/panabo.png')));
+
         $pdf = Pdf::loadView('admin.reports.walk_in_clients', [
             'walkInClients' => $data,
             'title' => 'Walk-In Clients Report',
             'filterInfo' => $filterInfo,
             'total' => $data->count(),
+            'base64Logo' => $base64Logo,
+            'base64PanaboLogo' => $base64PanaboLogo,
+            'reportDate' => now()->format('F d, Y'),
         ]);
 
         return $pdf->stream('walk-in-clients-report-' . date('Y-m-d') . '.pdf');

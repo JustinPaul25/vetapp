@@ -1461,10 +1461,14 @@ class ClientController extends Controller
             );
         }
 
-        // Check if already booked (excluding current appointment)
+        // Check if already booked (excluding current appointment and canceled appointments)
         $existing = Appointment::where('appointment_date', $date)
             ->where('appointment_time', $time)
             ->where('id', '!=', $excludeAppointmentId)
+            ->where(function ($q) {
+                $q->whereNull('is_canceled')
+                  ->orWhere('is_canceled', false);
+            })
             ->exists();
         if ($existing) {
             throw new \Illuminate\Validation\ValidationException(
@@ -1473,9 +1477,13 @@ class ClientController extends Controller
             );
         }
 
-        // Check daily limit (excluding current appointment)
+        // Check daily limit (excluding current appointment and canceled appointments)
         $dailyCount = Appointment::where('appointment_date', $date)
             ->where('id', '!=', $excludeAppointmentId)
+            ->where(function ($q) {
+                $q->whereNull('is_canceled')
+                  ->orWhere('is_canceled', false);
+            })
             ->count();
         if ($dailyCount >= $restrictions['max_appointments_per_day']) {
             throw new \Illuminate\Validation\ValidationException(
@@ -1484,9 +1492,13 @@ class ClientController extends Controller
             );
         }
 
-        // Check buffer time (excluding current appointment)
+        // Check buffer time (excluding current appointment and canceled appointments)
         $bookedTimes = Appointment::where('appointment_date', $date)
             ->where('id', '!=', $excludeAppointmentId)
+            ->where(function ($q) {
+                $q->whereNull('is_canceled')
+                  ->orWhere('is_canceled', false);
+            })
             ->pluck('appointment_time')
             ->map(function ($t) {
                 return Carbon::createFromFormat('H:i', $t)->format('h:i A');
@@ -1533,8 +1545,12 @@ class ClientController extends Controller
             ]);
         }
 
-        // Get all booked times for the selected date
+        // Get all booked times for the selected date (excluding canceled appointments)
         $bookedTimes = Appointment::where('appointment_date', $selectedDate)
+            ->where(function ($q) {
+                $q->whereNull('is_canceled')
+                  ->orWhere('is_canceled', false);
+            })
             ->pluck('appointment_time')
             ->map(function ($time) {
                 return Carbon::createFromFormat('H:i', $time)->format('h:i A');
@@ -1567,8 +1583,13 @@ class ClientController extends Controller
                 continue;
             }
 
-            // Check daily appointment limit
-            $dailyCount = Appointment::where('appointment_date', $selectedDate)->count();
+            // Check daily appointment limit (excluding canceled appointments)
+            $dailyCount = Appointment::where('appointment_date', $selectedDate)
+                ->where(function ($q) {
+                    $q->whereNull('is_canceled')
+                      ->orWhere('is_canceled', false);
+                })
+                ->count();
             if ($dailyCount >= $restrictions['max_appointments_per_day']) {
                 continue;
             }
@@ -1634,9 +1655,13 @@ class ClientController extends Controller
             );
         }
 
-        // Check if already booked
+        // Check if already booked (excluding canceled appointments)
         $existing = Appointment::where('appointment_date', $date)
             ->where('appointment_time', $time)
+            ->where(function ($q) {
+                $q->whereNull('is_canceled')
+                  ->orWhere('is_canceled', false);
+            })
             ->exists();
         if ($existing) {
             throw new \Illuminate\Validation\ValidationException(
@@ -1645,8 +1670,13 @@ class ClientController extends Controller
             );
         }
 
-        // Check daily limit
-        $dailyCount = Appointment::where('appointment_date', $date)->count();
+        // Check daily limit (excluding canceled appointments)
+        $dailyCount = Appointment::where('appointment_date', $date)
+            ->where(function ($q) {
+                $q->whereNull('is_canceled')
+                  ->orWhere('is_canceled', false);
+            })
+            ->count();
         if ($dailyCount >= $restrictions['max_appointments_per_day']) {
             throw new \Illuminate\Validation\ValidationException(
                 validator([], []),
@@ -1654,8 +1684,12 @@ class ClientController extends Controller
             );
         }
 
-        // Check buffer time
+        // Check buffer time (excluding canceled appointments)
         $bookedTimes = Appointment::where('appointment_date', $date)
+            ->where(function ($q) {
+                $q->whereNull('is_canceled')
+                  ->orWhere('is_canceled', false);
+            })
             ->pluck('appointment_time')
             ->map(function ($t) {
                 return Carbon::createFromFormat('H:i', $t)->format('h:i A');
@@ -2029,5 +2063,231 @@ class ClientController extends Controller
 
         return redirect()->route('client.pets.index')
             ->with('message', 'Pet deleted successfully.');
+    }
+
+    /**
+     * Display a listing of the client's prescriptions.
+     */
+    public function prescriptions(Request $request)
+    {
+        $query = Prescription::whereHas('patient', function ($q) {
+                $q->where('user_id', auth()->id());
+            })
+            ->with([
+                'appointment.appointment_type',
+                'patient.petType',
+                'diagnoses.disease',
+                'medicines.medicine'
+            ]);
+
+        // Search functionality
+        if ($request->has('search') && !empty($request->search)) {
+            $keyword = $request->search;
+            $query->where(function ($q) use ($keyword) {
+                $q->whereHas('patient', function ($q) use ($keyword) {
+                    $q->where('pet_name', 'LIKE', "%{$keyword}%");
+                })
+                ->orWhereHas('patient.petType', function ($q) use ($keyword) {
+                    $q->where('name', 'LIKE', "%{$keyword}%");
+                })
+                ->orWhereHas('diagnoses.disease', function ($q) use ($keyword) {
+                    $q->where('name', 'LIKE', "%{$keyword}%");
+                })
+                ->orWhere('symptoms', 'LIKE', "%{$keyword}%");
+            });
+        }
+
+        // Sort functionality
+        $sortBy = $request->get('sort_by', 'created_at');
+        $sortDirection = $request->get('sort_direction', 'desc');
+        
+        // Validate sort_by to prevent SQL injection
+        $allowedSortColumns = ['created_at', 'appointment_date'];
+        if (!in_array($sortBy, $allowedSortColumns)) {
+            $sortBy = 'created_at';
+        }
+        
+        // Validate sort_direction
+        $sortDirection = strtolower($sortDirection) === 'asc' ? 'asc' : 'desc';
+        
+        if ($sortBy === 'appointment_date') {
+            $query->join('appointments', 'prescriptions.appointment_id', '=', 'appointments.id')
+                  ->orderBy('appointments.appointment_date', $sortDirection)
+                  ->select('prescriptions.*');
+        } else {
+            $query->orderBy('prescriptions.' . $sortBy, $sortDirection);
+        }
+
+        $prescriptions = $query->paginate(15);
+
+        // Transform the data for Inertia
+        $prescriptions->getCollection()->transform(function ($prescription) {
+            $appointment = $prescription->appointment;
+            $patient = $prescription->patient;
+            
+            return [
+                'id' => $prescription->id,
+                'appointment_id' => $prescription->appointment_id,
+                'appointment_type' => $appointment->appointment_type->name ?? 'N/A',
+                'appointment_date' => $appointment->appointment_date ? $appointment->appointment_date->format('Y-m-d') : null,
+                'pet_name' => $patient->pet_name ?? 'N/A',
+                'pet_type' => $patient->petType->name ?? 'N/A',
+                'pet_breed' => $patient->pet_breed ?? 'N/A',
+                'symptoms' => $prescription->symptoms ?? 'N/A',
+                'issued_on' => $prescription->created_at->format('Y-m-d'),
+                'created_at' => $prescription->created_at->toISOString(),
+                'follow_up_date' => $prescription->follow_up_date ? $prescription->follow_up_date->format('Y-m-d') : null,
+                'diagnoses' => $prescription->diagnoses->map(function ($diagnosis) {
+                    return [
+                        'id' => $diagnosis->id,
+                        'disease' => $diagnosis->disease->name ?? 'N/A',
+                    ];
+                }),
+                'medicines_count' => $prescription->medicines->count(),
+            ];
+        });
+
+        return Inertia::render('Client/Prescriptions/Index', [
+            'prescriptions' => $prescriptions,
+            'filters' => $request->only(['search', 'sort_by', 'sort_direction']),
+        ]);
+    }
+
+    /**
+     * Display the specified prescription for the client.
+     */
+    public function showPrescription($id)
+    {
+        $prescription = Prescription::with([
+            'appointment.appointment_type',
+            'appointment.user',
+            'patient.petType',
+            'patient.user',
+            'diagnoses.disease',
+            'medicines.medicine'
+        ])->whereHas('patient', function ($q) {
+            $q->where('user_id', auth()->id());
+        })->findOrFail($id);
+
+        return Inertia::render('Client/Prescriptions/Show', [
+            'prescription' => [
+                'id' => $prescription->id,
+                'appointment_id' => $prescription->appointment_id,
+                'symptoms' => $prescription->symptoms,
+                'notes' => $prescription->notes,
+                'pet_weight' => $prescription->pet_weight,
+                'follow_up_date' => $prescription->follow_up_date ? $prescription->follow_up_date->format('Y-m-d') : null,
+                'created_at' => $prescription->created_at->toISOString(),
+                'updated_at' => $prescription->updated_at->toISOString(),
+            ],
+            'appointment' => [
+                'id' => $prescription->appointment->id,
+                'appointment_type' => $prescription->appointment->appointment_type->name ?? 'N/A',
+                'appointment_date' => $prescription->appointment->appointment_date->format('Y-m-d'),
+                'appointment_time' => $this->formatAppointmentTime($prescription->appointment->appointment_time),
+                'created_at' => $prescription->appointment->created_at->toISOString(),
+            ],
+            'patient' => [
+                'id' => $prescription->patient->id,
+                'pet_name' => $prescription->patient->pet_name,
+                'pet_breed' => $prescription->patient->pet_breed,
+                'pet_gender' => $prescription->patient->pet_gender,
+                'pet_birth_date' => $prescription->patient->pet_birth_date ? $prescription->patient->pet_birth_date->format('Y-m-d') : null,
+                'pet_allergies' => $prescription->patient->pet_allergies,
+                'pet_type' => $prescription->patient->petType->name ?? 'N/A',
+            ],
+            'diagnoses' => $prescription->diagnoses->map(function ($diagnosis) {
+                return [
+                    'id' => $diagnosis->id,
+                    'disease' => $diagnosis->disease->name ?? 'N/A',
+                ];
+            }),
+            'medicines' => $prescription->medicines->map(function ($prescriptionMedicine) {
+                return [
+                    'id' => $prescriptionMedicine->id,
+                    'medicine' => $prescriptionMedicine->medicine->name ?? 'N/A',
+                    'dosage' => $prescriptionMedicine->dosage,
+                    'instructions' => $prescriptionMedicine->instructions,
+                    'quantity' => $prescriptionMedicine->quantity,
+                ];
+            }),
+        ]);
+    }
+
+    /**
+     * Download prescription PDF for client.
+     */
+    public function downloadPrescription($id)
+    {
+        $prescription = Prescription::with(
+            'medicines.medicine',
+            'appointment.user',
+            'patient.petType',
+            'diagnoses.disease'
+        )->whereHas('patient', function ($q) {
+            $q->where('user_id', auth()->id());
+        })->findOrFail($id);
+
+        // Custom paper size: 8.5" × 5.5" (half-letter landscape)
+        $customPaper = [0, 0, 612, 396];
+        
+        $base64Logo = 'data:image/png;base64,' . base64_encode(file_get_contents(public_path('media/logo_for_print.png')));
+        $base64PanaboLogo = 'data:image/png;base64,' . base64_encode(file_get_contents(public_path('media/panabo.png')));
+        $base64PrescriptionLogo = 'data:image/png;base64,' . base64_encode(file_get_contents(public_path('media/prescription.png')));
+
+        // Get veterinarian information from settings
+        $veterinarianName = \App\Models\Setting::get('veterinarian_name', '');
+        $veterinarianLicense = \App\Models\Setting::get('veterinarian_license_number', '');
+
+        return \Barryvdh\DomPDF\Facade\Pdf::setOptions([
+            'isRemoteEnabled' => true,
+            'isHtml5ParserEnabled' => true,
+            'isPhpEnabled' => true,
+        ])
+        ->loadView('admin.appointments.pdf', compact(
+            'prescription',
+            'base64Logo',
+            'base64PanaboLogo',
+            'base64PrescriptionLogo',
+            'veterinarianName',
+            'veterinarianLicense'
+        ))
+        ->setPaper($customPaper, 'landscape')
+        ->stream('prescription-' . $prescription->id . '.pdf');
+    }
+
+    /**
+     * Print prescription for client.
+     */
+    public function printPrescription($id)
+    {
+        $prescription = Prescription::with(
+            'medicines.medicine',
+            'appointment.user',
+            'patient.petType',
+            'diagnoses.disease'
+        )->whereHas('patient', function ($q) {
+            $q->where('user_id', auth()->id());
+        })->findOrFail($id);
+
+        return view('admin.appointments.print', [
+            'prescription' => $prescription,
+        ]);
+    }
+
+    /**
+     * Format appointment time to 12-hour format.
+     */
+    private function formatAppointmentTime($time)
+    {
+        try {
+            return \Carbon\Carbon::createFromFormat('H:i:s', $time)->format('g:i A');
+        } catch (\Exception $e) {
+            try {
+                return \Carbon\Carbon::createFromFormat('H:i', $time)->format('g:i A');
+            } catch (\Exception $e) {
+                return $time;
+            }
+        }
     }
 }

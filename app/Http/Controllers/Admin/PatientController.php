@@ -214,7 +214,15 @@ class PatientController extends Controller
      */
     public function show(Patient $patient)
     {
-        $patient->load(['petType', 'user', 'appointments.appointment_type', 'appointmentPatients.appointment_type', 'prescriptions', 'weightHistory']);
+        $patient->load([
+            'petType', 
+            'user', 
+            'appointments.appointment_type', 
+            'appointmentPatients.appointment_type', 
+            'prescriptions.appointment.appointment_type',
+            'prescriptions.medicines.medicine',
+            'weightHistory'
+        ]);
 
         // Merge appointments from both relationships (hasMany and belongsToMany)
         // This ensures we get all appointments for this patient, whether they're the primary patient
@@ -224,6 +232,55 @@ class PatientController extends Controller
             ->unique('id')
             ->sortByDesc('appointment_date')
             ->values();
+
+        // Build vaccination records
+        $vaccinationRecords = [];
+        
+        // Add anti-rabies vaccination if exists
+        if ($patient->last_anti_rabies_date) {
+            $vaccinationRecords[] = [
+                'type' => 'Anti-Rabies',
+                'date' => $patient->last_anti_rabies_date->toDateString(),
+                'next_due' => $patient->next_anti_rabies_due_date ? $patient->next_anti_rabies_due_date->toDateString() : null,
+                'status' => $patient->next_anti_rabies_due_date && $patient->next_anti_rabies_due_date->isPast() ? 'Overdue' : ($patient->next_anti_rabies_due_date && $patient->next_anti_rabies_due_date->isToday() ? 'Due Today' : 'Up to Date'),
+            ];
+        }
+        
+        // Add vaccinations from prescriptions
+        foreach ($patient->prescriptions as $prescription) {
+            $appointment = $prescription->appointment;
+            $appointmentType = $appointment->appointment_type->name ?? null;
+            
+            // Check if appointment type is Vaccination
+            $isVaccinationAppointment = strtolower($appointmentType ?? '') === 'vaccination';
+            
+            // Check if any medicine is a vaccination
+            $vaccinationMedicines = $prescription->medicines->filter(function ($prescriptionMedicine) {
+                $medicineName = strtolower($prescriptionMedicine->medicine->name ?? '');
+                return str_contains($medicineName, 'vaccine') || 
+                       str_contains($medicineName, 'vaccination') ||
+                       str_contains($medicineName, 'anti-rabies') ||
+                       str_contains($medicineName, 'antirabies') ||
+                       (str_contains($medicineName, 'rabies') && !str_contains($medicineName, 'test'));
+            });
+            
+            if ($isVaccinationAppointment || $vaccinationMedicines->isNotEmpty()) {
+                $vaccineNames = $vaccinationMedicines->pluck('medicine.name')->filter()->unique()->implode(', ');
+                $vaccineType = $vaccineNames ?: ($appointmentType ?? 'Vaccination');
+                
+                $vaccinationRecords[] = [
+                    'type' => $vaccineType,
+                    'date' => $appointment->appointment_date ? $appointment->appointment_date->toDateString() : $prescription->created_at->toDateString(),
+                    'next_due' => null,
+                    'status' => 'Completed',
+                ];
+            }
+        }
+        
+        // Sort by date descending
+        usort($vaccinationRecords, function ($a, $b) {
+            return strcmp($b['date'], $a['date']);
+        });
 
         return Inertia::render('Admin/Patients/Show', [
             'patient' => [
@@ -281,6 +338,9 @@ class PatientController extends Controller
                         'prescription_id' => $entry->prescription_id,
                     ];
                 }),
+                'vaccination_records' => $vaccinationRecords,
+                'last_anti_rabies_date' => $patient->last_anti_rabies_date ? $patient->last_anti_rabies_date->toDateString() : null,
+                'next_anti_rabies_due_date' => $patient->next_anti_rabies_due_date ? $patient->next_anti_rabies_due_date->toDateString() : null,
                 'created_at' => $patient->created_at->toISOString(),
                 'updated_at' => $patient->updated_at->toISOString(),
             ],
@@ -461,11 +521,17 @@ class PatientController extends Controller
 
         $filterInfo = $this->getFilterInfo($request);
 
+        $base64Logo = 'data:image/png;base64,' . base64_encode(file_get_contents(public_path('media/logo_for_print.png')));
+        $base64PanaboLogo = 'data:image/png;base64,' . base64_encode(file_get_contents(public_path('media/panabo.png')));
+
         $pdf = Pdf::loadView('admin.reports.patients', [
             'patients' => $data,
             'title' => 'Patients Report',
             'filterInfo' => $filterInfo,
             'total' => $data->count(),
+            'base64Logo' => $base64Logo,
+            'base64PanaboLogo' => $base64PanaboLogo,
+            'reportDate' => now()->format('F d, Y'),
         ]);
 
         return $pdf->stream('patients-report-' . date('Y-m-d') . '.pdf');

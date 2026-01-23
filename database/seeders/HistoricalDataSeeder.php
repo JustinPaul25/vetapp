@@ -541,10 +541,14 @@ class HistoricalDataSeeder extends Seeder
             $disease = $diseases->firstWhere('id', $prescription->disease_id);
 
             if ($appointment && $disease) {
+                $r = rand(1, 100);
+                $condition = $r <= 55 ? 'Under Treatment' : ($r <= 85 ? 'Recovered' : 'Died');
+
                 PrescriptionDiagnosis::create([
                     'appointment_id' => $appointment->id,
                     'prescription_id' => $prescription->id,
                     'disease_id' => $disease->id,
+                    'condition' => $condition,
                     'created_at' => $prescription->created_at,
                     'updated_at' => $prescription->updated_at,
                 ]);

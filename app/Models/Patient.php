@@ -13,6 +13,9 @@ class Patient extends Model
 
     protected $casts = [
         'pet_birth_date' => 'date',
+        'last_anti_rabies_date' => 'date',
+        'next_anti_rabies_due_date' => 'date',
+        'anti_rabies_notified_at' => 'datetime',
     ];
 
     // Keep for backward compatibility - returns appointments via patient_id

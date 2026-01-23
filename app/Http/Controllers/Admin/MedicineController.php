@@ -225,11 +225,17 @@ class MedicineController extends Controller
 
         $filterInfo = $this->getFilterInfo($request);
 
+        $base64Logo = 'data:image/png;base64,' . base64_encode(file_get_contents(public_path('media/logo_for_print.png')));
+        $base64PanaboLogo = 'data:image/png;base64,' . base64_encode(file_get_contents(public_path('media/panabo.png')));
+
         $pdf = Pdf::loadView('admin.reports.medicines', [
             'medicines' => $data,
             'title' => 'Medicines Report',
             'filterInfo' => $filterInfo,
             'total' => $data->count(),
+            'base64Logo' => $base64Logo,
+            'base64PanaboLogo' => $base64PanaboLogo,
+            'reportDate' => now()->format('F d, Y'),
         ]);
 
         return $pdf->stream('medicines-report-' . date('Y-m-d') . '.pdf');
