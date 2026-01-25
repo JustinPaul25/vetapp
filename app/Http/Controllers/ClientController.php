@@ -2270,9 +2270,22 @@ class ClientController extends Controller
             $q->where('user_id', auth()->id());
         })->findOrFail($id);
 
-        return view('admin.appointments.print', [
-            'prescription' => $prescription,
-        ]);
+        $base64Logo = 'data:image/png;base64,' . base64_encode(file_get_contents(public_path('media/logo_for_print.png')));
+        $base64PanaboLogo = 'data:image/png;base64,' . base64_encode(file_get_contents(public_path('media/panabo.png')));
+        $base64PrescriptionLogo = 'data:image/png;base64,' . base64_encode(file_get_contents(public_path('media/prescription.png')));
+
+        // Get veterinarian information from settings
+        $veterinarianName = \App\Models\Setting::get('veterinarian_name', '');
+        $veterinarianLicense = \App\Models\Setting::get('veterinarian_license_number', '');
+
+        return view('admin.appointments.print', compact(
+            'prescription',
+            'base64Logo',
+            'base64PanaboLogo',
+            'base64PrescriptionLogo',
+            'veterinarianName',
+            'veterinarianLicense'
+        ));
     }
 
     /**

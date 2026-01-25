@@ -3,7 +3,7 @@ import AppLayout from '@/layouts/AppLayout.vue';
 import { Head, router } from '@inertiajs/vue3';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { MapPin, AlertCircle } from 'lucide-vue-next';
-import { onMounted, ref, watch } from 'vue';
+import { nextTick, onMounted, ref, watch } from 'vue';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { dashboard } from '@/routes';
@@ -57,6 +57,10 @@ const mapContainer = ref<HTMLElement | null>(null);
 const map = ref<L.Map | null>(null);
 const diseaseMarkersLayer = ref<L.LayerGroup | null>(null);
 const selectedDisease = ref<string | null>(null);
+
+const map2Container = ref<HTMLElement | null>(null);
+const map2 = ref<L.Map | null>(null);
+const individualMarkersLayer = ref<L.LayerGroup | null>(null);
 
 function applyConditionFilter(value: string) {
     const condition = value === 'all' ? undefined : value;
@@ -304,6 +308,54 @@ function renderDiseaseMarkers(
     }
 }
 
+function renderIndividualDiseaseMarkers(casesToShow: DiseaseCase[], fitToMarkers: boolean) {
+    const m = map2.value;
+    const layer = individualMarkersLayer.value;
+    if (!m || !layer) return;
+
+    layer.clearLayers();
+    const bounds: L.LatLng[] = [];
+    const size = 14;
+    const anchor = Math.round(size / 2);
+
+    casesToShow.forEach((caseItem) => {
+        const lat = Number(caseItem.lat);
+        const lng = Number(caseItem.lng);
+        if (!Number.isFinite(lat) || !Number.isFinite(lng) || Number.isNaN(lat) || Number.isNaN(lng)) return;
+
+        const color = props.diseaseColors[caseItem.disease_name] || '#3388ff';
+        const icon = L.divIcon({
+            className: 'custom-marker individual-marker',
+            html: `<div style="background-color: ${color}; width: ${size}px; height: ${size}px; border-radius: 50%; border: 2px solid white; box-shadow: 0 2px 4px rgba(0,0,0,0.3);"></div>`,
+            iconSize: [size, size],
+            iconAnchor: [anchor, anchor],
+        });
+
+        const popupContent = `
+            <div class="disease-popup" style="min-width: 180px;">
+                <div class="disease-item" style="margin-bottom: 6px;">
+                    <strong style="color: ${color};">${caseItem.disease_name}</strong>
+                </div>
+                <div style="margin-top: 6px; font-size: 11px; color: #6b7280;">
+                    Address: ${caseItem.address}
+                </div>
+                ${caseItem.appointment_date ? `<div style="margin-top: 4px; font-size: 11px; color: #6b7280;">Date: ${formatDate(caseItem.appointment_date)}</div>` : ''}
+            </div>
+        `;
+
+        const marker = L.marker([lat, lng], { icon })
+            .addTo(layer as L.LayerGroup)
+            .bindPopup(popupContent, { maxWidth: 300, className: 'disease-popup-container' })
+            .bindTooltip(caseItem.disease_name, { permanent: false, direction: 'top', offset: [0, -6] });
+
+        bounds.push(L.latLng(lat, lng));
+    });
+
+    if (fitToMarkers && bounds.length > 0) {
+        m.fitBounds(L.latLngBounds(bounds), { maxZoom: 15, padding: [24, 24] });
+    }
+}
+
 onMounted(() => {
     if (!mapContainer.value) return;
 
@@ -439,13 +491,53 @@ onMounted(() => {
     renderDiseaseMarkers(filteredCases, hotspotMap, false);
 });
 
-watch(selectedDisease, () => {
-    if (!map.value || !diseaseMarkersLayer.value) return;
-    const hotspotMap = buildHotspotMap(props.outbreakZones);
+function initMap2() {
+    if (!map2Container.value) return;
+    map2.value = L.map(map2Container.value).setView([7.3075, 125.6830], 13);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '© OpenStreetMap contributors',
+        maxZoom: 19,
+    }).addTo(map2.value as any);
+    const layerGroup2 = L.layerGroup();
+    layerGroup2.addTo(map2.value! as any);
+    individualMarkersLayer.value = layerGroup2;
+}
+
+function destroyMap2() {
+    if (map2.value) {
+        map2.value.remove();
+        map2.value = null;
+    }
+    individualMarkersLayer.value = null;
+}
+
+watch(selectedDisease, async () => {
     const filteredCases = selectedDisease.value
         ? props.cases.filter((c) => c.disease_name === selectedDisease.value)
         : props.cases;
-    renderDiseaseMarkers(filteredCases, hotspotMap, !!selectedDisease.value);
+
+    if (selectedDisease.value) {
+        if (map.value && diseaseMarkersLayer.value) {
+            const hotspotMap = buildHotspotMap(props.outbreakZones);
+            renderDiseaseMarkers(filteredCases, hotspotMap, true);
+        }
+        await nextTick();
+        if (!map2.value && map2Container.value) {
+            initMap2();
+        }
+        if (map2.value && individualMarkersLayer.value) {
+            renderIndividualDiseaseMarkers(filteredCases, true);
+            map2.value.invalidateSize();
+        }
+    } else {
+        destroyMap2();
+        if (map.value && diseaseMarkersLayer.value) {
+            const hotspotMap = buildHotspotMap(props.outbreakZones);
+            renderDiseaseMarkers(filteredCases, hotspotMap, true);
+        }
+        await nextTick();
+        map.value?.invalidateSize?.();
+    }
 });
 
 function selectDisease(name: string) {
@@ -491,10 +583,17 @@ function selectDisease(name: string) {
                         </span>
                     </div>
                     <div class="grid grid-cols-1 lg:grid-cols-4 gap-6">
-                        <!-- Map -->
-                        <div class="lg:col-span-3">
+                        <!-- Map: Disease Map when nothing selected, Individual Cases Map when a Top Disease is selected -->
+                        <div class="lg:col-span-3 min-h-[600px]">
                             <div
+                                v-show="!selectedDisease"
                                 ref="mapContainer"
+                                class="w-full h-[600px] rounded-lg border"
+                                style="z-index: 1"
+                            ></div>
+                            <div
+                                v-if="selectedDisease"
+                                ref="map2Container"
                                 class="w-full h-[600px] rounded-lg border"
                                 style="z-index: 1"
                             ></div>
