@@ -70,6 +70,7 @@ interface Props {
     pet_types: PetType[];
     pet_breeds: Record<string, string[]>;
     philippine_holidays?: string[];
+    appointments?: Appointment[];
 }
 
 const props = defineProps<Props>();
@@ -82,7 +83,8 @@ const breadcrumbs = [
     { title: 'My Appointments', href: '#' },
 ];
 
-const appointments = ref<Appointment[]>([]);
+// Initialize from server so list shows immediately after redirect (e.g. after booking 2+ pets)
+const appointments = ref<Appointment[]>(props.appointments ?? []);
 const loading = ref(false);
 const submitting = ref(false);
 const searchQuery = ref('');
@@ -115,6 +117,8 @@ const checkboxSelections = ref<PetAppointmentSelections>({});
 
 const availableTimes = ref<string[]>([]);
 const loadingTimes = ref(false);
+const datesWithoutSlots = ref<string[]>([]);
+const loadingDatesWithoutSlots = ref(false);
 const errors = ref<Record<string, string[]>>({});
 const currentStep = ref(0);
 
@@ -154,6 +158,20 @@ const minDate = computed(() => {
     const tomorrow = new Date();
     tomorrow.setDate(tomorrow.getDate() + 1);
     return tomorrow.toISOString().split('T')[0];
+});
+
+// End date for dates-without-slots range (minDate + 60 days)
+const maxDateForSlots = computed(() => {
+    const d = new Date(minDate.value + 'T12:00:00');
+    d.setDate(d.getDate() + 60);
+    return d.toISOString().split('T')[0];
+});
+
+// Holidays + dates with no available slots (for disabling in date picker)
+const disabledDatesForCalendar = computed(() => {
+    const holidays = props.philippine_holidays || [];
+    const noSlots = datesWithoutSlots.value || [];
+    return [...new Set([...holidays, ...noSlots])];
 });
 
 // Computed property for step 0 validation (for better reactivity)
@@ -207,6 +225,13 @@ watch(() => form.value.appointment_date, (newDate) => {
     }
 });
 
+// When booking modal opens, fetch dates with no slots so we can disable them in the date picker
+watch(isModalOpen, (open) => {
+    if (open) {
+        fetchDatesWithoutSlots();
+    }
+});
+
 // Watch for checkbox selections changes - reset time slots if selections change
 watch(() => checkboxSelections.value, () => {
     form.value.appointment_times = [];
@@ -257,6 +282,21 @@ const fetchAvailableTimes = async (date: string) => {
         availableTimes.value = [];
     } finally {
         loadingTimes.value = false;
+    }
+};
+
+const fetchDatesWithoutSlots = async () => {
+    loadingDatesWithoutSlots.value = true;
+    try {
+        const response = await axios.get('/appointments/times/dates-without-slots', {
+            params: { from: minDate.value, to: maxDateForSlots.value },
+        });
+        datesWithoutSlots.value = response.data.datesWithoutSlots || [];
+    } catch (error) {
+        console.error('Error fetching dates without slots:', error);
+        datesWithoutSlots.value = [];
+    } finally {
+        loadingDatesWithoutSlots.value = false;
     }
 };
 
@@ -813,7 +853,8 @@ onUnmounted(() => {
                                                 id="appointment_date"
                                                 v-model="form.appointment_date"
                                                 :min-date="minDate"
-                                                :disabled-dates="props.philippine_holidays || []"
+                                                :disabled-dates="disabledDatesForCalendar"
+                                                :disabled="loadingDatesWithoutSlots"
                                                 required
                                             />
                                             <p
@@ -822,8 +863,17 @@ onUnmounted(() => {
                                             >
                                                 {{ errors.appointment_date[0] }}
                                             </p>
-                                            <p class="text-sm text-muted-foreground">
-                                                Please select a date for your appointment. Appointments must be booked at least one day in advance.
+                                            <p
+                                                v-if="loadingDatesWithoutSlots"
+                                                class="text-sm text-muted-foreground"
+                                            >
+                                                Loading available dates...
+                                            </p>
+                                            <p
+                                                v-else
+                                                class="text-sm text-muted-foreground"
+                                            >
+                                                Please select a date for your appointment. Dates with no available times are disabled.
                                             </p>
                                         </div>
                                     </div>

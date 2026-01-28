@@ -220,6 +220,8 @@ const rescheduleReasons = [
 ];
 const availableTimes = ref<string[]>([]);
 const loadingTimes = ref(false);
+const datesWithoutSlots = ref<string[]>([]);
+const loadingDatesWithoutSlots = ref(false);
 const rescheduleErrors = ref<Record<string, string[]>>({});
 
 // Create Prescription Dialog
@@ -243,6 +245,14 @@ const minDate = computed(() => {
     return tomorrow.toISOString().split('T')[0];
 });
 
+const maxDateForSlots = computed(() => {
+    const d = new Date(minDate.value + 'T12:00:00');
+    d.setDate(d.getDate() + 60);
+    return d.toISOString().split('T')[0];
+});
+
+const disabledDatesForCalendar = computed(() => datesWithoutSlots.value || []);
+
 // Watch for date changes to fetch available times
 watch(() => rescheduleForm.value.appointment_date, (newDate) => {
     if (newDate) {
@@ -256,6 +266,7 @@ watch(() => rescheduleForm.value.appointment_date, (newDate) => {
 // Watch for dialog open to initialize form
 watch(() => rescheduleDialogOpen.value, (isOpen) => {
     if (isOpen) {
+        fetchDatesWithoutSlots();
         // Initialize with current appointment date/time, but ensure it's not in the past
         const currentDate = props.appointment.appointment_date || '';
         const today = new Date().toISOString().split('T')[0];
@@ -294,6 +305,21 @@ const fetchAvailableTimes = async (date: string) => {
         availableTimes.value = [];
     } finally {
         loadingTimes.value = false;
+    }
+};
+
+const fetchDatesWithoutSlots = async () => {
+    loadingDatesWithoutSlots.value = true;
+    try {
+        const response = await axios.get('/appointments/times/dates-without-slots', {
+            params: { from: minDate.value, to: maxDateForSlots.value },
+        });
+        datesWithoutSlots.value = response.data.datesWithoutSlots || [];
+    } catch (error) {
+        console.error('Error fetching dates without slots:', error);
+        datesWithoutSlots.value = [];
+    } finally {
+        loadingDatesWithoutSlots.value = false;
     }
 };
 
@@ -392,10 +418,17 @@ const handleReschedule = () => {
                                                 id="reschedule_date"
                                                 v-model="rescheduleForm.appointment_date"
                                                 :min-date="minDate"
-                                                :disabled="rescheduling"
+                                                :disabled-dates="disabledDatesForCalendar"
+                                                :disabled="rescheduling || loadingDatesWithoutSlots"
                                             />
                                             <p v-if="rescheduleErrors.appointment_date" class="text-sm text-destructive">
                                                 {{ rescheduleErrors.appointment_date[0] }}
+                                            </p>
+                                            <p v-if="loadingDatesWithoutSlots" class="text-sm text-muted-foreground">
+                                                Loading available dates...
+                                            </p>
+                                            <p v-else class="text-sm text-muted-foreground">
+                                                Dates with no available times are disabled.
                                             </p>
                                         </div>
                                         <div class="space-y-2">

@@ -54,6 +54,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::get('/', [\App\Http\Controllers\ClientController::class, 'appointments'])->name('index');
         Route::post('/', [\App\Http\Controllers\ClientController::class, 'bookAppointment'])->name('book');
         Route::get('/times/available', [\App\Http\Controllers\ClientController::class, 'getAvailableTimes'])->name('times.available');
+        Route::get('/times/dates-without-slots', [\App\Http\Controllers\ClientController::class, 'getDatesWithoutSlots'])->name('times.datesWithoutSlots');
         Route::patch('/{id}/reschedule', [\App\Http\Controllers\ClientController::class, 'rescheduleAppointment'])->name('reschedule');
         Route::delete('/{id}', [\App\Http\Controllers\ClientController::class, 'cancelAppointment'])->name('cancel');
         Route::get('/{id}', [\App\Http\Controllers\ClientController::class, 'showAppointments'])->name('show');

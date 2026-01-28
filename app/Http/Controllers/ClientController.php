@@ -37,224 +37,16 @@ class ClientController extends Controller
         
         if ($isApiRequest) {
             // Handle search parameter - it comes as search[value] from Vue component
-            // Laravel parses search[value] as search.value
             $searchInput = $request->input('search');
             if (is_array($searchInput) && isset($searchInput['value'])) {
                 $keyword = trim((string) $searchInput['value']);
             } else {
                 $keyword = trim((string) ($request->input('search.value') ?? ''));
             }
-
-            // Primary check: appointments belong to the authenticated user
-            // This is the most reliable since we set user_id when creating appointments
-            $appointments = Appointment::where('appointments.user_id', auth()->id());
-
-            if (!empty($keyword)) {
-                $appointments->where(function ($q) use ($keyword) {
-                    // Search in patients via pivot table
-                    $q->whereHas('patients.petType', function ($subQ) use ($keyword) {
-                        $subQ->where('pet_types.name', 'LIKE', "%{$keyword}%");
-                    })
-                    ->orWhereHas('patients', function ($subQ) use ($keyword) {
-                        $subQ->where('patients.pet_name', 'LIKE', "%{$keyword}%");
-                    })
-                    // Fallback to legacy patient relationship
-                    ->orWhereHas('patient.petType', function ($subQ) use ($keyword) {
-                        $subQ->where('pet_types.name', 'LIKE', "%{$keyword}%");
-                    })
-                    ->orWhereHas('patient', function ($subQ) use ($keyword) {
-                        $subQ->where('patients.pet_name', 'LIKE', "%{$keyword}%");
-                    })
-                    // Search in appointment types
-                    ->orWhereHas('appointment_type', function ($subQ) use ($keyword) {
-                        $subQ->where('appointment_types.name', 'LIKE', "%{$keyword}%");
-                    })
-                    // Search in prescriptions and diseases
-                    ->orWhereHas('prescription.diagnoses.disease', function ($subQ) use ($keyword) {
-                        $subQ->where('diseases.name', 'LIKE', "%{$keyword}%");
-                    });
-                });
-            }
-
-            // Status filtering
-            if ($request->has('status') && !empty($request->status) && $request->status !== 'all') {
-                $status = strtolower($request->status);
-                switch ($status) {
-                    case 'pending':
-                        $appointments->where('appointments.is_approved', false)
-                              ->where('appointments.is_completed', false)
-                              ->where(function ($q) {
-                                  $q->whereNull('appointments.is_canceled')->orWhere('appointments.is_canceled', false);
-                              });
-                        break;
-                    case 'approved':
-                        $appointments->where('appointments.is_approved', true)
-                              ->where('appointments.is_completed', false)
-                              ->where(function ($q) {
-                                  $q->whereNull('appointments.is_canceled')->orWhere('appointments.is_canceled', false);
-                              });
-                        break;
-                    case 'completed':
-                        $appointments->where('appointments.is_completed', true);
-                        break;
-                    case 'canceled':
-                        $appointments->where('appointments.is_canceled', true);
-                        break;
-                }
-            }
-
-            // Order appointments and load relationships
-            $appointments = $appointments
-                ->orderBy('appointments.appointment_date', 'desc')
-                ->orderBy('appointments.appointment_time', 'desc')
-                ->orderBy('appointments.created_at', 'desc')
-                ->with('patients.petType', 'appointment_type', 'appointment_types')
-                ->get();
-
-            // Build result array - ONE appointment can have multiple pets
-            $result = [];
-            foreach ($appointments as $appointment) {
-                // Get all patients for this appointment
-                $patients = $appointment->patients;
-                
-                // If no patients in pivot table, fallback to single patient
-                if ($patients->isEmpty() && $appointment->patient) {
-                    $patients = collect([$appointment->patient]);
-                    // Load petType for the single patient if not loaded
-                    if ($patients->first() && !$patients->first()->relationLoaded('petType')) {
-                        $patients->first()->load('petType');
-                    }
-                }
-
-                // Calculate status
-                $status = 'Pending';
-                if ($appointment->is_canceled) {
-                    $status = 'Canceled';
-                } elseif ($appointment->is_approved) {
-                    $status = $appointment->is_completed ? 'Completed' : 'Approved';
-                }
-
-                // Get appointment type name(s) from relationship
-                // Check if appointment has multiple appointment types via many-to-many
-                $appointmentTypes = [];
-                if ($appointment->relationLoaded('appointment_types') && $appointment->appointment_types->isNotEmpty()) {
-                    $appointmentTypes = $appointment->appointment_types->pluck('name')->toArray();
-                } elseif ($appointment->relationLoaded('appointment_type') && $appointment->appointment_type) {
-                    $appointmentTypes = [$appointment->appointment_type->name];
-                } elseif ($appointment->appointment_type_id) {
-                    // Fallback: load if not already loaded
-                    if (!$appointment->relationLoaded('appointment_types')) {
-                        $appointment->load('appointment_types');
-                    }
-                    if ($appointment->appointment_types->isNotEmpty()) {
-                        $appointmentTypes = $appointment->appointment_types->pluck('name')->toArray();
-                    } else {
-                        $appointment->load('appointment_type');
-                        $appointmentTypes = $appointment->appointment_type ? [$appointment->appointment_type->name] : ['N/A'];
-                    }
-                } else {
-                    $appointmentTypes = ['N/A'];
-                }
-                
-                // Create display string for appointment types
-                $appointmentTypeName = count($appointmentTypes) > 1 
-                    ? implode(', ', $appointmentTypes) 
-                    : ($appointmentTypes[0] ?? 'N/A');
-
-                $petCount = $patients->count();
-                
-                // Build pet items for this appointment
-                // Get each pet's individual appointment type(s) from the pivot table
-                $petItems = $patients->map(function ($pet) use ($appointment) {
-                    // Get appointment types for this specific pet from the pivot table
-                    $petAppointmentTypes = \DB::table('appointment_patient')
-                        ->where('appointment_id', $appointment->id)
-                        ->where('patient_id', $pet->id)
-                        ->join('appointment_types', 'appointment_patient.appointment_type_id', '=', 'appointment_types.id')
-                        ->pluck('appointment_types.name')
-                        ->toArray();
-                    
-                    // If no appointment types found in pivot, fallback to appointment's primary type
-                    if (empty($petAppointmentTypes)) {
-                        if ($appointment->relationLoaded('appointment_type') && $appointment->appointment_type) {
-                            $petAppointmentTypes = [$appointment->appointment_type->name];
-                        } else {
-                            $petAppointmentTypes = ['N/A'];
-                        }
-                    }
-                    
-                    $petAppointmentTypeDisplay = count($petAppointmentTypes) > 1 
-                        ? implode(', ', $petAppointmentTypes) 
-                        : ($petAppointmentTypes[0] ?? 'N/A');
-                    
-                    return [
-                        'id' => $pet->id,
-                        'appointment_type' => $petAppointmentTypeDisplay,
-                        'pet_type' => $pet->petType ? $pet->petType->name : 'N/A',
-                        'pet_name' => $pet->pet_name,
-                    ];
-                })->toArray();
-
-                // Get unique pet types for display
-                $petTypes = $patients->map(function ($pet) {
-                    return $pet->petType ? $pet->petType->name : 'N/A';
-                })->unique()->values()->toArray();
-                $petTypeDisplay = $petCount > 1 
-                    ? (count($petTypes) > 1 ? implode(', ', $petTypes) : ($petTypes[0] ?? 'N/A'))
-                    : ($patients->first() && $patients->first()->petType ? $patients->first()->petType->name : 'N/A');
-
-                // Always return as ONE appointment (not grouped)
-                // If multiple pets, show pet count badge
-                $result[] = [
-                    'id' => $appointment->id,
-                    'appointment_date' => $appointment->appointment_date ? $appointment->appointment_date->format('Y-m-d') : null,
-                    'appointment_time' => $appointment->appointment_time,
-                    'status' => $status,
-                    'pet_count' => $petCount,
-                    'appointments' => $petItems, // All pets in this appointment
-                    'appointment_type' => $appointmentTypeName,
-                    // For display purposes
-                    'pet_name' => $petCount > 1 
-                        ? ($patients->first() ? $patients->first()->pet_name . ' (+' . ($petCount - 1) . ' more)' : 'N/A')
-                        : ($patients->first() ? $patients->first()->pet_name : 'N/A'),
-                    'pet_type' => $petTypeDisplay,
-                ];
-            }
-
-            // Fetch prescriptions with follow-up dates for this user's pets
-            $prescriptions = Prescription::whereHas('patient', function ($q) {
-                    $q->where('user_id', auth()->id());
-                })
-                ->whereNotNull('follow_up_date')
-                ->whereDate('follow_up_date', '>=', Carbon::today())
-                ->with(['patient.petType', 'appointment'])
-                ->get();
-
-            // Convert prescriptions to follow-up appointment format
-            foreach ($prescriptions as $prescription) {
-                $patient = $prescription->patient;
-                $result[] = [
-                    'id' => 'followup-' . $prescription->id,
-                    'appointment_date' => $prescription->follow_up_date->format('Y-m-d'),
-                    'appointment_time' => null, // Follow-ups don't have specific times
-                    'status' => 'Follow-up',
-                    'pet_count' => 1,
-                    'appointments' => [[
-                        'id' => $patient->id,
-                        'appointment_type' => 'Follow-up Check-up',
-                        'pet_type' => $patient->petType ? $patient->petType->name : 'N/A',
-                        'pet_name' => $patient->pet_name,
-                    ]],
-                    'appointment_type' => 'Follow-up Check-up',
-                    'pet_name' => $patient->pet_name,
-                    'pet_type' => $patient->petType ? $patient->petType->name : 'N/A',
-                    'is_followup' => true,
-                    'prescription_id' => $prescription->id,
-                ];
-            }
+            $status = ($request->has('status') && $request->status !== 'all') ? strtolower((string) $request->status) : 'all';
 
             return response()->json([
-                'data' => $result,
+                'data' => $this->getAppointmentsListForClient($status, $keyword),
             ]);
         }
 
@@ -279,7 +71,11 @@ class ClientController extends Controller
         // Get Philippine holidays for current year and next year
         $holidays = PhilippineHolidays::getCurrentAndNextYearHolidays();
 
+        // Include initial appointments (all) so list is visible immediately after redirect (e.g. after booking 2+ pets)
+        $initialAppointments = $this->getAppointmentsListForClient('all', '');
+
         return Inertia::render('Client/Appointments/Index', [
+            'appointments' => $initialAppointments,
             'pets' => $pets->map(function ($pet) {
                 return [
                     'id' => $pet->id,
@@ -297,6 +93,194 @@ class ClientController extends Controller
             'pet_breeds' => $pet_breeds,
             'philippine_holidays' => $holidays,
         ]);
+    }
+
+    /**
+     * Build appointments list for the authenticated client (shared by API and initial Inertia payload).
+     */
+    private function getAppointmentsListForClient(string $status = 'all', string $keyword = ''): array
+    {
+        $appointments = Appointment::where('appointments.user_id', auth()->id());
+
+        if ($keyword !== '') {
+            $appointments->where(function ($q) use ($keyword) {
+                $q->whereHas('patients.petType', function ($subQ) use ($keyword) {
+                    $subQ->where('pet_types.name', 'LIKE', "%{$keyword}%");
+                })
+                ->orWhereHas('patients', function ($subQ) use ($keyword) {
+                    $subQ->where('patients.pet_name', 'LIKE', "%{$keyword}%");
+                })
+                ->orWhereHas('patient.petType', function ($subQ) use ($keyword) {
+                    $subQ->where('pet_types.name', 'LIKE', "%{$keyword}%");
+                })
+                ->orWhereHas('patient', function ($subQ) use ($keyword) {
+                    $subQ->where('patients.pet_name', 'LIKE', "%{$keyword}%");
+                })
+                ->orWhereHas('appointment_type', function ($subQ) use ($keyword) {
+                    $subQ->where('appointment_types.name', 'LIKE', "%{$keyword}%");
+                })
+                ->orWhereHas('prescription.diagnoses.disease', function ($subQ) use ($keyword) {
+                    $subQ->where('diseases.name', 'LIKE', "%{$keyword}%");
+                });
+            });
+        }
+
+        if ($status !== 'all') {
+            switch ($status) {
+                case 'pending':
+                    $appointments->where('appointments.is_approved', false)
+                        ->where('appointments.is_completed', false)
+                        ->where(function ($q) {
+                            $q->whereNull('appointments.is_canceled')->orWhere('appointments.is_canceled', false);
+                        });
+                    break;
+                case 'approved':
+                    $appointments->where('appointments.is_approved', true)
+                        ->where('appointments.is_completed', false)
+                        ->where(function ($q) {
+                            $q->whereNull('appointments.is_canceled')->orWhere('appointments.is_canceled', false);
+                        });
+                    break;
+                case 'completed':
+                    $appointments->where('appointments.is_completed', true);
+                    break;
+                case 'canceled':
+                    $appointments->where('appointments.is_canceled', true);
+                    break;
+            }
+        }
+
+        $appointments = $appointments
+            ->orderBy('appointments.appointment_date', 'desc')
+            ->orderBy('appointments.appointment_time', 'desc')
+            ->orderBy('appointments.created_at', 'desc')
+            ->with('patients.petType', 'appointment_type', 'appointment_types')
+            ->get();
+
+        $result = [];
+        foreach ($appointments as $appointment) {
+            $patients = $appointment->patients;
+
+            if ($patients->isEmpty() && $appointment->patient) {
+                $patients = collect([$appointment->patient]);
+                if ($patients->first() && ! $patients->first()->relationLoaded('petType')) {
+                    $patients->first()->load('petType');
+                }
+            }
+
+            $statusLabel = 'Pending';
+            if ($appointment->is_canceled) {
+                $statusLabel = 'Canceled';
+            } elseif ($appointment->is_approved) {
+                $statusLabel = $appointment->is_completed ? 'Completed' : 'Approved';
+            }
+
+            $appointmentTypes = [];
+            if ($appointment->relationLoaded('appointment_types') && $appointment->appointment_types->isNotEmpty()) {
+                $appointmentTypes = $appointment->appointment_types->pluck('name')->toArray();
+            } elseif ($appointment->relationLoaded('appointment_type') && $appointment->appointment_type) {
+                $appointmentTypes = [$appointment->appointment_type->name];
+            } elseif ($appointment->appointment_type_id) {
+                if (! $appointment->relationLoaded('appointment_types')) {
+                    $appointment->load('appointment_types');
+                }
+                if ($appointment->appointment_types->isNotEmpty()) {
+                    $appointmentTypes = $appointment->appointment_types->pluck('name')->toArray();
+                } else {
+                    $appointment->load('appointment_type');
+                    $appointmentTypes = $appointment->appointment_type ? [$appointment->appointment_type->name] : ['N/A'];
+                }
+            } else {
+                $appointmentTypes = ['N/A'];
+            }
+
+            $appointmentTypeName = count($appointmentTypes) > 1
+                ? implode(', ', $appointmentTypes)
+                : ($appointmentTypes[0] ?? 'N/A');
+
+            $petCount = $patients->count();
+
+            $petItems = $patients->map(function ($pet) use ($appointment) {
+                $petAppointmentTypes = \DB::table('appointment_patient')
+                    ->where('appointment_id', $appointment->id)
+                    ->where('patient_id', $pet->id)
+                    ->join('appointment_types', 'appointment_patient.appointment_type_id', '=', 'appointment_types.id')
+                    ->pluck('appointment_types.name')
+                    ->toArray();
+
+                if (empty($petAppointmentTypes)) {
+                    if ($appointment->relationLoaded('appointment_type') && $appointment->appointment_type) {
+                        $petAppointmentTypes = [$appointment->appointment_type->name];
+                    } else {
+                        $petAppointmentTypes = ['N/A'];
+                    }
+                }
+
+                $petAppointmentTypeDisplay = count($petAppointmentTypes) > 1
+                    ? implode(', ', $petAppointmentTypes)
+                    : ($petAppointmentTypes[0] ?? 'N/A');
+
+                return [
+                    'id' => $pet->id,
+                    'appointment_type' => $petAppointmentTypeDisplay,
+                    'pet_type' => $pet->petType ? $pet->petType->name : 'N/A',
+                    'pet_name' => $pet->pet_name,
+                ];
+            })->toArray();
+
+            $petTypes = $patients->map(function ($pet) {
+                return $pet->petType ? $pet->petType->name : 'N/A';
+            })->unique()->values()->toArray();
+            $petTypeDisplay = $petCount > 1
+                ? (count($petTypes) > 1 ? implode(', ', $petTypes) : ($petTypes[0] ?? 'N/A'))
+                : ($patients->first() && $patients->first()->petType ? $patients->first()->petType->name : 'N/A');
+
+            $result[] = [
+                'id' => $appointment->id,
+                'appointment_date' => $appointment->appointment_date ? $appointment->appointment_date->format('Y-m-d') : null,
+                'appointment_time' => $appointment->appointment_time,
+                'status' => $statusLabel,
+                'pet_count' => $petCount,
+                'appointments' => $petItems,
+                'appointment_type' => $appointmentTypeName,
+                'pet_name' => $petCount > 1
+                    ? ($patients->first() ? $patients->first()->pet_name . ' (+' . ($petCount - 1) . ' more)' : 'N/A')
+                    : ($patients->first() ? $patients->first()->pet_name : 'N/A'),
+                'pet_type' => $petTypeDisplay,
+            ];
+        }
+
+        $prescriptions = Prescription::whereHas('patient', function ($q) {
+            $q->where('user_id', auth()->id());
+        })
+            ->whereNotNull('follow_up_date')
+            ->whereDate('follow_up_date', '>=', Carbon::today())
+            ->with(['patient.petType', 'appointment'])
+            ->get();
+
+        foreach ($prescriptions as $prescription) {
+            $patient = $prescription->patient;
+            $result[] = [
+                'id' => 'followup-' . $prescription->id,
+                'appointment_date' => $prescription->follow_up_date->format('Y-m-d'),
+                'appointment_time' => null,
+                'status' => 'Follow-up',
+                'pet_count' => 1,
+                'appointments' => [[
+                    'id' => $patient->id,
+                    'appointment_type' => 'Follow-up Check-up',
+                    'pet_type' => $patient->petType ? $patient->petType->name : 'N/A',
+                    'pet_name' => $patient->pet_name,
+                ]],
+                'appointment_type' => 'Follow-up Check-up',
+                'pet_name' => $patient->pet_name,
+                'pet_type' => $patient->petType ? $patient->petType->name : 'N/A',
+                'is_followup' => true,
+                'prescription_id' => $prescription->id,
+            ];
+        }
+
+        return $result;
     }
 
     /**
@@ -1513,39 +1497,31 @@ class ClientController extends Controller
     }
 
     /**
-     * Get available time slots for a given date.
+     * Get available time slots for a given date (internal helper).
+     * Returns ['availableTimes' => string[], 'disabledTimes' => string[], 'isDateDisabled' => bool, 'message' => ?string].
      */
-    public function getAvailableTimes(Request $request)
+    private function getAvailableSlotsForDate(string $selectedDate): array
     {
-        $request->validate([
-            'selectedDate' => 'required|date|after:today',
-        ]);
-
-        $selectedDate = $request->input('selectedDate');
         $restrictions = $this->getTimeslotRestrictions();
 
-        // Check if date is disabled (from database)
-        $isDisabled = DisabledDate::where('date', $selectedDate)->exists();
-        if ($isDisabled) {
-            return response()->json([
+        if (DisabledDate::where('date', $selectedDate)->exists()) {
+            return [
                 'availableTimes' => [],
                 'disabledTimes' => [],
                 'isDateDisabled' => true,
                 'message' => 'This date is not available for booking. The veterinarian is not available on this date.',
-            ]);
+            ];
         }
 
-        // Check if date is a Philippine holiday
         if (PhilippineHolidays::isHoliday($selectedDate)) {
-            return response()->json([
+            return [
                 'availableTimes' => [],
                 'disabledTimes' => [],
                 'isDateDisabled' => true,
                 'message' => 'This date is not available for booking. The clinic is closed on this holiday.',
-            ]);
+            ];
         }
 
-        // Get all booked times for the selected date (excluding canceled appointments)
         $bookedTimes = Appointment::where('appointment_date', $selectedDate)
             ->where(function ($q) {
                 $q->whereNull('is_canceled')
@@ -1557,33 +1533,22 @@ class ClientController extends Controller
             })
             ->toArray();
 
-        // Generate all possible time slots
         $allTimeSlots = $this->generateTimeSlots($restrictions);
-
-        // Filter out unavailable slots
         $availableSlots = [];
+
         foreach ($allTimeSlots as $slot) {
-            // Check if slot is within working hours
             if (!$this->isWithinWorkingHours($slot, $restrictions)) {
                 continue;
             }
-
-            // Check if slot is during lunch break
             if ($this->isDuringLunchBreak($slot, $restrictions)) {
                 continue;
             }
-
-            // Check if slot is already booked
             if (in_array($slot, $bookedTimes)) {
                 continue;
             }
-
-            // Check if slot violates buffer time
             if ($this->violatesBufferTime($slot, $bookedTimes, $restrictions)) {
                 continue;
             }
-
-            // Check daily appointment limit (excluding canceled appointments)
             $dailyCount = Appointment::where('appointment_date', $selectedDate)
                 ->where(function ($q) {
                     $q->whereNull('is_canceled')
@@ -1593,14 +1558,67 @@ class ClientController extends Controller
             if ($dailyCount >= $restrictions['max_appointments_per_day']) {
                 continue;
             }
-
             $availableSlots[] = $slot;
         }
 
-        return response()->json([
+        return [
             'availableTimes' => $availableSlots,
             'disabledTimes' => $bookedTimes,
+            'isDateDisabled' => false,
+            'message' => null,
+        ];
+    }
+
+    /**
+     * Get available time slots for a given date.
+     */
+    public function getAvailableTimes(Request $request)
+    {
+        $request->validate([
+            'selectedDate' => 'required|date|after:today',
         ]);
+
+        $data = $this->getAvailableSlotsForDate($request->input('selectedDate'));
+
+        return response()->json([
+            'availableTimes' => $data['availableTimes'],
+            'disabledTimes' => $data['disabledTimes'],
+            'isDateDisabled' => $data['isDateDisabled'],
+            'message' => $data['message'],
+        ]);
+    }
+
+    /**
+     * Get dates that have no available time slots (for disabling in date pickers).
+     * Query params: from (Y-m-d), to (Y-m-d). Max range 90 days.
+     */
+    public function getDatesWithoutSlots(Request $request)
+    {
+        $request->validate([
+            'from' => 'required|date|after:today',
+            'to' => 'required|date|after_or_equal:from',
+        ]);
+
+        $from = Carbon::parse($request->input('from'));
+        $to = Carbon::parse($request->input('to'));
+
+        if ($from->diffInDays($to) > 90) {
+            return response()->json(['error' => 'Date range must not exceed 90 days.'], 422);
+        }
+
+        $datesWithoutSlots = [];
+        $current = $from->copy();
+
+        while ($current->lte($to)) {
+            $dateStr = $current->format('Y-m-d');
+            $data = $this->getAvailableSlotsForDate($dateStr);
+            if (empty($data['availableTimes'])) {
+                $datesWithoutSlots[] = $dateStr;
+            }
+            $current->addDay();
+        }
+
+        return response()->json(['datesWithoutSlots' => $datesWithoutSlots]);
     }
 
     /**
