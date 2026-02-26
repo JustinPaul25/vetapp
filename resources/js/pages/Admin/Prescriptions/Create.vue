@@ -315,35 +315,35 @@ const searchDiseasesBySymptoms = async () => {
             return;
         }
 
-        // Try ML prediction first
+        // Use backend API as primary method to avoid ML errors
         let predictions: any[] = [];
         try {
-            const mlPredictions = await predictDiseasesFromSymptoms(symptomIds, 10);
-            predictions = mlPredictions.map(pred => ({
-                id: pred.disease_id,
-                name: pred.disease_name,
-                accuracy: parseFloat(pred.accuracy.replace('%', '')),
-            }));
-        } catch (mlError) {
-            console.warn('ML prediction failed, falling back to backend API:', mlError);
-        }
-
-        // If ML returns no results or fails, use backend API as fallback
-        if (predictions.length === 0) {
+            const response = await axios.get('/admin/diseases/search-by-symptoms', {
+                params: { symptoms: selectedSymptoms.value }
+            });
+            
+            if (response.data && Array.isArray(response.data)) {
+                predictions = response.data.map((disease: any) => ({
+                    id: disease.id,
+                    name: disease.name,
+                    accuracy: disease.accuracy || 0,
+                }));
+            }
+        } catch (apiError) {
+            console.error('Backend API search failed, trying ML:', apiError);
+            
+            // Only try ML if API fails
             try {
-                const response = await axios.get('/admin/diseases/search-by-symptoms', {
-                    params: { symptoms: selectedSymptoms.value }
-                });
-                
-                if (response.data && Array.isArray(response.data)) {
-                    predictions = response.data.map((disease: any) => ({
-                        id: disease.id,
-                        name: disease.name,
-                        accuracy: disease.accuracy || 0,
+                const mlPredictions = await predictDiseasesFromSymptoms(symptomIds, 10);
+                if (mlPredictions && Array.isArray(mlPredictions) && mlPredictions.length > 0) {
+                    predictions = mlPredictions.map(pred => ({
+                        id: pred.disease_id,
+                        name: pred.disease_name,
+                        accuracy: parseFloat(pred.accuracy.replace('%', '')),
                     }));
                 }
-            } catch (apiError) {
-                console.error('Backend API fallback also failed:', apiError);
+            } catch (mlError) {
+                console.warn('ML prediction also failed:', mlError);
             }
         }
         
