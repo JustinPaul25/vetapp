@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import InputError from '@/components/InputError.vue';
 import PasswordRequirements from '@/components/PasswordRequirements.vue';
+import PasswordInput from '@/components/PasswordInput.vue';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -50,11 +51,10 @@ const password = ref('');
 
                 <div class="grid gap-2">
                     <Label for="password">Password</Label>
-                    <Input
+                    <PasswordInput
                         id="password"
                         :model-value="password"
                         @update:model-value="password = $event"
-                        type="password"
                         name="password"
                         autocomplete="new-password"
                         class="mt-1 block w-full"
@@ -69,9 +69,8 @@ const password = ref('');
                     <Label for="password_confirmation">
                         Confirm Password
                     </Label>
-                    <Input
+                    <PasswordInput
                         id="password_confirmation"
-                        type="password"
                         name="password_confirmation"
                         autocomplete="new-password"
                         class="mt-1 block w-full"

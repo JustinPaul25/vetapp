@@ -8,6 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Checkbox } from '@/components/ui/checkbox';
 import InputError from '@/components/InputError.vue';
 import PasswordRequirements from '@/components/PasswordRequirements.vue';
+import PasswordInput from '@/components/PasswordInput.vue';
 import { Users, ArrowLeft } from 'lucide-vue-next';
 import { Link } from '@inertiajs/vue3';
 import { dashboard } from '@/routes';
@@ -103,10 +104,9 @@ const toggleRole = (roleName: string) => {
 
                         <div class="space-y-2">
                             <Label for="password">Password</Label>
-                            <Input
+                            <PasswordInput
                                 id="password"
                                 v-model="form.password"
-                                type="password"
                                 required
                                 autocomplete="new-password"
                             />
@@ -116,10 +116,9 @@ const toggleRole = (roleName: string) => {
 
                         <div class="space-y-2">
                             <Label for="password_confirmation">Confirm Password</Label>
-                            <Input
+                            <PasswordInput
                                 id="password_confirmation"
                                 v-model="form.password_confirmation"
-                                type="password"
                                 required
                                 autocomplete="new-password"
                             />

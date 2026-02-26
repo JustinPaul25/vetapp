@@ -7,6 +7,7 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import InputError from '@/components/InputError.vue';
 import PasswordRequirements from '@/components/PasswordRequirements.vue';
+import PasswordInput from '@/components/PasswordInput.vue';
 import LocationMapPicker from '@/components/LocationMapPicker.vue';
 import { UserCheck, ArrowLeft } from 'lucide-vue-next';
 import { Link } from '@inertiajs/vue3';
@@ -180,10 +181,9 @@ const submit = () => {
 
                         <div class="space-y-2">
                             <Label for="password">New Password (leave blank to keep current)</Label>
-                            <Input
+                            <PasswordInput
                                 id="password"
                                 v-model="form.password"
-                                type="password"
                                 autocomplete="new-password"
                             />
                             <PasswordRequirements v-if="form.password" :password="form.password" />
@@ -192,10 +192,9 @@ const submit = () => {
 
                         <div class="space-y-2">
                             <Label for="password_confirmation">Confirm New Password</Label>
-                            <Input
+                            <PasswordInput
                                 id="password_confirmation"
                                 v-model="form.password_confirmation"
-                                type="password"
                                 autocomplete="new-password"
                             />
                             <InputError :message="form.errors.password_confirmation" />
