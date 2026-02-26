@@ -43,9 +43,6 @@ class DatabaseSeeder extends Seeder
         // Create disease-medicine relationships for ALL diseases
         $this->call(DiseaseMedicineSeeder::class);
 
-        // Seed historical data (patients, appointments, prescriptions, etc.)
-        $this->call(HistoricalDataSeeder::class);
-
         // Seed settings (ML prediction toggles, veterinarian info, etc.)
         $this->call(SettingsSeeder::class);
 

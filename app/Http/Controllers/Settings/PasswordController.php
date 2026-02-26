@@ -33,6 +33,8 @@ class PasswordController extends Controller
             'password' => $validated['password'],
         ]);
 
+        $request->session()->regenerate();
+
         return back();
     }
 }
