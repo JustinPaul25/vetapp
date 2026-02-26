@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import InputError from '@/components/InputError.vue';
 import PasswordRequirements from '@/components/PasswordRequirements.vue';
+import PasswordInput from '@/components/PasswordInput.vue';
 import TextLink from '@/components/TextLink.vue';
 import AddressMapPicker from '@/components/AddressMapPicker.vue';
 import { Button } from '@/components/ui/button';
@@ -11,12 +12,9 @@ import AuthBase from '@/layouts/AuthLayout.vue';
 import { login } from '@/routes';
 import { store } from '@/routes/register';
 import { Form, Head } from '@inertiajs/vue3';
-import { Eye, EyeOff } from 'lucide-vue-next';
 import { ref } from 'vue';
 
 const password = ref('');
-const showPassword = ref(false);
-const showPasswordConfirmation = ref(false);
 const address = ref('');
 const location = ref<{ lat: number | null; lng: number | null } | null>(null);
 
@@ -72,56 +70,30 @@ const updateLocation = (value: { lat: number | null; lng: number | null }) => {
 
                 <div class="grid gap-2">
                     <Label for="password">Password</Label>
-                    <div class="relative">
-                        <Input
-                            id="password"
-                            :model-value="password"
-                            @update:model-value="password = $event"
-                            :type="showPassword ? 'text' : 'password'"
-                            required
-                            :tabindex="3"
-                            autocomplete="new-password"
-                            name="password"
-                            placeholder="Password"
-                            class="pr-10"
-                        />
-                        <button
-                            type="button"
-                            @click="showPassword = !showPassword"
-                            class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700 focus:outline-none"
-                            tabindex="-1"
-                        >
-                            <Eye v-if="!showPassword" class="h-4 w-4" />
-                            <EyeOff v-else class="h-4 w-4" />
-                        </button>
-                    </div>
+                    <PasswordInput
+                        id="password"
+                        :model-value="password"
+                        @update:model-value="password = $event"
+                        required
+                        :tabindex="3"
+                        autocomplete="new-password"
+                        name="password"
+                        placeholder="Password"
+                    />
                     <PasswordRequirements :password="password" />
                     <InputError :message="errors.password" />
                 </div>
 
                 <div class="grid gap-2">
                     <Label for="password_confirmation">Confirm password</Label>
-                    <div class="relative">
-                        <Input
-                            id="password_confirmation"
-                            :type="showPasswordConfirmation ? 'text' : 'password'"
-                            required
-                            :tabindex="4"
-                            autocomplete="new-password"
-                            name="password_confirmation"
-                            placeholder="Confirm password"
-                            class="pr-10"
-                        />
-                        <button
-                            type="button"
-                            @click="showPasswordConfirmation = !showPasswordConfirmation"
-                            class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700 focus:outline-none"
-                            tabindex="-1"
-                        >
-                            <Eye v-if="!showPasswordConfirmation" class="h-4 w-4" />
-                            <EyeOff v-else class="h-4 w-4" />
-                        </button>
-                    </div>
+                    <PasswordInput
+                        id="password_confirmation"
+                        required
+                        :tabindex="4"
+                        autocomplete="new-password"
+                        name="password_confirmation"
+                        placeholder="Confirm password"
+                    />
                     <InputError :message="errors.password_confirmation" />
                 </div>
 

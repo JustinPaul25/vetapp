@@ -1,18 +1,16 @@
 <script setup lang="ts">
 import InputError from '@/components/InputError.vue';
 import PasswordRequirements from '@/components/PasswordRequirements.vue';
+import PasswordInput from '@/components/PasswordInput.vue';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Spinner } from '@/components/ui/spinner';
 import AuthBase from '@/layouts/AuthLayout.vue';
 import { Form, Head, router } from '@inertiajs/vue3';
-import { Eye, EyeOff } from 'lucide-vue-next';
 import { ref } from 'vue';
 
 const password = ref('');
-const showPassword = ref(false);
-const showPasswordConfirmation = ref(false);
 
 const form = router.form({
     password: '',
@@ -50,53 +48,27 @@ const submit = () => {
             <div class="grid gap-6">
                 <div class="grid gap-2">
                     <Label for="password">Password <span class="text-red-500">*</span></Label>
-                    <div class="relative">
-                        <Input
-                            id="password"
-                            v-model="password"
-                            :type="showPassword ? 'text' : 'password'"
-                            required
-                            autofocus
-                            autocomplete="new-password"
-                            placeholder="Password"
-                            class="pr-10"
-                        />
-                        <button
-                            type="button"
-                            @click="showPassword = !showPassword"
-                            class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700 focus:outline-none"
-                            tabindex="-1"
-                        >
-                            <Eye v-if="!showPassword" class="h-4 w-4" />
-                            <EyeOff v-else class="h-4 w-4" />
-                        </button>
-                    </div>
+                    <PasswordInput
+                        id="password"
+                        v-model="password"
+                        required
+                        autofocus
+                        autocomplete="new-password"
+                        placeholder="Password"
+                    />
                     <PasswordRequirements :password="password" />
                     <InputError :message="form.errors.password" />
                 </div>
 
                 <div class="grid gap-2">
                     <Label for="password_confirmation">Confirm Password <span class="text-red-500">*</span></Label>
-                    <div class="relative">
-                        <Input
-                            id="password_confirmation"
-                            v-model="form.password_confirmation"
-                            :type="showPasswordConfirmation ? 'text' : 'password'"
-                            required
-                            autocomplete="new-password"
-                            placeholder="Confirm password"
-                            class="pr-10"
-                        />
-                        <button
-                            type="button"
-                            @click="showPasswordConfirmation = !showPasswordConfirmation"
-                            class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700 focus:outline-none"
-                            tabindex="-1"
-                        >
-                            <Eye v-if="!showPasswordConfirmation" class="h-4 w-4" />
-                            <EyeOff v-else class="h-4 w-4" />
-                        </button>
-                    </div>
+                    <PasswordInput
+                        id="password_confirmation"
+                        v-model="form.password_confirmation"
+                        required
+                        autocomplete="new-password"
+                        placeholder="Confirm password"
+                    />
                     <InputError :message="form.errors.password_confirmation" />
                 </div>
 

@@ -6,6 +6,7 @@ import { useTemplateRef } from 'vue';
 // Components
 import HeadingSmall from '@/components/HeadingSmall.vue';
 import InputError from '@/components/InputError.vue';
+import PasswordInput from '@/components/PasswordInput.vue';
 import { Button } from '@/components/ui/button';
 import {
     Dialog,
@@ -73,9 +74,8 @@ const passwordInput = useTemplateRef('passwordInput');
                             <Label for="password" class="sr-only"
                                 >Password</Label
                             >
-                            <Input
+                            <PasswordInput
                                 id="password"
-                                type="password"
                                 name="password"
                                 ref="passwordInput"
                                 placeholder="Password"
