@@ -224,8 +224,10 @@ const getSelectedMedicineName = (rowId: number): string => {
     const medicine = props.medicines.find(m => m.id === row.medicine_id);
     if (!medicine) return '';
     
-    // Only show dosage in parentheses if it exists and is meaningful
-    if (medicine.dosage && medicine.dosage.trim() !== '') {
+    // Only show dosage in parentheses if it exists and is meaningful (exclude "As prescribed")
+    const lowerDosage = medicine.dosage?.toLowerCase().trim() || '';
+    const nonCalculable = ['as prescribed', 'as per prescription', 'per prescription'];
+    if (medicine.dosage && medicine.dosage.trim() !== '' && !nonCalculable.includes(lowerDosage)) {
         return `${medicine.name} (${medicine.dosage})`;
     }
     
@@ -454,10 +456,9 @@ const loadMedicinesForDisease = async (diseaseId: number) => {
                 if (!existingRow.disease_ids.includes(diseaseId)) {
                     existingRow.disease_ids.push(diseaseId);
                 }
-                // Keep dosage empty - vet will manually enter it
-                // Don't overwrite if user has already entered a dosage
+                // Auto-calculate dosage if empty
                 if (!existingRow.dosage || existingRow.dosage.trim() === '') {
-                    existingRow.dosage = ''; // Ensure it's empty for vet to fill
+                    existingRow.dosage = calculateDosage(medicine.dosage, form.pet_current_weight);
                 }
             } else {
                 // Add new medicine row
@@ -470,7 +471,7 @@ const loadMedicinesForDisease = async (diseaseId: number) => {
                 medicineRows.value.push({
                     id: newId,
                     medicine_id: medicine.id,
-                    dosage: '', // Empty - vet will manually enter dosage
+                    dosage: calculateDosage(medicine.dosage, form.pet_current_weight),
                     instructions: defaultInstruction, // Set default instruction instead of empty string
                     quantity: '1pc/s',
                     disease_ids: [diseaseId], // Track which disease added this medicine
@@ -496,10 +497,9 @@ const calculateDosage = (dosagePattern: string | null | undefined, weight: strin
     const lowerPattern = trimmedPattern.toLowerCase();
     const nonCalculablePatterns = ['as prescribed', 'as per prescription', 'per prescription'];
     
-    // For non-calculable patterns, return the original pattern so user can see it
-    // but understand it's not auto-calculated - they can edit it if needed
+    // For non-calculable patterns, return empty - user must enter dosage manually
     if (nonCalculablePatterns.includes(lowerPattern)) {
-        return trimmedPattern;
+        return '';
     }
     
     // If weight is not provided, return the original pattern to show what's in the database
@@ -549,8 +549,29 @@ const calculateDosage = (dosagePattern: string | null | undefined, weight: strin
     return trimmedPattern;
 };
 
-// Weight changes no longer auto-calculate dosages
-// Users can manually edit dosages as needed
+// Recalculate dosages for all medicine rows when weight changes
+const recalculateAllDosages = () => {
+    const weight = form.pet_current_weight;
+    medicineRows.value.forEach(row => {
+        if (row.medicine_id) {
+            const medicine = props.medicines.find(m => m.id === row.medicine_id);
+            if (medicine) {
+                const calculated = calculateDosage(medicine.dosage, weight);
+                // Update if: empty, looks like previous auto-calc (e.g. "2.5ml"), or still has raw pattern (e.g. "1ml/10 Kg")
+                const isAutoCalculated = /^\d+(\.\d+)?\s*ml$/i.test(row.dosage?.trim() || '');
+                const isRawPattern = row.dosage?.trim() === medicine.dosage?.trim();
+                if (!row.dosage || row.dosage.trim() === '' || isAutoCalculated || isRawPattern) {
+                    row.dosage = calculated;
+                }
+            }
+        }
+    });
+};
+
+// Watch for weight changes and auto-calculate dosages
+watch(() => form.pet_current_weight, () => {
+    recalculateAllDosages();
+});
 
 // Handle medicine selection
 const onMedicineChange = (rowId: number, medicineId: number) => {
@@ -559,10 +580,10 @@ const onMedicineChange = (rowId: number, medicineId: number) => {
         row.medicine_id = medicineId;
         // Remove from newly added set once medicine is selected
         newlyAddedRowIds.value.delete(rowId);
-        // Keep dosage empty - vet will manually enter it
-        // Don't overwrite if user has already entered a dosage
-        if (!row.dosage || row.dosage.trim() === '') {
-            row.dosage = '';
+        // Auto-calculate dosage from medicine's dosage pattern and pet weight
+        const medicine = props.medicines.find(m => m.id === medicineId);
+        if (medicine && (!row.dosage || row.dosage.trim() === '')) {
+            row.dosage = calculateDosage(medicine.dosage, form.pet_current_weight);
         }
     }
 };
@@ -977,7 +998,7 @@ const submit = () => {
                                             <div class="flex-1">
                                                 <div class="font-medium">{{ medicine.name }}</div>
                                                 <div class="text-sm text-muted-foreground mt-1">
-                                                    Dosage: {{ medicine.dosage }}
+                                                    Dosage: {{ ['as prescribed', 'as per prescription', 'per prescription'].includes(medicine.dosage?.toLowerCase().trim() || '') ? 'Enter manually' : medicine.dosage }}
                                                 </div>
                                                 <div class="text-xs text-muted-foreground mt-1">
                                                     Stock: {{ medicine.stock }}
@@ -1270,7 +1291,8 @@ const submit = () => {
                                                 <Input
                                                     v-model="row.dosage"
                                                     type="text"
-                                                    placeholder="Enter dosage (auto-calculated if pattern matches)"
+                                                    placeholder="Auto-calculated from weight, or enter manually"
+                                                    :class="row.medicine_id && (!row.dosage || !row.dosage.trim()) ? 'border-destructive border-2' : ''"
                                                 />
                                             </td>
                                             <td class="p-2">

@@ -35,8 +35,8 @@ Route::middleware(['auth'])->group(function () {
 // Public disease search route for landing page
 Route::get('/search-diseases', [\App\Http\Controllers\DiseaseSearchController::class, 'search'])->name('diseases.search');
 
-// Public prescription download route (signed URL for security)
-Route::get('/prescriptions/{id}/download', [\App\Http\Controllers\Admin\AppointmentController::class, 'publicDownloadPrescription'])
+// Public prescription download route (signed URL for security - unique path to avoid conflict with client route)
+Route::get('/prescription-download/{id}', [\App\Http\Controllers\Admin\AppointmentController::class, 'publicDownloadPrescription'])
     ->name('prescriptions.public.download')
     ->middleware('signed');
 
