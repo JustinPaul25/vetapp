@@ -16,7 +16,7 @@
                             <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%">
                                 <tr>
                                     <td align="center" style="padding-bottom: 20px;">
-                                        <img src="{{ url('media/logo.png') }}" alt="Panabo City ANIMED" style="height: 80px; max-width: 200px;" />
+                                        <img src="{{ asset('media/logo.png') }}" alt="Panabo City ANIMED" style="height: 80px; max-width: 200px;" />
                                     </td>
                                 </tr>
                                 <tr>
