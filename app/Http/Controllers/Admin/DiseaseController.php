@@ -331,6 +331,7 @@ class DiseaseController extends Controller
     public function map(Request $request)
     {
         $condition = $request->query('condition');
+        $diseaseFilter = $request->query('disease');
 
         $baseQuery = PrescriptionDiagnosis::with(['disease', 'prescription.patient.user', 'appointment'])
             ->whereHas('prescription.patient.user');
@@ -339,6 +340,12 @@ class DiseaseController extends Controller
 
         if ($condition && $condition !== 'all') {
             $baseQuery->where('condition', $condition);
+        }
+
+        if ($diseaseFilter && $diseaseFilter !== 'all') {
+            $baseQuery->whereHas('disease', function ($q) use ($diseaseFilter) {
+                $q->where('name', $diseaseFilter);
+            });
         }
 
         $cases = $baseQuery->get()
@@ -351,6 +358,7 @@ class DiseaseController extends Controller
 
                 $lat = $user->lat ?? 7.322074145850032;
                 $lng = $user->long ?? 125.6865978240967;
+                $barangay = $user->barangay ?? null;
 
                 return [
                     'disease_id' => $diagnosis->disease_id,
@@ -358,6 +366,7 @@ class DiseaseController extends Controller
                     'lat' => is_numeric($lat) ? (float) $lat : 7.322074145850032,
                     'lng' => is_numeric($lng) ? (float) $lng : 125.6865978240967,
                     'address' => $user->address ?? 'Unknown',
+                    'barangay' => $barangay ?: 'Unspecified',
                     'appointment_date' => $diagnosis->appointment->appointment_date ?? null,
                 ];
             })
@@ -368,6 +377,18 @@ class DiseaseController extends Controller
             });
 
         $filteredCount = $cases->count();
+
+        $barangaysWithCases = $cases->groupBy('barangay')
+            ->map(function ($barangayCases, $barangay) {
+                return [
+                    'barangay' => $barangay,
+                    'count' => $barangayCases->count(),
+                ];
+            })
+            ->sortByDesc('count')
+            ->values();
+
+        $allDiseases = Disease::orderBy('name')->get(['id', 'name']);
 
         $zones = $cases->groupBy('address')
             ->map(function ($zoneCases, $address) {
@@ -400,14 +421,21 @@ class DiseaseController extends Controller
             return [$disease['name'] => $this->generateColor($disease['name'])];
         })->toArray();
 
+        if ($diseaseFilter && $diseaseFilter !== 'all' && !isset($diseaseColors[$diseaseFilter])) {
+            $diseaseColors[$diseaseFilter] = $this->generateColor($diseaseFilter);
+        }
+
         return Inertia::render('Admin/Diseases/Map', [
             'outbreakZones' => $zones,
             'cases' => $cases->values(),
             'topDiseases' => $topDiseases,
             'diseaseColors' => $diseaseColors,
+            'allDiseases' => $allDiseases,
+            'barangaysWithCases' => $barangaysWithCases,
             'totalCases' => $totalCasesCount,
             'filteredCases' => $filteredCount,
             'conditionFilter' => $condition ?: null,
+            'diseaseFilter' => $diseaseFilter ?: null,
         ]);
     }
 

@@ -21,6 +21,7 @@ interface DiseaseCase {
     lat: number;
     lng: number;
     address: string;
+    barangay?: string;
     appointment_date: string | null;
 }
 
@@ -29,14 +30,22 @@ interface TopDisease {
     count: number;
 }
 
+interface BarangayWithCases {
+    barangay: string;
+    count: number;
+}
+
 interface Props {
     outbreakZones: OutbreakZone[];
     cases: DiseaseCase[];
     topDiseases: TopDisease[];
     diseaseColors: Record<string, string>;
+    allDiseases?: Array<{ id: number; name: string }>;
+    barangaysWithCases?: BarangayWithCases[];
     totalCases?: number;
     filteredCases?: number;
     conditionFilter?: string | null;
+    diseaseFilter?: string | null;
 }
 
 const CONDITION_OPTIONS = [
@@ -64,7 +73,18 @@ const individualMarkersLayer = ref<L.LayerGroup | null>(null);
 
 function applyConditionFilter(value: string) {
     const condition = value === 'all' ? undefined : value;
-    router.get('/admin/diseases/map', condition ? { condition } : {}, { preserveState: false });
+    const params: Record<string, string> = {};
+    if (condition) params.condition = condition;
+    if (props.diseaseFilter && props.diseaseFilter !== 'all') params.disease = props.diseaseFilter;
+    router.get('/admin/diseases/map', params, { preserveState: false });
+}
+
+function applyDiseaseFilter(value: string) {
+    const disease = value === 'all' ? undefined : value;
+    const params: Record<string, string> = {};
+    if (props.conditionFilter) params.condition = props.conditionFilter;
+    if (disease) params.disease = disease;
+    router.get('/admin/diseases/map', params, { preserveState: false });
 }
 
 // Format date string (YYYY-MM-DD) as local date to avoid timezone issues
@@ -578,6 +598,21 @@ function selectDisease(name: string) {
                                 {{ opt.label }}
                             </option>
                         </select>
+                        <label class="text-sm font-medium text-muted-foreground">Filter by Disease:</label>
+                        <select
+                            :value="diseaseFilter ?? 'all'"
+                            class="rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                            @change="applyDiseaseFilter(($event.target as HTMLSelectElement).value)"
+                        >
+                            <option value="all">All Diseases</option>
+                            <option
+                                v-for="d in (allDiseases ?? [])"
+                                :key="d.id"
+                                :value="d.name"
+                            >
+                                {{ d.name }}
+                            </option>
+                        </select>
                         <span class="text-sm text-muted-foreground">
                             Showing {{ filteredCases ?? cases.length }} of {{ totalCases ?? cases.length }} cases
                         </span>
@@ -631,6 +666,33 @@ function selectDisease(name: string) {
                                     </button>
                                     <div v-if="topDiseases.length === 0" class="text-sm text-muted-foreground">
                                         No disease data available
+                                    </div>
+                                </CardContent>
+                            </Card>
+
+                            <!-- Barangays with Cases (when filtering by disease) -->
+                            <Card v-if="diseaseFilter && diseaseFilter !== 'all'">
+                                <CardHeader class="pb-3">
+                                    <CardTitle class="text-sm">
+                                        Barangays with {{ diseaseFilter }} Cases
+                                    </CardTitle>
+                                    <CardDescription>
+                                        Locations where cases have been reported
+                                    </CardDescription>
+                                </CardHeader>
+                                <CardContent class="space-y-2">
+                                    <div
+                                        v-for="(item, index) in (barangaysWithCases ?? [])"
+                                        :key="index"
+                                        class="text-sm"
+                                    >
+                                        <div class="font-medium truncate">{{ item.barangay }}</div>
+                                        <div class="text-muted-foreground">
+                                            {{ item.count }} case{{ item.count !== 1 ? 's' : '' }}
+                                        </div>
+                                    </div>
+                                    <div v-if="!barangaysWithCases?.length" class="text-sm text-muted-foreground">
+                                        No barangay data for this disease
                                     </div>
                                 </CardContent>
                             </Card>

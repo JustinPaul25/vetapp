@@ -1291,7 +1291,6 @@ const submit = () => {
                                                 <Input
                                                     v-model="row.dosage"
                                                     type="text"
-                                                    placeholder="Auto-calculated from weight, or enter manually"
                                                     :class="row.medicine_id && (!row.dosage || !row.dosage.trim()) ? 'border-destructive border-2' : ''"
                                                 />
                                             </td>
