@@ -152,6 +152,7 @@ const getSortIcon = (column: string) => {
                                 export-url="/admin/walk_in_clients/export"
                                 report-title="Walk-In Clients"
                                 :filters="{ search: searchQuery, sort_by: sortBy, sort_direction: sortDirection }"
+                                disable-date-filter
                             />
                             <Link :href="adminWalkInClientsRoute('/create')">
                                 <Button>
