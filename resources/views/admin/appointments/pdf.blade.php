@@ -18,7 +18,7 @@
         
         body {
             font-family: Arial, sans-serif;
-            font-size: 11px;
+            font-size: 12px;
             color: #000;
             line-height: 1.3;
             padding: 0;
@@ -94,11 +94,11 @@
         }
 
         .header-address {
-            font-size: 11px;
+            font-size: 12px;
         }
         
         .header-section-name {
-            font-size: 10px;
+            font-size: 11px;
             font-weight: bold;
             margin: 0;
         }
@@ -167,7 +167,7 @@
         
         .medicines-table th .sub-header {
             font-weight: normal;
-            font-size: 10px;
+            font-size: 11px;
             font-style: normal;
             display: block;
             margin-top: 3px;
@@ -191,7 +191,7 @@
         }
         
         .medicine-route {
-            font-size: 10px;
+            font-size: 11px;
             color: #000;
         }
         
@@ -200,7 +200,7 @@
         }
         
         .dosage-frequency {
-            font-size: 10px;
+            font-size: 11px;
             color: #000;
         }
         
@@ -209,7 +209,7 @@
         }
         
         .quantity-time {
-            font-size: 10px;
+            font-size: 11px;
             color: #000;
         }
         
@@ -227,7 +227,7 @@
         /* Footer Section */
         .footer-table {
             margin-top: 10px;
-            font-size: 11px;
+            font-size: 12px;
         }
         
         .footer-table td {

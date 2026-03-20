@@ -38,8 +38,8 @@ const breadcrumbs = [
 ];
 
 const searchQuery = ref(props.filters?.search || '');
-const sortBy = ref(props.filters?.sort_by || 'created_at');
-const sortDirection = ref(props.filters?.sort_direction || 'desc');
+const sortBy = ref(props.filters?.sort_by || 'name');
+const sortDirection = ref(props.filters?.sort_direction || 'asc');
 
 const deleteSymptom = (symptomId: number, symptomName: string) => {
     if (confirm(`Are you sure you want to delete the symptom "${symptomName}"?`)) {

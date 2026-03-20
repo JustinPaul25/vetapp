@@ -14,12 +14,28 @@ use App\Services\AppointmentLimitService;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
+use Illuminate\Support\Facades\Auth;
 use App\Traits\HasDateFiltering;
 use Barryvdh\DomPDF\Facade\Pdf;
 
 class WalkInClientController extends Controller
 {
     use HasDateFiltering;
+
+    /**
+     * Generate a unique placeholder email when a walk-in client does not have one.
+     * Note: the `users.email` column is required + unique in the current schema.
+     */
+    private function generatePlaceholderEmail(): string
+    {
+        $domain = 'no-email.walkin.local';
+        do {
+            $email = 'walkin.no-email+' . Str::random(16) . '@' . $domain;
+        } while (User::where('email', $email)->exists());
+
+        return $email;
+    }
     /**
      * Display a listing of walk-in clients (users with walk_in_client role).
      */
@@ -218,6 +234,11 @@ class WalkInClientController extends Controller
      */
     public function store(Request $request)
     {
+        // Treat empty string as null so `nullable` validation works.
+        $request->merge([
+            'email' => $request->input('email') ? trim($request->input('email')) : null,
+        ]);
+
         // Check if using existing pet and owner
         $usingExistingRecords = $request->filled('existing_pet_id') && $request->filled('existing_owner_id');
 
@@ -294,7 +315,9 @@ class WalkInClientController extends Controller
 
                 // Redirect based on user role: admin can create prescription, staff goes to appointment show
                 $firstAppointment = $createdAppointments[0];
-                if (auth()->user()->hasRole('admin')) {
+                /** @var User|null $authUser */
+                $authUser = Auth::user();
+                if ($authUser && $authUser->hasRole('admin')) {
                     return redirect()->route('admin.appointments.prescription.create', $firstAppointment->id)
                         ->with('success', count($createdAppointments) . ' appointment(s) created successfully for existing client and pet.');
                 } else {
@@ -310,7 +333,7 @@ class WalkInClientController extends Controller
             'first_name' => 'nullable|string|max:255',
             'last_name' => 'nullable|string|max:255',
             'name' => 'nullable|string|max:255',
-            'email' => 'required|string|email|max:255',
+            'email' => 'nullable|string|email|max:255',
             'mobile_number' => ['nullable', new PhilippineMobileNumber()],
             'address' => 'nullable|string|max:500',
             'lat' => 'nullable|numeric|between:-90,90',
@@ -342,7 +365,10 @@ class WalkInClientController extends Controller
         return DB::transaction(function () use ($validated) {
             // Step 1: Check if client already exists
             // Check by email first (primary identifier)
-            $existingClient = User::where('email', $validated['email'])->first();
+            $existingClient = null;
+            if (!empty($validated['email'])) {
+                $existingClient = User::where('email', $validated['email'])->first();
+            }
 
             // If client doesn't exist, check by mobile number as secondary check
             if (!$existingClient && !empty($validated['mobile_number'])) {
@@ -356,17 +382,24 @@ class WalkInClientController extends Controller
                 // Generate a random password for walk-in clients (they can reset it if needed)
                 $password = bcrypt(uniqid('walkin_', true));
 
+                $emailToStore = $validated['email'] ?? null;
+                if (empty($emailToStore)) {
+                    $emailToStore = $this->generatePlaceholderEmail();
+                }
+
                 $existingClient = User::create([
                     'first_name' => $validated['first_name'] ?? null,
                     'last_name' => $validated['last_name'] ?? null,
                     'name' => $validated['name'] ?? trim(($validated['first_name'] ?? '') . ' ' . ($validated['last_name'] ?? '')),
-                    'email' => $validated['email'],
+                    'email' => $emailToStore,
                     'mobile_number' => $validated['mobile_number'] ?? null,
                     'address' => $validated['address'] ?? null,
                     'lat' => $validated['lat'] ?? null,
                     'long' => $validated['lng'] ?? null,
                     'password' => $password,
-                    'email_verified_at' => now(), // Auto-verify walk-in clients
+                    // Walk-in clients shouldn't be treated as fully registered app users.
+                    // Leaving email unverified prevents access to routes guarded by `verified`.
+                    'email_verified_at' => null,
                 ]);
 
                 // Assign walk_in_client role to the user
@@ -521,7 +554,9 @@ class WalkInClientController extends Controller
             // Use the first appointment for redirect
             $firstAppointment = $createdAppointments[0] ?? null;
             if ($firstAppointment) {
-                if (auth()->user()->hasRole('admin')) {
+                /** @var User|null $authUser */
+                $authUser = Auth::user();
+                if ($authUser && $authUser->hasRole('admin')) {
                     return redirect()->route('admin.appointments.prescription.create', $firstAppointment->id)
                         ->with('success', implode(' ', $messages));
                 } else {
@@ -610,6 +645,11 @@ class WalkInClientController extends Controller
      */
     public function update(Request $request, User $walkInClient)
     {
+        // Treat empty string as null so `nullable` validation works.
+        $request->merge([
+            'email' => $request->input('email') ? trim($request->input('email')) : null,
+        ]);
+
         // Verify this is a walk-in client
         if (!$walkInClient->hasRole('walk_in_client')) {
             abort(404);
@@ -619,7 +659,7 @@ class WalkInClientController extends Controller
             'first_name' => 'nullable|string|max:255',
             'last_name' => 'nullable|string|max:255',
             'name' => 'nullable|string|max:255',
-            'email' => 'required|string|email|max:255|unique:users,email,' . $walkInClient->id,
+            'email' => 'nullable|string|email|max:255|unique:users,email,' . $walkInClient->id,
             'mobile_number' => ['nullable', new PhilippineMobileNumber()],
             'address' => 'nullable|string|max:500',
             'lat' => 'nullable|numeric|between:-90,90',
@@ -630,7 +670,7 @@ class WalkInClientController extends Controller
             'first_name' => $validated['first_name'] ?? null,
             'last_name' => $validated['last_name'] ?? null,
             'name' => $validated['name'] ?? trim(($validated['first_name'] ?? '') . ' ' . ($validated['last_name'] ?? '')),
-            'email' => $validated['email'],
+            'email' => $validated['email'] ?? $walkInClient->email,
             'mobile_number' => $validated['mobile_number'] ?? null,
             'address' => $validated['address'] ?? null,
             'lat' => $validated['lat'] ?? null,

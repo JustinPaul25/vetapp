@@ -127,12 +127,11 @@ const submit = () => {
                         </div>
 
                         <div class="space-y-2">
-                            <Label for="email">Email <span class="text-red-500">*</span></Label>
+                            <Label for="email">Email <span class="text-muted-foreground text-xs">(optional)</span></Label>
                             <Input
                                 id="email"
                                 v-model="form.email"
                                 type="email"
-                                required
                                 autocomplete="email"
                             />
                             <InputError :message="form.errors.email" />

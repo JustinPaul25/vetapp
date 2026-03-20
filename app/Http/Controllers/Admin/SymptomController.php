@@ -22,8 +22,9 @@ class SymptomController extends Controller
         }
 
         // Sort functionality
-        $sortBy = $request->get('sort_by', 'created_at');
-        $sortDirection = $request->get('sort_direction', 'desc');
+        // Default to alphabetical order (A-Z) for registry usability.
+        $sortBy = $request->get('sort_by', 'name');
+        $sortDirection = $request->get('sort_direction', 'asc');
         
         // Validate sort_by to prevent SQL injection
         $allowedSortColumns = ['name', 'created_at'];

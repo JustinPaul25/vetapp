@@ -24,6 +24,7 @@ use App\Services\AppointmentLimitService;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Notification;
 use Inertia\Inertia;
@@ -860,6 +861,7 @@ class AppointmentController extends Controller
     {
         // Exclude general "Diarrhea" and "Vomiting" when specific types exist
         $symptoms = Symptom::whereNotIn('name', ['Diarrhea', 'Vomiting'])
+            ->orderBy('name')
             ->get()
             ->map(function ($symptom) {
                 return [
@@ -1065,11 +1067,18 @@ class AppointmentController extends Controller
         }
         
         return DB::transaction(function () use ($appointment, $request, $prescriptionPatientId, $hasOptionalFields) {
-            // Prepare symptoms string - handle null or empty arrays
-            $symptomsString = '';
+            // Normalize + de-duplicate symptoms so the prescription doesn't store duplicates.
+            $normalizedSymptoms = [];
             if (is_array($request->symptoms) && count($request->symptoms) > 0) {
-                $symptomsString = implode(', ', array_map('ucwords', $request->symptoms));
+                $normalizedSymptoms = collect($request->symptoms)
+                    ->map(fn ($symptom) => ucwords(trim((string) $symptom)))
+                    ->filter()
+                    ->unique()
+                    ->values()
+                    ->all();
             }
+
+            $symptomsString = implode(', ', $normalizedSymptoms);
 
             $prescription = Prescription::create([
                 'appointment_id' => $appointment->id,
@@ -1115,14 +1124,10 @@ class AppointmentController extends Controller
                     }
                     
                     // Create disease-symptom relationships for machine learning only if symptoms are provided
-                    if (is_array($request->symptoms) && count($request->symptoms) > 0) {
-                        $data_symptoms = $request->symptoms;
-                        foreach ($data_symptoms as $symptom) {
-                            $symptom_data = ucfirst(trim($symptom));
-                            $symptomModel = Symptom::firstOrCreate(
-                                ['name' => $symptom_data],
-                                ['name' => $symptom_data]
-                            );
+                    if (!empty($normalizedSymptoms)) {
+                        foreach ($normalizedSymptoms as $symptom) {
+                            $symptom_data = trim((string) $symptom);
+                            $symptomModel = Symptom::firstOrCreate(['name' => $symptom_data]);
 
                             // Create record for machine learning
                             DB::table('disease_symptoms')->updateOrInsert(
@@ -1248,10 +1253,10 @@ class AppointmentController extends Controller
         }
         
         // Symptoms
-        if (!empty($request->symptoms)) {
+        if (!empty($prescription->symptoms)) {
             $summaryParts[] = "";
             $summaryParts[] = "SYMPTOMS OBSERVED";
-            $summaryParts[] = implode(', ', array_map('ucwords', $request->symptoms));
+            $summaryParts[] = $prescription->symptoms;
         }
         
         // Diagnoses
@@ -1303,9 +1308,9 @@ class AppointmentController extends Controller
      */
     public function downloadPrescriptionByAppointment($id)
     {
-        // Custom paper size: 8.5" × 5.5" (half-letter landscape)
-        // 1 inch = 72 points, so 8.5" = 612pt, 5.5" = 396pt
-        $customPaper = [0, 0, 612, 396];
+        // Custom paper size: A5 landscape (half of A4)
+        // 1 inch = 72 points, so 8.27" = 595pt, 5.83" = 420pt
+        $customPaper = [0, 0, 595, 420];
         
         $prescription = Prescription::with(
             'medicines.medicine',
@@ -1345,9 +1350,9 @@ class AppointmentController extends Controller
      */
     public function downloadPrescription($id)
     {
-        // Custom paper size: 8.5" × 5.5" (half-letter landscape)
-        // 1 inch = 72 points, so 8.5" = 612pt, 5.5" = 396pt
-        $customPaper = [0, 0, 612, 396];
+        // Custom paper size: A5 landscape (half of A4)
+        // 1 inch = 72 points, so 8.27" = 595pt, 5.83" = 420pt
+        $customPaper = [0, 0, 595, 420];
         
         $prescription = Prescription::with(
             'medicines.medicine',
@@ -1564,7 +1569,7 @@ class AppointmentController extends Controller
         $disabledDate = DisabledDate::create([
             'date' => $date,
             'reason' => $request->input('reason'),
-            'disabled_by' => auth()->id(),
+            'disabled_by' => Auth::id(),
         ]);
 
         $disabledDate->load('disabledBy:id,name,first_name,last_name');
