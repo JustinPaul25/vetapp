@@ -11,7 +11,6 @@ use App\Models\PetBreed;
 use App\Models\PetType;
 use App\Models\Prescription;
 use App\Models\User;
-use App\Notifications\DatabaseNotification;
 use App\Services\AblyService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -33,8 +32,8 @@ class ClientController extends Controller
 
         // Check if it's an AJAX request but NOT an Inertia request
         // Also check if Accept header wants JSON or if it's explicitly an API request
-        $isApiRequest = ($request->ajax() || $request->wantsJson()) && !$request->header('X-Inertia');
-        
+        $isApiRequest = ($request->ajax() || $request->wantsJson()) && ! $request->header('X-Inertia');
+
         if ($isApiRequest) {
             // Handle search parameter - it comes as search[value] from Vue component
             $searchInput = $request->input('search');
@@ -107,21 +106,21 @@ class ClientController extends Controller
                 $q->whereHas('patients.petType', function ($subQ) use ($keyword) {
                     $subQ->where('pet_types.name', 'LIKE', "%{$keyword}%");
                 })
-                ->orWhereHas('patients', function ($subQ) use ($keyword) {
-                    $subQ->where('patients.pet_name', 'LIKE', "%{$keyword}%");
-                })
-                ->orWhereHas('patient.petType', function ($subQ) use ($keyword) {
-                    $subQ->where('pet_types.name', 'LIKE', "%{$keyword}%");
-                })
-                ->orWhereHas('patient', function ($subQ) use ($keyword) {
-                    $subQ->where('patients.pet_name', 'LIKE', "%{$keyword}%");
-                })
-                ->orWhereHas('appointment_type', function ($subQ) use ($keyword) {
-                    $subQ->where('appointment_types.name', 'LIKE', "%{$keyword}%");
-                })
-                ->orWhereHas('prescription.diagnoses.disease', function ($subQ) use ($keyword) {
-                    $subQ->where('diseases.name', 'LIKE', "%{$keyword}%");
-                });
+                    ->orWhereHas('patients', function ($subQ) use ($keyword) {
+                        $subQ->where('patients.pet_name', 'LIKE', "%{$keyword}%");
+                    })
+                    ->orWhereHas('patient.petType', function ($subQ) use ($keyword) {
+                        $subQ->where('pet_types.name', 'LIKE', "%{$keyword}%");
+                    })
+                    ->orWhereHas('patient', function ($subQ) use ($keyword) {
+                        $subQ->where('patients.pet_name', 'LIKE', "%{$keyword}%");
+                    })
+                    ->orWhereHas('appointment_type', function ($subQ) use ($keyword) {
+                        $subQ->where('appointment_types.name', 'LIKE', "%{$keyword}%");
+                    })
+                    ->orWhereHas('prescription.diagnoses.disease', function ($subQ) use ($keyword) {
+                        $subQ->where('diseases.name', 'LIKE', "%{$keyword}%");
+                    });
             });
         }
 
@@ -244,7 +243,7 @@ class ClientController extends Controller
                 'appointments' => $petItems,
                 'appointment_type' => $appointmentTypeName,
                 'pet_name' => $petCount > 1
-                    ? ($patients->first() ? $patients->first()->pet_name . ' (+' . ($petCount - 1) . ' more)' : 'N/A')
+                    ? ($patients->first() ? $patients->first()->pet_name.' (+'.($petCount - 1).' more)' : 'N/A')
                     : ($patients->first() ? $patients->first()->pet_name : 'N/A'),
                 'pet_type' => $petTypeDisplay,
             ];
@@ -261,7 +260,7 @@ class ClientController extends Controller
         foreach ($prescriptions as $prescription) {
             $patient = $prescription->patient;
             $result[] = [
-                'id' => 'followup-' . $prescription->id,
+                'id' => 'followup-'.$prescription->id,
                 'appointment_date' => $prescription->follow_up_date->format('Y-m-d'),
                 'appointment_time' => null,
                 'status' => 'Follow-up',
@@ -288,12 +287,12 @@ class ClientController extends Controller
      */
     public function bookAppointment(Request $request)
     {
-        $appointmentTimes = $request->has('appointment_times') && is_array($request->appointment_times) ? $request->appointment_times : 
+        $appointmentTimes = $request->has('appointment_times') && is_array($request->appointment_times) ? $request->appointment_times :
                            ($request->has('appointment_time') ? [$request->appointment_time] : []);
 
         // Check if using new format (pet_appointments) or legacy format (pet_ids + appointment_type_ids)
         $petAppointments = $request->has('pet_appointments') && is_array($request->pet_appointments) ? $request->pet_appointments : null;
-        
+
         if ($petAppointments) {
             // New format: pet_appointments array with pet_id and appointment_type_id pairs
             $request->validate([
@@ -348,42 +347,43 @@ class ClientController extends Controller
             $allPetIds = [];
             $allAppointmentTypeIds = [];
             $petAppointmentTypeMap = []; // Track which pet has which appointment type(s)
-            
+
             foreach ($petAppointments as $pair) {
                 // Validate pair structure
-                if (!isset($pair['pet_id']) || !isset($pair['appointment_type_id'])) {
+                if (! isset($pair['pet_id']) || ! isset($pair['appointment_type_id'])) {
                     continue; // Skip invalid pairs
                 }
-                
+
                 $petId = (int) $pair['pet_id']; // Ensure integer
                 $appointmentTypeId = (int) $pair['appointment_type_id']; // Ensure integer
 
                 // Verify pet belongs to user
                 $pet = $pets->firstWhere('id', $petId);
-                if (!$pet) {
-                    Log::warning("Pet {$petId} not found or doesn't belong to user " . auth()->id());
+                if (! $pet) {
+                    Log::warning("Pet {$petId} not found or doesn't belong to user ".auth()->id());
+
                     continue;
                 }
 
                 // Collect all unique pet IDs
-                if (!in_array($petId, $allPetIds)) {
+                if (! in_array($petId, $allPetIds)) {
                     $allPetIds[] = $petId;
                 }
 
                 // Collect all unique appointment type IDs
-                if (!in_array($appointmentTypeId, $allAppointmentTypeIds)) {
+                if (! in_array($appointmentTypeId, $allAppointmentTypeIds)) {
                     $allAppointmentTypeIds[] = $appointmentTypeId;
                 }
 
                 // Track which appointment types each pet has
-                if (!isset($petAppointmentTypeMap[$petId])) {
+                if (! isset($petAppointmentTypeMap[$petId])) {
                     $petAppointmentTypeMap[$petId] = [];
                 }
-                if (!in_array($appointmentTypeId, $petAppointmentTypeMap[$petId])) {
+                if (! in_array($appointmentTypeId, $petAppointmentTypeMap[$petId])) {
                     $petAppointmentTypeMap[$petId][] = $appointmentTypeId;
                 }
             }
-            
+
             // Log grouping for debugging
             Log::info('Appointment grouping', [
                 'user_id' => auth()->id(),
@@ -399,17 +399,19 @@ class ClientController extends Controller
                 // Ensure we have at least one pet
                 $allPetIds = array_unique($allPetIds);
                 if (empty($allPetIds)) {
-                    Log::warning("No valid pets found for appointment creation");
+                    Log::warning('No valid pets found for appointment creation');
+
                     return;
                 }
 
                 // Get the first pet as the primary patient_id (for backward compatibility)
                 $firstPetId = $allPetIds[0];
-                
+
                 // Get the first appointment type as the primary appointment_type_id (for backward compatibility)
-                $firstAppointmentTypeId = !empty($allAppointmentTypeIds) ? $allAppointmentTypeIds[0] : null;
-                if (!$firstAppointmentTypeId) {
-                    Log::warning("No appointment types found for appointment creation");
+                $firstAppointmentTypeId = ! empty($allAppointmentTypeIds) ? $allAppointmentTypeIds[0] : null;
+                if (! $firstAppointmentTypeId) {
+                    Log::warning('No appointment types found for appointment creation');
+
                     return;
                 }
 
@@ -435,20 +437,20 @@ class ClientController extends Controller
                             ->where('patient_id', $petId)
                             ->where('appointment_type_id', $appointmentTypeId)
                             ->exists();
-                        
-                        if (!$exists) {
+
+                        if (! $exists) {
                             $appointment->patients()->attach($petId, [
                                 'appointment_type_id' => $appointmentTypeId,
                             ]);
                         }
                     }
                 }
-                
+
                 // Attach ALL appointment types to this appointment via many-to-many relationship
-                if (!empty($allAppointmentTypeIds)) {
+                if (! empty($allAppointmentTypeIds)) {
                     $appointment->appointment_types()->sync($allAppointmentTypeIds);
                 }
-                
+
                 // Reload the appointment with relationships to ensure data is correct
                 $appointment->load('patients', 'appointment_type', 'appointment_types');
 
@@ -466,9 +468,9 @@ class ClientController extends Controller
             });
         } else {
             // Legacy format: separate pet_ids and appointment_type_ids arrays (creates cartesian product)
-            $petIds = $request->has('pet_ids') && is_array($request->pet_ids) ? $request->pet_ids : 
+            $petIds = $request->has('pet_ids') && is_array($request->pet_ids) ? $request->pet_ids :
                       ($request->has('pet_id') ? [$request->pet_id] : []);
-            $appointmentTypeIds = $request->has('appointment_type_ids') && is_array($request->appointment_type_ids) ? $request->appointment_type_ids : 
+            $appointmentTypeIds = $request->has('appointment_type_ids') && is_array($request->appointment_type_ids) ? $request->appointment_type_ids :
                                   ($request->has('appointment_type_id') ? [$request->appointment_type_id] : []);
 
             // Validate that we have at least one of each required field
@@ -482,7 +484,7 @@ class ClientController extends Controller
             if (empty($appointmentTimes)) {
                 $errors['appointment_times'] = ['At least one appointment time must be selected.'];
             }
-            if (!empty($errors)) {
+            if (! empty($errors)) {
                 return back()->withErrors($errors)->withInput();
             }
 
@@ -543,20 +545,22 @@ class ClientController extends Controller
                 // Ensure unique pet IDs and appointment type IDs
                 $uniquePetIds = array_unique($petIds);
                 $uniqueAppointmentTypeIds = array_unique($appointmentTypeIds);
-                
+
                 if (empty($uniquePetIds)) {
-                    Log::warning("No valid pets found for appointment creation (legacy format)");
+                    Log::warning('No valid pets found for appointment creation (legacy format)');
+
                     return;
                 }
-                
+
                 if (empty($uniqueAppointmentTypeIds)) {
-                    Log::warning("No appointment types found for appointment creation (legacy format)");
+                    Log::warning('No appointment types found for appointment creation (legacy format)');
+
                     return;
                 }
 
                 // Get the first pet as the primary patient_id (for backward compatibility)
                 $firstPetId = $uniquePetIds[0];
-                
+
                 // Get the first appointment type as the primary appointment_type_id (for backward compatibility)
                 $firstAppointmentTypeId = $uniqueAppointmentTypeIds[0];
 
@@ -582,18 +586,18 @@ class ClientController extends Controller
                             ->where('patient_id', $petId)
                             ->where('appointment_type_id', $appointmentTypeId)
                             ->exists();
-                        
-                        if (!$exists) {
+
+                        if (! $exists) {
                             $appointment->patients()->attach($petId, [
                                 'appointment_type_id' => $appointmentTypeId,
                             ]);
                         }
                     }
                 }
-                
+
                 // Attach ALL appointment types to this appointment via many-to-many relationship
                 $appointment->appointment_types()->sync($uniqueAppointmentTypeIds);
-                
+
                 // Reload the appointment with relationships
                 $appointment->load('patients', 'appointment_type', 'appointment_types');
 
@@ -636,31 +640,31 @@ class ClientController extends Controller
         // Send notifications for each created appointment
         foreach ($createdAppointments as $appointment) {
             $pet = $appointment->patient;
-            $patient_owner_full_name = $pet->user ? 
-                trim(($pet->user->first_name ?? '') . ' ' . ($pet->user->last_name ?? '')) ?: $pet->user->name : 'N/A';
+            $patient_owner_full_name = $pet->user ?
+                trim(($pet->user->first_name ?? '').' '.($pet->user->last_name ?? '')) ?: $pet->user->name : 'N/A';
             $appointmentTypeName = $appointment->appointment_type->name ?? 'N/A';
             $appointmentTime12Hour = Carbon::createFromFormat('H:i', $appointment->appointment_time)->format('h:i A');
 
-            $link = config('app.url') . '/admin/appointments/' . $appointment->id;
-            $subject = sprintf("%s has submitted new appointment.", $patient_owner_full_name ?? '');
-            $message = "Hi, new appointment has been submitted<br><br>" .
-                "Appointment Details.<br><br>" .
-                "Full Name: " . $patient_owner_full_name . "<br>" .
-                "Mobile Number: " . ($pet->user ? ($pet->user->mobile_number ?? 'N/A') : 'N/A') . "<br>" .
-                "Email Address: " . ($pet->user ? ($pet->user->email ?? 'N/A') : 'N/A') . "<br>" .
-                "Pet Type: " . ($pet->petType->name ?? 'N/A') . "<br>" .
-                "Breed: " . ($pet->pet_breed ?? 'N/A') . "<br>" .
-                "Appointment Type: " . $appointmentTypeName . "<br>" .
-                "Appointment Date: " . $appointmentDate . "<br>" .
-                "Appointment Time: " . $appointmentTime12Hour . "<br>" .
-                "<p style='text-align:center'><a href='" . $link . "' style='background-color: #4CAF50; border: none; color: white; padding: 15px 32px; text-align: center; text-decoration: none; font-size: 12px; border-radius: 15px;'>View Appointment</a></p>";
+            $link = config('app.url').'/admin/appointments/'.$appointment->id;
+            $subject = sprintf('%s has submitted new appointment.', $patient_owner_full_name ?? '');
+            $message = 'Hi, new appointment has been submitted<br><br>'.
+                'Appointment Details.<br><br>'.
+                'Full Name: '.$patient_owner_full_name.'<br>'.
+                'Mobile Number: '.($pet->user ? ($pet->user->mobile_number ?? 'N/A') : 'N/A').'<br>'.
+                'Email Address: '.($pet->user ? ($pet->user->email ?? 'N/A') : 'N/A').'<br>'.
+                'Pet Type: '.($pet->petType->name ?? 'N/A').'<br>'.
+                'Breed: '.($pet->pet_breed ?? 'N/A').'<br>'.
+                'Appointment Type: '.$appointmentTypeName.'<br>'.
+                'Appointment Date: '.$appointmentDate.'<br>'.
+                'Appointment Time: '.$appointmentTime12Hour.'<br>'.
+                "<p style='text-align:center'><a href='".$link."' style='background-color: #4CAF50; border: none; color: white; padding: 15px 32px; text-align: center; text-decoration: none; font-size: 12px; border-radius: 15px;'>View Appointment</a></p>";
 
-            $appointmentMessage = $appointmentTypeName . ' appointment scheduled for ' . $appointmentDate . ' at ' . $appointmentTime12Hour;
+            $appointmentMessage = $appointmentTypeName.' appointment scheduled for '.$appointmentDate.' at '.$appointmentTime12Hour;
 
             // Send notifications via database, email, and Ably to admins
             foreach ($adminUsers as $adminUser) {
                 $adminUser->notify(new \App\Notifications\DefaultNotification($subject, $message, $link));
-                
+
                 // Send real-time notification via Ably
                 $ablyService->publishToUser($adminUser->id, 'appointment.created', [
                     'appointment_id' => $appointment->id,
@@ -675,7 +679,7 @@ class ClientController extends Controller
             // Send notifications via database and Ably to staff
             foreach ($staffUsers as $staffUser) {
                 $staffUser->notify(new \App\Notifications\DefaultNotification($subject, $message, $link));
-                
+
                 // Send real-time notification via Ably
                 $ablyService->publishToUser($staffUser->id, 'appointment.created', [
                     'appointment_id' => $appointment->id,
@@ -692,9 +696,9 @@ class ClientController extends Controller
         if (count($createdAppointments) > 0) {
             $firstAppointment = $createdAppointments[0];
             $firstPet = $firstAppointment->patient;
-            $patient_owner_full_name = $firstPet->user ? 
-                trim(($firstPet->user->first_name ?? '') . ' ' . ($firstPet->user->last_name ?? '')) ?: $firstPet->user->name : 'N/A';
-            
+            $patient_owner_full_name = $firstPet->user ?
+                trim(($firstPet->user->first_name ?? '').' '.($firstPet->user->last_name ?? '')) ?: $firstPet->user->name : 'N/A';
+
             $ablyService->publishToAdmins('appointment.created', [
                 'appointment_count' => count($createdAppointments),
                 'owner_name' => $patient_owner_full_name,
@@ -708,7 +712,7 @@ class ClientController extends Controller
         }
 
         $appointmentCount = count($createdAppointments);
-        $successMessage = $appointmentCount === 1 
+        $successMessage = $appointmentCount === 1
             ? 'Appointment created successfully.'
             : sprintf('%d appointments created successfully.', $appointmentCount);
 
@@ -727,21 +731,21 @@ class ClientController extends Controller
                 $query->whereHas('patients', function ($q) {
                     $q->where('user_id', auth()->id());
                 })
-                ->orWhereHas('patient', function ($q) {
-                    $q->where('user_id', auth()->id());
-                })
-                ->orWhere('user_id', auth()->id());
+                    ->orWhereHas('patient', function ($q) {
+                        $q->where('user_id', auth()->id());
+                    })
+                    ->orWhere('user_id', auth()->id());
             })
             ->firstOrFail();
-        
+
         // Ensure relationships are loaded
-        if (!$appointment->relationLoaded('appointment_type')) {
+        if (! $appointment->relationLoaded('appointment_type')) {
             $appointment->load('appointment_type');
         }
-        if (!$appointment->relationLoaded('patients')) {
+        if (! $appointment->relationLoaded('patients')) {
             $appointment->load('patients.petType');
         }
-        if (!$appointment->relationLoaded('patient')) {
+        if (! $appointment->relationLoaded('patient')) {
             $appointment->load('patient.petType');
         }
 
@@ -766,7 +770,7 @@ class ClientController extends Controller
                     ->join('appointment_types', 'appointment_patient.appointment_type_id', '=', 'appointment_types.id')
                     ->pluck('appointment_types.name')
                     ->toArray();
-                
+
                 // If no appointment types found in pivot, fallback to appointment's primary type
                 if (empty($petAppointmentTypes)) {
                     if ($appointment->relationLoaded('appointment_type') && $appointment->appointment_type) {
@@ -775,7 +779,7 @@ class ClientController extends Controller
                         $petAppointmentTypes = ['N/A'];
                     }
                 }
-                
+
                 return [
                     'id' => $pet->id,
                     'pet_name' => $pet->pet_name,
@@ -795,13 +799,13 @@ class ClientController extends Controller
                 ->join('appointment_types', 'appointment_patient.appointment_type_id', '=', 'appointment_types.id')
                 ->pluck('appointment_types.name')
                 ->toArray();
-            
+
             if (empty($petAppointmentTypes) && $appointment->appointment_type) {
                 $petAppointmentTypes = [$appointment->appointment_type->name];
             } elseif (empty($petAppointmentTypes)) {
                 $petAppointmentTypes = ['N/A'];
             }
-            
+
             $patients = [[
                 'id' => $appointment->patient->id,
                 'pet_name' => $appointment->patient->pet_name,
@@ -865,8 +869,8 @@ class ClientController extends Controller
     public function cancelAppointment(Request $request, $id)
     {
         // Check if this is an API request (not Inertia)
-        $isApiRequest = ($request->ajax() || $request->wantsJson()) && !$request->header('X-Inertia');
-        
+        $isApiRequest = ($request->ajax() || $request->wantsJson()) && ! $request->header('X-Inertia');
+
         try {
             $request->validate([
                 'cancel_reason' => 'required|string|in:Personal reason,Emergency,Health related,Booked incorrect date/time,Other/Prefer not to say',
@@ -877,7 +881,7 @@ class ClientController extends Controller
                     $query->whereHas('patient', function ($q) {
                         $q->where('user_id', auth()->id());
                     })
-                    ->orWhere('user_id', auth()->id());
+                        ->orWhere('user_id', auth()->id());
                 })
                 ->firstOrFail();
 
@@ -886,6 +890,7 @@ class ClientController extends Controller
                 if ($isApiRequest) {
                     return response()->json(['error' => 'This appointment is already canceled.'], 403);
                 }
+
                 return redirect()->route('client.appointments.show', $id)
                     ->with('error', 'This appointment is already canceled.');
             }
@@ -894,6 +899,7 @@ class ClientController extends Controller
                 if ($isApiRequest) {
                     return response()->json(['error' => 'Only pending appointments can be canceled.'], 403);
                 }
+
                 return redirect()->route('client.appointments.show', $id)
                     ->with('error', 'Only pending appointments can be canceled.');
             }
@@ -909,8 +915,8 @@ class ClientController extends Controller
 
             // Prepare notification data
             $pet = $appointment->patient;
-            $patient_owner_full_name = $pet->user ? 
-                trim(($pet->user->first_name ?? '') . ' ' . ($pet->user->last_name ?? '')) ?: $pet->user->name : 'N/A';
+            $patient_owner_full_name = $pet->user ?
+                trim(($pet->user->first_name ?? '').' '.($pet->user->last_name ?? '')) ?: $pet->user->name : 'N/A';
             $appointmentTypeName = $appointment->appointment_type->name ?? 'N/A';
             $appointmentDate = $appointment->appointment_date->format('Y-m-d');
             $appointmentTime = Carbon::createFromFormat('H:i', $appointment->appointment_time)->format('h:i A');
@@ -931,27 +937,27 @@ class ClientController extends Controller
                 ->distinct()
                 ->get();
 
-            $adminLink = config('app.url') . '/admin/appointments/' . $appointment->id;
-            $adminSubject = sprintf("%s has canceled an appointment.", $patient_owner_full_name ?? '');
-            $adminMessage = "Hi, an appointment has been canceled<br><br>" .
-                "Appointment Details.<br><br>" .
-                "Full Name: " . $patient_owner_full_name . "<br>" .
-                "Mobile Number: " . ($pet->user ? ($pet->user->mobile_number ?? 'N/A') : 'N/A') . "<br>" .
-                "Email Address: " . ($pet->user ? ($pet->user->email ?? 'N/A') : 'N/A') . "<br>" .
-                "Pet Type: " . ($pet->petType->name ?? 'N/A') . "<br>" .
-                "Breed: " . ($pet->pet_breed ?? 'N/A') . "<br>" .
-                "Appointment Type: " . $appointmentTypeName . "<br>" .
-                "Appointment Date: " . $appointmentDate . "<br>" .
-                "Appointment Time: " . $appointmentTime . "<br>" .
-                "<p style='text-align:center'><a href='" . $adminLink . "' style='background-color: #4CAF50; border: none; color: white; padding: 15px 32px; text-align: center; text-decoration: none; font-size: 12px; border-radius: 15px;'>View Appointment</a></p>";
+            $adminLink = config('app.url').'/admin/appointments/'.$appointment->id;
+            $adminSubject = sprintf('%s has canceled an appointment.', $patient_owner_full_name ?? '');
+            $adminMessage = 'Hi, an appointment has been canceled<br><br>'.
+                'Appointment Details.<br><br>'.
+                'Full Name: '.$patient_owner_full_name.'<br>'.
+                'Mobile Number: '.($pet->user ? ($pet->user->mobile_number ?? 'N/A') : 'N/A').'<br>'.
+                'Email Address: '.($pet->user ? ($pet->user->email ?? 'N/A') : 'N/A').'<br>'.
+                'Pet Type: '.($pet->petType->name ?? 'N/A').'<br>'.
+                'Breed: '.($pet->pet_breed ?? 'N/A').'<br>'.
+                'Appointment Type: '.$appointmentTypeName.'<br>'.
+                'Appointment Date: '.$appointmentDate.'<br>'.
+                'Appointment Time: '.$appointmentTime.'<br>'.
+                "<p style='text-align:center'><a href='".$adminLink."' style='background-color: #4CAF50; border: none; color: white; padding: 15px 32px; text-align: center; text-decoration: none; font-size: 12px; border-radius: 15px;'>View Appointment</a></p>";
 
             $ablyService = app(AblyService::class);
-            $appointmentMessage = $appointmentTypeName . ' appointment scheduled for ' . $appointmentDate . ' at ' . $appointmentTime . ' has been canceled';
+            $appointmentMessage = $appointmentTypeName.' appointment scheduled for '.$appointmentDate.' at '.$appointmentTime.' has been canceled';
 
             // Send notifications via database, email, and Ably to admins
             foreach ($adminUsers as $user) {
                 $user->notify(new \App\Notifications\DefaultNotification($adminSubject, $adminMessage, $adminLink));
-                
+
                 // Send real-time notification via Ably
                 $ablyService->publishToUser($user->id, 'appointment.canceled', [
                     'appointment_id' => $appointment->id,
@@ -1005,17 +1011,17 @@ class ClientController extends Controller
 
             // Send notification to client confirming cancellation
             if ($pet->user) {
-                $clientLink = config('app.url') . '/appointments/' . $appointment->id;
+                $clientLink = config('app.url').'/appointments/'.$appointment->id;
                 $clientSubject = 'Your appointment has been canceled';
-                $clientMessage = "Hi {$patient_owner_full_name},<br><br>" .
-                    "Your appointment has been successfully canceled.<br><br>" .
-                    "Appointment Details:<br><br>" .
-                    "Pet Name: {$pet->pet_name}<br>" .
-                    "Appointment Type: {$appointmentTypeName}<br>" .
-                    "Appointment Date: {$appointmentDate}<br>" .
-                    "Appointment Time: {$appointmentTime}<br><br>" .
-                    "If you need to schedule a new appointment, please visit our appointment booking page.<br><br>" .
-                    "<p style='text-align:center'><a href='" . $clientLink . "' style='background-color: #4CAF50; border: none; color: white; padding: 15px 32px; text-align: center; text-decoration: none; font-size: 12px; border-radius: 15px;'>View Appointment</a></p>";
+                $clientMessage = "Hi {$patient_owner_full_name},<br><br>".
+                    'Your appointment has been successfully canceled.<br><br>'.
+                    'Appointment Details:<br><br>'.
+                    "Pet Name: {$pet->pet_name}<br>".
+                    "Appointment Type: {$appointmentTypeName}<br>".
+                    "Appointment Date: {$appointmentDate}<br>".
+                    "Appointment Time: {$appointmentTime}<br><br>".
+                    'If you need to schedule a new appointment, please visit our appointment booking page.<br><br>'.
+                    "<p style='text-align:center'><a href='".$clientLink."' style='background-color: #4CAF50; border: none; color: white; padding: 15px 32px; text-align: center; text-decoration: none; font-size: 12px; border-radius: 15px;'>View Appointment</a></p>";
 
                 // Send email notification to client
                 if ($pet->user->email) {
@@ -1047,12 +1053,12 @@ class ClientController extends Controller
             return redirect()->route('client.appointments.index')
                 ->with('success', 'Appointment canceled successfully.');
         } catch (\Exception $e) {
-            Log::error('Error canceling appointment: ' . $e->getMessage());
-            
+            Log::error('Error canceling appointment: '.$e->getMessage());
+
             if ($isApiRequest) {
                 return response()->json(['error' => 'Failed to cancel appointment.'], 500);
             }
-            
+
             return redirect()->route('client.appointments.show', $id)
                 ->with('error', 'Failed to cancel appointment. Please try again.');
         }
@@ -1064,8 +1070,8 @@ class ClientController extends Controller
     public function rescheduleAppointment(Request $request, $id)
     {
         // Check if this is an API request (not Inertia)
-        $isApiRequest = ($request->ajax() || $request->wantsJson()) && !$request->header('X-Inertia');
-        
+        $isApiRequest = ($request->ajax() || $request->wantsJson()) && ! $request->header('X-Inertia');
+
         try {
             $request->validate([
                 'appointment_date' => 'required|date|after:today',
@@ -1078,7 +1084,7 @@ class ClientController extends Controller
                     $query->whereHas('patient', function ($q) {
                         $q->where('user_id', auth()->id());
                     })
-                    ->orWhere('user_id', auth()->id());
+                        ->orWhere('user_id', auth()->id());
                 })
                 ->with(['appointment_type', 'patient.petType', 'patient.user'])
                 ->firstOrFail();
@@ -1088,6 +1094,7 @@ class ClientController extends Controller
                 if ($isApiRequest) {
                     return response()->json(['error' => 'Canceled appointments cannot be rescheduled.'], 403);
                 }
+
                 return redirect()->route('client.appointments.show', $id)
                     ->with('error', 'Canceled appointments cannot be rescheduled.');
             }
@@ -1096,6 +1103,7 @@ class ClientController extends Controller
                 if ($isApiRequest) {
                     return response()->json(['error' => 'Completed appointments cannot be rescheduled.'], 403);
                 }
+
                 return redirect()->route('client.appointments.show', $id)
                     ->with('error', 'Completed appointments cannot be rescheduled.');
             }
@@ -1104,6 +1112,7 @@ class ClientController extends Controller
                 if ($isApiRequest) {
                     return response()->json(['error' => 'Only pending appointments can be rescheduled.'], 403);
                 }
+
                 return redirect()->route('client.appointments.show', $id)
                     ->with('error', 'Only pending appointments can be rescheduled.');
             }
@@ -1138,28 +1147,29 @@ class ClientController extends Controller
             if ($patients->isEmpty() && $appointment->patient) {
                 $patients = collect([$appointment->patient]);
             }
-            
+
             // Get the first patient's user for notifications (all pets should belong to the same user)
             $firstPatient = $patients->first();
-            if (!$firstPatient || !$firstPatient->user) {
+            if (! $firstPatient || ! $firstPatient->user) {
                 if ($isApiRequest) {
                     return response()->json(['error' => 'Pet owner not found.'], 404);
                 }
+
                 return redirect()->route('client.appointments.show', $id)
                     ->with('error', 'Pet owner not found.');
             }
 
-            $patient_owner_full_name = $firstPatient->user ? 
-                trim(($firstPatient->user->first_name ?? '') . ' ' . ($firstPatient->user->last_name ?? '')) ?: $firstPatient->user->name : 'N/A';
+            $patient_owner_full_name = $firstPatient->user ?
+                trim(($firstPatient->user->first_name ?? '').' '.($firstPatient->user->last_name ?? '')) ?: $firstPatient->user->name : 'N/A';
 
             // Build pet details with their appointment types for admin/staff notifications
             $petDetailsHtml = '';
             $petNamesList = [];
             $allAppointmentTypes = [];
-            
+
             foreach ($patients as $pet) {
                 $petNamesList[] = $pet->pet_name ?? 'Unnamed Pet';
-                
+
                 // Get appointment types for this specific pet from the pivot table
                 $petAppointmentTypes = \DB::table('appointment_patient')
                     ->where('appointment_id', $appointment->id)
@@ -1167,7 +1177,7 @@ class ClientController extends Controller
                     ->join('appointment_types', 'appointment_patient.appointment_type_id', '=', 'appointment_types.id')
                     ->pluck('appointment_types.name')
                     ->toArray();
-                
+
                 // If no appointment types found in pivot, fallback to appointment's primary type
                 if (empty($petAppointmentTypes)) {
                     if ($appointment->appointment_type) {
@@ -1176,16 +1186,16 @@ class ClientController extends Controller
                         $petAppointmentTypes = ['N/A'];
                     }
                 }
-                
+
                 $allAppointmentTypes = array_merge($allAppointmentTypes, $petAppointmentTypes);
                 $appointmentTypesList = implode(', ', $petAppointmentTypes);
-                
-                $petDetailsHtml .= "Pet Name: " . ($pet->pet_name ?? 'Unnamed Pet') . "<br>" .
-                    "Pet Type: " . ($pet->petType->name ?? 'N/A') . "<br>" .
-                    "Breed: " . ($pet->pet_breed ?? 'N/A') . "<br>" .
+
+                $petDetailsHtml .= 'Pet Name: '.($pet->pet_name ?? 'Unnamed Pet').'<br>'.
+                    'Pet Type: '.($pet->petType->name ?? 'N/A').'<br>'.
+                    'Breed: '.($pet->pet_breed ?? 'N/A').'<br>'.
                     "Appointment Type(s): {$appointmentTypesList}<br><br>";
             }
-            
+
             $petNamesListText = implode(', ', $petNamesList);
             $allAppointmentTypes = array_unique($allAppointmentTypes);
             $appointmentTypeName = implode(', ', $allAppointmentTypes);
@@ -1215,27 +1225,27 @@ class ClientController extends Controller
                 ->distinct()
                 ->get();
 
-            $link = config('app.url') . '/admin/appointments/' . $appointment->id;
-            $subject = sprintf("%s has rescheduled an appointment.", $patient_owner_full_name ?? '');
-            $message = "Hi, an appointment has been rescheduled<br><br>" .
-                "Appointment Details.<br><br>" .
-                "Full Name: " . $patient_owner_full_name . "<br>" .
-                "Mobile Number: " . ($firstPatient->user ? ($firstPatient->user->mobile_number ?? 'N/A') : 'N/A') . "<br>" .
-                "Email Address: " . ($firstPatient->user ? ($firstPatient->user->email ?? 'N/A') : 'N/A') . "<br><br>" .
-                $petDetailsHtml .
-                "Previous Date: " . $oldDateFormatted . "<br>" .
-                "Previous Time: " . $oldTimeFormatted . "<br>" .
-                "New Date: " . $newDateFormatted . "<br>" .
-                "New Time: " . $newTimeFormatted . "<br>" .
-                "<p style='text-align:center'><a href='" . $link . "' style='background-color: #4CAF50; border: none; color: white; padding: 15px 32px; text-align: center; text-decoration: none; font-size: 12px; border-radius: 15px;'>View Appointment</a></p>";
+            $link = config('app.url').'/admin/appointments/'.$appointment->id;
+            $subject = sprintf('%s has rescheduled an appointment.', $patient_owner_full_name ?? '');
+            $message = 'Hi, an appointment has been rescheduled<br><br>'.
+                'Appointment Details.<br><br>'.
+                'Full Name: '.$patient_owner_full_name.'<br>'.
+                'Mobile Number: '.($firstPatient->user ? ($firstPatient->user->mobile_number ?? 'N/A') : 'N/A').'<br>'.
+                'Email Address: '.($firstPatient->user ? ($firstPatient->user->email ?? 'N/A') : 'N/A').'<br><br>'.
+                $petDetailsHtml.
+                'Previous Date: '.$oldDateFormatted.'<br>'.
+                'Previous Time: '.$oldTimeFormatted.'<br>'.
+                'New Date: '.$newDateFormatted.'<br>'.
+                'New Time: '.$newTimeFormatted.'<br>'.
+                "<p style='text-align:center'><a href='".$link."' style='background-color: #4CAF50; border: none; color: white; padding: 15px 32px; text-align: center; text-decoration: none; font-size: 12px; border-radius: 15px;'>View Appointment</a></p>";
 
             $ablyService = app(AblyService::class);
-            $appointmentMessage = $appointmentTypeName . ' appointment rescheduled from ' . $oldDateFormatted . ' at ' . $oldTimeFormatted . ' to ' . $newDateFormatted . ' at ' . $newTimeFormatted;
+            $appointmentMessage = $appointmentTypeName.' appointment rescheduled from '.$oldDateFormatted.' at '.$oldTimeFormatted.' to '.$newDateFormatted.' at '.$newTimeFormatted;
 
             // Send notifications via database, email, and Ably to admins
             foreach ($adminUsers as $user) {
                 $user->notify(new \App\Notifications\DefaultNotification($subject, $message, $link));
-                
+
                 // Send real-time notification via Ably
                 $ablyService->publishToUser($user->id, 'appointment.rescheduled', [
                     'appointment_id' => $appointment->id,
@@ -1254,7 +1264,7 @@ class ClientController extends Controller
             // Send notifications via database and Ably to staff
             foreach ($staffUsers as $user) {
                 $user->notify(new \App\Notifications\DefaultNotification($subject, $message, $link));
-                
+
                 // Send real-time notification via Ably
                 $ablyService->publishToUser($user->id, 'appointment.rescheduled', [
                     'appointment_id' => $appointment->id,
@@ -1300,10 +1310,10 @@ class ClientController extends Controller
 
             // Send notification to client confirming reschedule
             if ($firstPatient->user) {
-                $clientLink = config('app.url') . '/appointments/' . $appointment->id;
+                $clientLink = config('app.url').'/appointments/'.$appointment->id;
                 $clientSubject = 'Your appointment has been rescheduled';
                 $rescheduleReason = $request->reschedule_reason;
-                
+
                 // Build pet details HTML for client email
                 $clientPetDetailsHtml = '';
                 foreach ($patients as $pet) {
@@ -1314,7 +1324,7 @@ class ClientController extends Controller
                         ->join('appointment_types', 'appointment_patient.appointment_type_id', '=', 'appointment_types.id')
                         ->pluck('appointment_types.name')
                         ->toArray();
-                    
+
                     // If no appointment types found in pivot, fallback to appointment's primary type
                     if (empty($petAppointmentTypes)) {
                         if ($appointment->appointment_type) {
@@ -1323,23 +1333,23 @@ class ClientController extends Controller
                             $petAppointmentTypes = ['N/A'];
                         }
                     }
-                    
+
                     $appointmentTypesList = implode(', ', $petAppointmentTypes);
-                    $clientPetDetailsHtml .= "Pet Name: " . ($pet->pet_name ?? 'Unnamed Pet') . "<br>" .
+                    $clientPetDetailsHtml .= 'Pet Name: '.($pet->pet_name ?? 'Unnamed Pet').'<br>'.
                         "Appointment Type(s): {$appointmentTypesList}<br><br>";
                 }
-                
-                $clientMessage = "Hi {$patient_owner_full_name},<br><br>" .
-                    "Your appointment has been successfully rescheduled.<br><br>" .
-                    "Reason for Rescheduling: {$rescheduleReason}<br><br>" .
-                    "Appointment Details:<br><br>" .
-                    $clientPetDetailsHtml .
-                    "Previous Date: {$oldDateFormatted}<br>" .
-                    "Previous Time: {$oldTimeFormatted}<br>" .
-                    "New Date: {$newDateFormatted}<br>" .
-                    "New Time: {$newTimeFormatted}<br><br>" .
-                    "Please note that your appointment status has been reset to pending and will need to be approved again.<br><br>" .
-                    "<p style='text-align:center'><a href='" . $clientLink . "' style='background-color: #4CAF50; border: none; color: white; padding: 15px 32px; text-align: center; text-decoration: none; font-size: 12px; border-radius: 15px;'>View Appointment</a></p>";
+
+                $clientMessage = "Hi {$patient_owner_full_name},<br><br>".
+                    'Your appointment has been successfully rescheduled.<br><br>'.
+                    "Reason for Rescheduling: {$rescheduleReason}<br><br>".
+                    'Appointment Details:<br><br>'.
+                    $clientPetDetailsHtml.
+                    "Previous Date: {$oldDateFormatted}<br>".
+                    "Previous Time: {$oldTimeFormatted}<br>".
+                    "New Date: {$newDateFormatted}<br>".
+                    "New Time: {$newTimeFormatted}<br><br>".
+                    'Please note that your appointment status has been reset to pending and will need to be approved again.<br><br>'.
+                    "<p style='text-align:center'><a href='".$clientLink."' style='background-color: #4CAF50; border: none; color: white; padding: 15px 32px; text-align: center; text-decoration: none; font-size: 12px; border-radius: 15px;'>View Appointment</a></p>";
 
                 // Send email notification to client
                 if ($firstPatient->user->email) {
@@ -1382,12 +1392,12 @@ class ClientController extends Controller
             }
             throw $e;
         } catch (\Exception $e) {
-            Log::error('Error rescheduling appointment: ' . $e->getMessage());
-            
+            Log::error('Error rescheduling appointment: '.$e->getMessage());
+
             if ($isApiRequest) {
-                return response()->json(['error' => 'Failed to reschedule appointment: ' . $e->getMessage()], 500);
+                return response()->json(['error' => 'Failed to reschedule appointment: '.$e->getMessage()], 500);
             }
-            
+
             return redirect()->route('client.appointments.show', $id)
                 ->with('error', 'Failed to reschedule appointment. Please try again.');
         }
@@ -1420,17 +1430,17 @@ class ClientController extends Controller
         }
 
         // Check minimum notice time
-        $appointmentDateTime = Carbon::parse($date . ' ' . $time);
+        $appointmentDateTime = Carbon::parse($date.' '.$time);
         $minimumNotice = Carbon::now()->addHours($restrictions['minimum_notice_hours']);
         if ($appointmentDateTime->lt($minimumNotice)) {
             throw new \Illuminate\Validation\ValidationException(
                 validator([], []),
-                ['appointment_time' => ['Appointments must be rescheduled at least ' . $restrictions['minimum_notice_hours'] . ' hours in advance.']]
+                ['appointment_time' => ['Appointments must be rescheduled at least '.$restrictions['minimum_notice_hours'].' hours in advance.']]
             );
         }
 
         // Check working hours
-        if (!$this->isWithinWorkingHours($time12Hour, $restrictions)) {
+        if (! $this->isWithinWorkingHours($time12Hour, $restrictions)) {
             throw new \Illuminate\Validation\ValidationException(
                 validator([], []),
                 ['appointment_time' => ['Appointments can only be rescheduled during working hours.']]
@@ -1451,7 +1461,7 @@ class ClientController extends Controller
             ->where('id', '!=', $excludeAppointmentId)
             ->where(function ($q) {
                 $q->whereNull('is_canceled')
-                  ->orWhere('is_canceled', false);
+                    ->orWhere('is_canceled', false);
             })
             ->exists();
         if ($existing) {
@@ -1466,7 +1476,7 @@ class ClientController extends Controller
             ->where('id', '!=', $excludeAppointmentId)
             ->where(function ($q) {
                 $q->whereNull('is_canceled')
-                  ->orWhere('is_canceled', false);
+                    ->orWhere('is_canceled', false);
             })
             ->count();
         if ($dailyCount >= $restrictions['max_appointments_per_day']) {
@@ -1481,7 +1491,7 @@ class ClientController extends Controller
             ->where('id', '!=', $excludeAppointmentId)
             ->where(function ($q) {
                 $q->whereNull('is_canceled')
-                  ->orWhere('is_canceled', false);
+                    ->orWhere('is_canceled', false);
             })
             ->pluck('appointment_time')
             ->map(function ($t) {
@@ -1525,7 +1535,7 @@ class ClientController extends Controller
         $bookedTimes = Appointment::where('appointment_date', $selectedDate)
             ->where(function ($q) {
                 $q->whereNull('is_canceled')
-                  ->orWhere('is_canceled', false);
+                    ->orWhere('is_canceled', false);
             })
             ->pluck('appointment_time')
             ->map(function ($time) {
@@ -1537,7 +1547,7 @@ class ClientController extends Controller
         $availableSlots = [];
 
         foreach ($allTimeSlots as $slot) {
-            if (!$this->isWithinWorkingHours($slot, $restrictions)) {
+            if (! $this->isWithinWorkingHours($slot, $restrictions)) {
                 continue;
             }
             if ($this->isDuringLunchBreak($slot, $restrictions)) {
@@ -1552,7 +1562,7 @@ class ClientController extends Controller
             $dailyCount = Appointment::where('appointment_date', $selectedDate)
                 ->where(function ($q) {
                     $q->whereNull('is_canceled')
-                      ->orWhere('is_canceled', false);
+                        ->orWhere('is_canceled', false);
                 })
                 ->count();
             if ($dailyCount >= $restrictions['max_appointments_per_day']) {
@@ -1648,17 +1658,17 @@ class ClientController extends Controller
         }
 
         // Check minimum notice time
-        $appointmentDateTime = Carbon::parse($date . ' ' . $time);
+        $appointmentDateTime = Carbon::parse($date.' '.$time);
         $minimumNotice = Carbon::now()->addHours($restrictions['minimum_notice_hours']);
         if ($appointmentDateTime->lt($minimumNotice)) {
             throw new \Illuminate\Validation\ValidationException(
                 validator([], []),
-                ['appointment_time' => ['Appointments must be booked at least ' . $restrictions['minimum_notice_hours'] . ' hours in advance.']]
+                ['appointment_time' => ['Appointments must be booked at least '.$restrictions['minimum_notice_hours'].' hours in advance.']]
             );
         }
 
         // Check working hours
-        if (!$this->isWithinWorkingHours($time12Hour, $restrictions)) {
+        if (! $this->isWithinWorkingHours($time12Hour, $restrictions)) {
             throw new \Illuminate\Validation\ValidationException(
                 validator([], []),
                 ['appointment_time' => ['Appointments can only be booked during working hours.']]
@@ -1678,7 +1688,7 @@ class ClientController extends Controller
             ->where('appointment_time', $time)
             ->where(function ($q) {
                 $q->whereNull('is_canceled')
-                  ->orWhere('is_canceled', false);
+                    ->orWhere('is_canceled', false);
             })
             ->exists();
         if ($existing) {
@@ -1692,7 +1702,7 @@ class ClientController extends Controller
         $dailyCount = Appointment::where('appointment_date', $date)
             ->where(function ($q) {
                 $q->whereNull('is_canceled')
-                  ->orWhere('is_canceled', false);
+                    ->orWhere('is_canceled', false);
             })
             ->count();
         if ($dailyCount >= $restrictions['max_appointments_per_day']) {
@@ -1706,7 +1716,7 @@ class ClientController extends Controller
         $bookedTimes = Appointment::where('appointment_date', $date)
             ->where(function ($q) {
                 $q->whereNull('is_canceled')
-                  ->orWhere('is_canceled', false);
+                    ->orWhere('is_canceled', false);
             })
             ->pluck('appointment_time')
             ->map(function ($t) {
@@ -1810,7 +1820,7 @@ class ClientController extends Controller
             ->with('petType');
 
         // Search functionality
-        if ($request->has('search') && !empty($request->search)) {
+        if ($request->has('search') && ! empty($request->search)) {
             $keyword = $request->search;
             $query->where(function ($q) use ($keyword) {
                 $q->where('pet_name', 'LIKE', "%{$keyword}%")
@@ -1824,16 +1834,16 @@ class ClientController extends Controller
         // Sort functionality
         $sortBy = $request->get('sort_by', 'created_at');
         $sortDirection = $request->get('sort_direction', 'desc');
-        
+
         // Validate sort_by to prevent SQL injection
         $allowedSortColumns = ['pet_name', 'pet_breed', 'pet_gender', 'created_at'];
-        if (!in_array($sortBy, $allowedSortColumns)) {
+        if (! in_array($sortBy, $allowedSortColumns)) {
             $sortBy = 'created_at';
         }
-        
+
         // Validate sort_direction
         $sortDirection = strtolower($sortDirection) === 'asc' ? 'asc' : 'desc';
-        
+
         $query->orderBy($sortBy, $sortDirection);
 
         $pets = $query->paginate(15);
@@ -1914,9 +1924,9 @@ class ClientController extends Controller
         ]);
 
         // Validate pet_type_id exists if not creating new
-        if (!empty($validated['pet_type_id']) && $validated['pet_type_id'] !== '__new__') {
+        if (! empty($validated['pet_type_id']) && $validated['pet_type_id'] !== '__new__') {
             $exists = PetType::where('id', $validated['pet_type_id'])->exists();
-            if (!$exists) {
+            if (! $exists) {
                 return back()->withErrors(['pet_type_id' => 'The selected pet type is invalid.'])->withInput();
             }
         }
@@ -1924,10 +1934,10 @@ class ClientController extends Controller
         return DB::transaction(function () use ($validated, $request) {
             // Handle custom pet type creation
             $petTypeId = $validated['pet_type_id'];
-            if (!empty($validated['custom_pet_type_name']) && ($petTypeId === '__new__' || empty($petTypeId))) {
+            if (! empty($validated['custom_pet_type_name']) && ($petTypeId === '__new__' || empty($petTypeId))) {
                 // Check if pet type with this name already exists (case-insensitive)
                 $existingPetType = PetType::whereRaw('LOWER(name) = ?', [strtolower($validated['custom_pet_type_name'])])->first();
-                
+
                 if ($existingPetType) {
                     $petTypeId = $existingPetType->id;
                 } else {
@@ -1941,22 +1951,22 @@ class ClientController extends Controller
 
             // Handle custom breed creation
             $petBreed = $validated['pet_breed'];
-            if (!empty($validated['custom_pet_breed_name']) && ($petBreed === '__new__' || empty($petBreed))) {
+            if (! empty($validated['custom_pet_breed_name']) && ($petBreed === '__new__' || empty($petBreed))) {
                 $breedName = ucfirst($validated['custom_pet_breed_name']);
-                
+
                 // Check if breed with this name already exists for this pet type (case-insensitive)
                 $existingBreed = PetBreed::where('pet_type_id', $petTypeId)
                     ->whereRaw('LOWER(name) = ?', [strtolower($breedName)])
                     ->first();
-                
-                if (!$existingBreed) {
+
+                if (! $existingBreed) {
                     // Create new breed
                     PetBreed::create([
                         'name' => $breedName,
                         'pet_type_id' => $petTypeId,
                     ]);
                 }
-                
+
                 $petBreed = $breedName;
             }
 
@@ -1974,8 +1984,8 @@ class ClientController extends Controller
             $patient->load('petType');
 
             // Check if it's an API request (not Inertia)
-            $isApiRequest = ($request->ajax() || $request->wantsJson()) && !$request->header('X-Inertia');
-            
+            $isApiRequest = ($request->ajax() || $request->wantsJson()) && ! $request->header('X-Inertia');
+
             if ($isApiRequest) {
                 return response()->json([
                     'success' => true,
@@ -2048,7 +2058,7 @@ class ClientController extends Controller
         $validated = $request->validate([
             'pet_type_id' => 'required|exists:pet_types,id',
             'pet_name' => 'nullable|string|max:100',
-            'pet_breed' => 'required|string|max:100',
+            'pet_breed' => 'nullable|string|max:100',
             'pet_gender' => 'nullable|in:Male,Female',
             'pet_birth_date' => 'nullable|date',
             'pet_allergies' => 'nullable|string',
@@ -2089,51 +2099,51 @@ class ClientController extends Controller
     public function prescriptions(Request $request)
     {
         $query = Prescription::whereHas('patient', function ($q) {
-                $q->where('user_id', auth()->id());
-            })
+            $q->where('user_id', auth()->id());
+        })
             ->with([
                 'appointment.appointment_type',
                 'patient.petType',
                 'diagnoses.disease',
-                'medicines.medicine'
+                'medicines.medicine',
             ]);
 
         // Search functionality
-        if ($request->has('search') && !empty($request->search)) {
+        if ($request->has('search') && ! empty($request->search)) {
             $keyword = $request->search;
             $query->where(function ($q) use ($keyword) {
                 $q->whereHas('patient', function ($q) use ($keyword) {
                     $q->where('pet_name', 'LIKE', "%{$keyword}%");
                 })
-                ->orWhereHas('patient.petType', function ($q) use ($keyword) {
-                    $q->where('name', 'LIKE', "%{$keyword}%");
-                })
-                ->orWhereHas('diagnoses.disease', function ($q) use ($keyword) {
-                    $q->where('name', 'LIKE', "%{$keyword}%");
-                })
-                ->orWhere('symptoms', 'LIKE', "%{$keyword}%");
+                    ->orWhereHas('patient.petType', function ($q) use ($keyword) {
+                        $q->where('name', 'LIKE', "%{$keyword}%");
+                    })
+                    ->orWhereHas('diagnoses.disease', function ($q) use ($keyword) {
+                        $q->where('name', 'LIKE', "%{$keyword}%");
+                    })
+                    ->orWhere('symptoms', 'LIKE', "%{$keyword}%");
             });
         }
 
         // Sort functionality
         $sortBy = $request->get('sort_by', 'created_at');
         $sortDirection = $request->get('sort_direction', 'desc');
-        
+
         // Validate sort_by to prevent SQL injection
         $allowedSortColumns = ['created_at', 'appointment_date'];
-        if (!in_array($sortBy, $allowedSortColumns)) {
+        if (! in_array($sortBy, $allowedSortColumns)) {
             $sortBy = 'created_at';
         }
-        
+
         // Validate sort_direction
         $sortDirection = strtolower($sortDirection) === 'asc' ? 'asc' : 'desc';
-        
+
         if ($sortBy === 'appointment_date') {
             $query->join('appointments', 'prescriptions.appointment_id', '=', 'appointments.id')
-                  ->orderBy('appointments.appointment_date', $sortDirection)
-                  ->select('prescriptions.*');
+                ->orderBy('appointments.appointment_date', $sortDirection)
+                ->select('prescriptions.*');
         } else {
-            $query->orderBy('prescriptions.' . $sortBy, $sortDirection);
+            $query->orderBy('prescriptions.'.$sortBy, $sortDirection);
         }
 
         $prescriptions = $query->paginate(15);
@@ -2142,7 +2152,7 @@ class ClientController extends Controller
         $prescriptions->getCollection()->transform(function ($prescription) {
             $appointment = $prescription->appointment;
             $patient = $prescription->patient;
-            
+
             return [
                 'id' => $prescription->id,
                 'appointment_id' => $prescription->appointment_id,
@@ -2182,7 +2192,7 @@ class ClientController extends Controller
             'patient.petType',
             'patient.user',
             'diagnoses.disease',
-            'medicines.medicine'
+            'medicines.medicine',
         ])->whereHas('patient', function ($q) {
             $q->where('user_id', auth()->id());
         })->findOrFail($id);
@@ -2248,10 +2258,10 @@ class ClientController extends Controller
 
         // Custom paper size: 8.5" × 5.5" (half-letter landscape)
         $customPaper = [0, 0, 612, 396];
-        
-        $base64Logo = 'data:image/png;base64,' . base64_encode(file_get_contents(public_path('media/logo_for_print.png')));
-        $base64PanaboLogo = 'data:image/png;base64,' . base64_encode(file_get_contents(public_path('media/panabo.png')));
-        $base64PrescriptionLogo = 'data:image/png;base64,' . base64_encode(file_get_contents(public_path('media/prescription.png')));
+
+        $base64Logo = 'data:image/png;base64,'.base64_encode(file_get_contents(public_path('media/logo_for_print.png')));
+        $base64PanaboLogo = 'data:image/png;base64,'.base64_encode(file_get_contents(public_path('media/panabo.png')));
+        $base64PrescriptionLogo = 'data:image/png;base64,'.base64_encode(file_get_contents(public_path('media/prescription.png')));
 
         // Get veterinarian information from settings
         $veterinarianName = \App\Models\Setting::get('veterinarian_name', '');
@@ -2262,16 +2272,16 @@ class ClientController extends Controller
             'isHtml5ParserEnabled' => true,
             'isPhpEnabled' => true,
         ])
-        ->loadView('admin.appointments.pdf', compact(
-            'prescription',
-            'base64Logo',
-            'base64PanaboLogo',
-            'base64PrescriptionLogo',
-            'veterinarianName',
-            'veterinarianLicense'
-        ))
-        ->setPaper($customPaper, 'landscape')
-        ->stream('prescription-' . $prescription->id . '.pdf');
+            ->loadView('admin.appointments.pdf', compact(
+                'prescription',
+                'base64Logo',
+                'base64PanaboLogo',
+                'base64PrescriptionLogo',
+                'veterinarianName',
+                'veterinarianLicense'
+            ))
+            ->setPaper($customPaper, 'landscape')
+            ->stream('prescription-'.$prescription->id.'.pdf');
     }
 
     /**
@@ -2288,9 +2298,9 @@ class ClientController extends Controller
             $q->where('user_id', auth()->id());
         })->findOrFail($id);
 
-        $base64Logo = 'data:image/png;base64,' . base64_encode(file_get_contents(public_path('media/logo_for_print.png')));
-        $base64PanaboLogo = 'data:image/png;base64,' . base64_encode(file_get_contents(public_path('media/panabo.png')));
-        $base64PrescriptionLogo = 'data:image/png;base64,' . base64_encode(file_get_contents(public_path('media/prescription.png')));
+        $base64Logo = 'data:image/png;base64,'.base64_encode(file_get_contents(public_path('media/logo_for_print.png')));
+        $base64PanaboLogo = 'data:image/png;base64,'.base64_encode(file_get_contents(public_path('media/panabo.png')));
+        $base64PrescriptionLogo = 'data:image/png;base64,'.base64_encode(file_get_contents(public_path('media/prescription.png')));
 
         // Get veterinarian information from settings
         $veterinarianName = \App\Models\Setting::get('veterinarian_name', '');

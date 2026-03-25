@@ -59,6 +59,8 @@ interface VaccinationRecord {
     date: string;
     next_due: string | null;
     status: string;
+    source?: string | null;
+    registry_id?: number | null;
 }
 
 interface Patient {
@@ -470,12 +472,13 @@ const getWeightChange = () => {
                                             <th class="text-left p-3 font-semibold">Date Given</th>
                                             <th class="text-left p-3 font-semibold">Next Due</th>
                                             <th class="text-left p-3 font-semibold">Status</th>
+                                            <th class="text-left p-3 font-semibold">Source</th>
                                         </tr>
                                     </thead>
                                     <tbody>
                                         <tr
                                             v-for="(record, index) in patient.vaccination_records"
-                                            :key="index"
+                                            :key="record.registry_id ?? `v-${index}`"
                                             class="border-b hover:bg-muted/50"
                                         >
                                             <td class="p-3 font-medium">{{ record.type }}</td>
@@ -495,6 +498,16 @@ const getWeightChange = () => {
                                                 >
                                                     {{ record.status }}
                                                 </span>
+                                            </td>
+                                            <td class="p-3 text-sm text-muted-foreground">
+                                                <Link
+                                                    v-if="record.registry_id"
+                                                    :href="`/admin/vaccination_records/${record.registry_id}`"
+                                                    class="text-primary hover:underline"
+                                                >
+                                                    {{ record.source || 'Registry' }}
+                                                </Link>
+                                                <span v-else>{{ record.source || '—' }}</span>
                                             </td>
                                         </tr>
                                     </tbody>

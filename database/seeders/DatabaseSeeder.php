@@ -2,7 +2,6 @@
 
 namespace Database\Seeders;
 
-use App\Models\User;
 // use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
 
@@ -50,5 +49,9 @@ class DatabaseSeeder extends Seeder
         // Uncomment the line below to import data from public/dataset/PetMedicalRecord.xlsx
         // Make sure the Excel file exists and SymptomsSeeder has been run first
         $this->call(PetMedicalRecordSeeder::class);
+
+        // Optional: Import vaccination rows from public/dataset/vaccinationRecord.xlsx (large; run manually):
+        // php artisan db:seed --class=VaccinationRecordImportSeeder
+        // $this->call(VaccinationRecordImportSeeder::class);
     }
 }

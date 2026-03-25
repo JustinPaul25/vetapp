@@ -50,4 +50,9 @@ class Patient extends Model
     {
         return $this->hasMany(PatientWeightHistory::class)->orderBy('recorded_at', 'desc');
     }
+
+    public function vaccinationRecords()
+    {
+        return $this->hasMany(VaccinationRecord::class)->orderByDesc('administered_at');
+    }
 }

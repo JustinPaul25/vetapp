@@ -5,18 +5,19 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\Patient;
 use App\Models\PatientWeightHistory;
-use App\Models\PetType;
 use App\Models\PetBreed;
+use App\Models\PetType;
 use App\Models\User;
-use Illuminate\Http\Request;
-use Inertia\Inertia;
-use Illuminate\Support\Facades\DB;
 use App\Traits\HasDateFiltering;
 use Barryvdh\DomPDF\Facade\Pdf;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Inertia\Inertia;
 
 class PatientController extends Controller
 {
     use HasDateFiltering;
+
     /**
      * Display a listing of the resource.
      */
@@ -25,7 +26,7 @@ class PatientController extends Controller
         $query = Patient::with(['petType', 'user']);
 
         // Search functionality
-        if ($request->has('search') && !empty($request->search)) {
+        if ($request->has('search') && ! empty($request->search)) {
             $keyword = $request->search;
             $query->where(function ($q) use ($keyword) {
                 $q->where('pet_name', 'LIKE', "%{$keyword}%")
@@ -47,16 +48,16 @@ class PatientController extends Controller
         // Sort functionality
         $sortBy = $request->get('sort_by', 'created_at');
         $sortDirection = $request->get('sort_direction', 'desc');
-        
+
         // Validate sort_by to prevent SQL injection
         $allowedSortColumns = ['pet_name', 'pet_breed', 'pet_gender', 'created_at'];
-        if (!in_array($sortBy, $allowedSortColumns)) {
+        if (! in_array($sortBy, $allowedSortColumns)) {
             $sortBy = 'created_at';
         }
-        
+
         // Validate sort_direction
         $sortDirection = strtolower($sortDirection) === 'asc' ? 'asc' : 'desc';
-        
+
         $query->orderBy($sortBy, $sortDirection);
 
         $patients = $query->paginate(15);
@@ -76,7 +77,7 @@ class PatientController extends Controller
                 ],
                 'owner' => $patient->user ? [
                     'id' => $patient->user->id,
-                    'name' => trim(($patient->user->first_name ?? '') . ' ' . ($patient->user->last_name ?? '')) ?: $patient->user->name,
+                    'name' => trim(($patient->user->first_name ?? '').' '.($patient->user->last_name ?? '')) ?: $patient->user->name,
                     'email' => $patient->user->email,
                     'mobile_number' => $patient->user->mobile_number ?? null,
                 ] : null,
@@ -118,7 +119,7 @@ class PatientController extends Controller
         })->get()->map(function ($user) {
             return [
                 'id' => $user->id,
-                'name' => trim(($user->first_name ?? '') . ' ' . ($user->last_name ?? '')) ?: $user->name,
+                'name' => trim(($user->first_name ?? '').' '.($user->last_name ?? '')) ?: $user->name,
                 'email' => $user->email,
             ];
         });
@@ -148,9 +149,9 @@ class PatientController extends Controller
         ]);
 
         // Validate pet_type_id exists if not creating new
-        if (!empty($validated['pet_type_id']) && $validated['pet_type_id'] !== '__new__') {
+        if (! empty($validated['pet_type_id']) && $validated['pet_type_id'] !== '__new__') {
             $exists = PetType::where('id', $validated['pet_type_id'])->exists();
-            if (!$exists) {
+            if (! $exists) {
                 return back()->withErrors(['pet_type_id' => 'The selected pet type is invalid.'])->withInput();
             }
         }
@@ -158,10 +159,10 @@ class PatientController extends Controller
         return DB::transaction(function () use ($validated) {
             // Handle custom pet type creation
             $petTypeId = $validated['pet_type_id'];
-            if (!empty($validated['custom_pet_type_name']) && ($petTypeId === '__new__' || empty($petTypeId))) {
+            if (! empty($validated['custom_pet_type_name']) && ($petTypeId === '__new__' || empty($petTypeId))) {
                 // Check if pet type with this name already exists (case-insensitive)
                 $existingPetType = PetType::whereRaw('LOWER(name) = ?', [strtolower($validated['custom_pet_type_name'])])->first();
-                
+
                 if ($existingPetType) {
                     $petTypeId = $existingPetType->id;
                 } else {
@@ -175,22 +176,22 @@ class PatientController extends Controller
 
             // Handle custom breed creation
             $petBreed = $validated['pet_breed'];
-            if (!empty($validated['custom_pet_breed_name']) && ($petBreed === '__new__' || empty($petBreed))) {
+            if (! empty($validated['custom_pet_breed_name']) && ($petBreed === '__new__' || empty($petBreed))) {
                 $breedName = ucfirst($validated['custom_pet_breed_name']);
-                
+
                 // Check if breed with this name already exists for this pet type (case-insensitive)
                 $existingBreed = PetBreed::where('pet_type_id', $petTypeId)
                     ->whereRaw('LOWER(name) = ?', [strtolower($breedName)])
                     ->first();
-                
-                if (!$existingBreed) {
+
+                if (! $existingBreed) {
                     // Create new breed
                     PetBreed::create([
                         'name' => $breedName,
                         'pet_type_id' => $petTypeId,
                     ]);
                 }
-                
+
                 $petBreed = $breedName;
             }
 
@@ -215,13 +216,14 @@ class PatientController extends Controller
     public function show(Patient $patient)
     {
         $patient->load([
-            'petType', 
-            'user', 
-            'appointments.appointment_type', 
-            'appointmentPatients.appointment_type', 
+            'petType',
+            'user',
+            'appointments.appointment_type',
+            'appointmentPatients.appointment_type',
             'prescriptions.appointment.appointment_type',
             'prescriptions.medicines.medicine',
-            'weightHistory'
+            'weightHistory',
+            'vaccinationRecords',
         ]);
 
         // Merge appointments from both relationships (hasMany and belongsToMany)
@@ -235,7 +237,7 @@ class PatientController extends Controller
 
         // Build vaccination records
         $vaccinationRecords = [];
-        
+
         // Add anti-rabies vaccination if exists
         if ($patient->last_anti_rabies_date) {
             $vaccinationRecords[] = [
@@ -245,29 +247,30 @@ class PatientController extends Controller
                 'status' => $patient->next_anti_rabies_due_date && $patient->next_anti_rabies_due_date->isPast() ? 'Overdue' : ($patient->next_anti_rabies_due_date && $patient->next_anti_rabies_due_date->isToday() ? 'Due Today' : 'Up to Date'),
             ];
         }
-        
+
         // Add vaccinations from prescriptions
         foreach ($patient->prescriptions as $prescription) {
             $appointment = $prescription->appointment;
             $appointmentType = $appointment->appointment_type->name ?? null;
-            
+
             // Check if appointment type is Vaccination
             $isVaccinationAppointment = strtolower($appointmentType ?? '') === 'vaccination';
-            
+
             // Check if any medicine is a vaccination
             $vaccinationMedicines = $prescription->medicines->filter(function ($prescriptionMedicine) {
                 $medicineName = strtolower($prescriptionMedicine->medicine->name ?? '');
-                return str_contains($medicineName, 'vaccine') || 
+
+                return str_contains($medicineName, 'vaccine') ||
                        str_contains($medicineName, 'vaccination') ||
                        str_contains($medicineName, 'anti-rabies') ||
                        str_contains($medicineName, 'antirabies') ||
-                       (str_contains($medicineName, 'rabies') && !str_contains($medicineName, 'test'));
+                       (str_contains($medicineName, 'rabies') && ! str_contains($medicineName, 'test'));
             });
-            
+
             if ($isVaccinationAppointment || $vaccinationMedicines->isNotEmpty()) {
                 $vaccineNames = $vaccinationMedicines->pluck('medicine.name')->filter()->unique()->implode(', ');
                 $vaccineType = $vaccineNames ?: ($appointmentType ?? 'Vaccination');
-                
+
                 $vaccinationRecords[] = [
                     'type' => $vaccineType,
                     'date' => $appointment->appointment_date ? $appointment->appointment_date->toDateString() : $prescription->created_at->toDateString(),
@@ -276,10 +279,24 @@ class PatientController extends Controller
                 ];
             }
         }
-        
-        // Sort by date descending
+
+        foreach ($patient->vaccinationRecords as $registry) {
+            $vaccinationRecords[] = [
+                'type' => $registry->vaccine_name ?? 'Vaccination',
+                'date' => $registry->administered_at?->toDateString() ?? '',
+                'next_due' => $registry->next_due_at ? $registry->next_due_at->toDateString() : null,
+                'status' => $this->vaccinationRegistryStatus($registry->next_due_at),
+                'source' => 'Registry',
+                'registry_id' => $registry->id,
+            ];
+        }
+
+        // Sort by date descending (rows without a date sort last)
         usort($vaccinationRecords, function ($a, $b) {
-            return strcmp($b['date'], $a['date']);
+            $da = $a['date'] !== '' ? $a['date'] : '0000-00-00';
+            $db = $b['date'] !== '' ? $b['date'] : '0000-00-00';
+
+            return strcmp($db, $da);
         });
 
         return Inertia::render('Admin/Patients/Show', [
@@ -296,7 +313,7 @@ class PatientController extends Controller
                 ],
                 'owner' => $patient->user ? [
                     'id' => $patient->user->id,
-                    'name' => trim(($patient->user->first_name ?? '') . ' ' . ($patient->user->last_name ?? '')) ?: $patient->user->name,
+                    'name' => trim(($patient->user->first_name ?? '').' '.($patient->user->last_name ?? '')) ?: $patient->user->name,
                     'email' => $patient->user->email,
                     'mobile_number' => $patient->user->mobile_number ?? null,
                     'address' => $patient->user->address ?? null,
@@ -313,7 +330,7 @@ class PatientController extends Controller
                             $formattedTime = $appointment->appointment_time;
                         }
                     }
-                    
+
                     return [
                         'id' => $appointment->id,
                         'appointment_type' => $appointment->appointment_type->name ?? null,
@@ -365,7 +382,7 @@ class PatientController extends Controller
         })->get()->map(function ($user) {
             return [
                 'id' => $user->id,
-                'name' => trim(($user->first_name ?? '') . ' ' . ($user->last_name ?? '')) ?: $user->name,
+                'name' => trim(($user->first_name ?? '').' '.($user->last_name ?? '')) ?: $user->name,
                 'email' => $user->email,
             ];
         });
@@ -394,7 +411,7 @@ class PatientController extends Controller
         $validated = $request->validate([
             'pet_type_id' => 'required|exists:pet_types,id',
             'pet_name' => 'nullable|string|max:100',
-            'pet_breed' => 'required|string|max:100',
+            'pet_breed' => 'nullable|string|max:100',
             'pet_gender' => 'nullable|in:Male,Female',
             'pet_birth_date' => 'nullable|date',
             'pet_allergies' => 'nullable|string',
@@ -473,7 +490,7 @@ class PatientController extends Controller
         $query = Patient::with(['petType', 'user']);
 
         // Apply search if provided
-        if ($request->has('search') && !empty($request->search)) {
+        if ($request->has('search') && ! empty($request->search)) {
             $keyword = $request->search;
             $query->where(function ($q) use ($keyword) {
                 $q->where('pet_name', 'LIKE', "%{$keyword}%")
@@ -513,7 +530,7 @@ class PatientController extends Controller
                 'pet_type' => $patient->petType->name ?? 'N/A',
                 'pet_breed' => $patient->pet_breed,
                 'pet_gender' => $patient->pet_gender ?? 'N/A',
-                'owner' => $patient->user ? (trim(($patient->user->first_name ?? '') . ' ' . ($patient->user->last_name ?? '')) ?: $patient->user->name) : 'N/A',
+                'owner' => $patient->user ? (trim(($patient->user->first_name ?? '').' '.($patient->user->last_name ?? '')) ?: $patient->user->name) : 'N/A',
                 'owner_email' => $patient->user->email ?? 'N/A',
                 'created_at' => $patient->created_at->format('Y-m-d'),
             ];
@@ -521,8 +538,8 @@ class PatientController extends Controller
 
         $filterInfo = $this->getFilterInfo($request);
 
-        $base64Logo = 'data:image/png;base64,' . base64_encode(file_get_contents(public_path('media/logo_for_print.png')));
-        $base64PanaboLogo = 'data:image/png;base64,' . base64_encode(file_get_contents(public_path('media/panabo.png')));
+        $base64Logo = 'data:image/png;base64,'.base64_encode(file_get_contents(public_path('media/logo_for_print.png')));
+        $base64PanaboLogo = 'data:image/png;base64,'.base64_encode(file_get_contents(public_path('media/panabo.png')));
 
         $pdf = Pdf::loadView('admin.reports.patients', [
             'patients' => $data,
@@ -534,12 +551,12 @@ class PatientController extends Controller
             'reportDate' => now()->format('F d, Y'),
         ]);
 
-        return $pdf->stream('patients-report-' . date('Y-m-d') . '.pdf');
+        return $pdf->stream('patients-report-'.date('Y-m-d').'.pdf');
     }
 
     private function exportCsv($patients)
     {
-        $filename = 'patients-report-' . date('Y-m-d') . '.csv';
+        $filename = 'patients-report-'.date('Y-m-d').'.csv';
         $headers = [
             'Content-Type' => 'text/csv',
             'Content-Disposition' => "attachment; filename=\"{$filename}\"",
@@ -547,7 +564,7 @@ class PatientController extends Controller
 
         $callback = function () use ($patients) {
             $file = fopen('php://output', 'w');
-            
+
             // Header row
             fputcsv($file, ['Pet Name', 'Pet Type', 'Breed', 'Gender', 'Owner', 'Owner Email', 'Created At']);
 
@@ -558,7 +575,7 @@ class PatientController extends Controller
                     $patient->petType->name ?? 'N/A',
                     $patient->pet_breed,
                     $patient->pet_gender ?? 'N/A',
-                    $patient->user ? (trim(($patient->user->first_name ?? '') . ' ' . ($patient->user->last_name ?? '')) ?: $patient->user->name) : 'N/A',
+                    $patient->user ? (trim(($patient->user->first_name ?? '').' '.($patient->user->last_name ?? '')) ?: $patient->user->name) : 'N/A',
                     $patient->user->email ?? 'N/A',
                     $patient->created_at->format('Y-m-d'),
                 ]);
@@ -570,27 +587,43 @@ class PatientController extends Controller
         return response()->stream($callback, 200, $headers);
     }
 
+    private function vaccinationRegistryStatus(?\Carbon\Carbon $nextDue): string
+    {
+        if (! $nextDue) {
+            return 'Recorded';
+        }
+        if ($nextDue->isPast()) {
+            return 'Overdue';
+        }
+        if ($nextDue->isToday()) {
+            return 'Due Today';
+        }
+
+        return 'Up to Date';
+    }
+
     private function getFilterInfo($request)
     {
         $filterType = $request->get('filter_type');
-        
+
         // If no filter type is provided, return "All Records"
-        if (!$filterType) {
+        if (! $filterType) {
             return 'All Records';
         }
-        
+
         switch ($filterType) {
             case 'date':
-                return 'Date: ' . $request->get('date');
+                return 'Date: '.$request->get('date');
             case 'month':
                 $month = $request->get('month');
                 $year = $request->get('year');
-                $monthName = date('F', mktime(0, 0, 0, (int)$month, 1));
+                $monthName = date('F', mktime(0, 0, 0, (int) $month, 1));
+
                 return "Month: {$monthName} {$year}";
             case 'year':
-                return 'Year: ' . $request->get('year');
+                return 'Year: '.$request->get('year');
             case 'range':
-                return 'Range: ' . $request->get('date_from') . ' to ' . $request->get('date_to');
+                return 'Range: '.$request->get('date_from').' to '.$request->get('date_to');
             default:
                 return 'All Records';
         }
