@@ -11,16 +11,17 @@
             box-sizing: border-box;
         }
         
+        /* A5 landscape: 210mm × 148mm (8.27" × 5.83") — half A4 by area */
         @page {
             size: A5 landscape;
-            margin: 0.3in 0.25in;
+            margin: 0.22in 0.2in;
         }
         
         body {
             font-family: Arial, sans-serif;
-            font-size: 12px;
+            font-size: 11px;
             color: #000;
-            line-height: 1.3;
+            line-height: 1.25;
             padding: 0;
             width: 8.27in;
             max-width: 8.27in;
@@ -52,7 +53,7 @@
         .header-table {
             margin-top: 0;
             width: 100%;
-            margin-bottom: 8px;
+            margin-bottom: 6px;
         }
 
         .header-table tr {
@@ -83,18 +84,18 @@
         }
         
         .header-logo {
-            width: 50px;
+            width: 44px;
             height: auto;
         }
         
         .header-org-name {
-            font-size: 16px;
+            font-size: 14px;
             font-weight: bold;
             margin: 0;
         }
 
         .header-address {
-            font-size: 12px;
+            font-size: 10px;
         }
         
         .header-section-name {
@@ -106,7 +107,7 @@
         .header-separator {
             border: none;
             border-top: 1px solid #1a4a75;
-            margin: 8px 0 10px 0;
+            margin: 6px 0 8px 0;
         }
         
         .prescription-logo {
@@ -120,7 +121,7 @@
         
         /* Patient Information Section */
         .patient-info-table {
-            margin-top: 10px;
+            margin-top: 6px;
         }
         
         .patient-info-table td {
@@ -142,7 +143,7 @@
         
         /* Medicines Section */
         .medicines-table {
-            margin-top: 8px;
+            margin-top: 6px;
         }
         
         .medicines-table th,
@@ -215,7 +216,7 @@
         
         /* Notes Section */
         .notes-table {
-            margin-top: 40px;
+            margin-top: 24px;
         }
         
         .notes-table td {

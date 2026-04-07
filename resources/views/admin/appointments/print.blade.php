@@ -11,17 +11,18 @@
             box-sizing: border-box;
         }
         
+        /* A5 landscape: 210mm × 148mm (8.27" × 5.83") — half A4 by area */
         @page {
             size: A5 landscape;
-            margin: 0.3in 0.25in;
+            margin: 0.22in 0.2in;
         }
         
         body {
             font-family: Arial, sans-serif;
-            font-size: 12px;
+            font-size: 11px;
             color: #000;
-            line-height: 1.3;
-            padding: 0.3in 0.25in;
+            line-height: 1.25;
+            padding: 0.22in 0.2in;
             width: 8.27in;
             max-width: 8.27in;
             margin: 0 auto;
@@ -39,7 +40,7 @@
             
             @page {
                 size: A5 landscape;
-                margin: 0.3in 0.25in;
+                margin: 0.22in 0.2in;
             }
         }
         
@@ -120,23 +121,23 @@
         }
         
         .header-logo {
-            width: 65px;
+            width: 48px;
             height: auto;
             max-width: 100%;
         }
         
         .header-org-name {
-            font-size: 20px;
+            font-size: 14px;
             font-weight: bold;
             margin: 0;
         }
 
         .header-address {
-            font-size: 14px;
+            font-size: 10px;
         }
         
         .header-section-name {
-            font-size: 12px;
+            font-size: 11px;
             font-weight: bold;
             margin: 0;
         }
@@ -144,21 +145,21 @@
         .header-separator {
             border: none;
             border-top: 1px solid #1a4a75;
-            margin: 12px 0 15px 0;
+            margin: 6px 0 8px 0;
         }
         
         .prescription-logo {
-            width: 27px;
+            width: 22px;
             height: auto;
             display: block;
-            margin-left: 15px;
+            margin-left: 10px;
             margin-right: auto;
-            margin-bottom: 10px;
+            margin-bottom: 8px;
         }
         
         /* Patient Information Section */
         .patient-info-table {
-            margin-top: 10px;
+            margin-top: 6px;
             width: 100%;
         }
         
@@ -173,15 +174,15 @@
         
         .section-header {
             font-weight: bold;
-            margin-top: 12px;
+            margin-top: 8px;
             border-bottom: 1px solid #1a4a75;
-            padding-bottom: 4px;
-            margin-bottom: 6px;
+            padding-bottom: 3px;
+            margin-bottom: 4px;
         }
         
         /* Medicines Section */
         .medicines-table {
-            margin-top: 8px;
+            margin-top: 6px;
             width: 100%;
         }
         
@@ -207,7 +208,7 @@
         
         .medicines-table th .sub-header {
             font-weight: normal;
-            font-size: 11px;
+            font-size: 10px;
             font-style: normal;
             display: block;
             margin-top: 3px;
@@ -255,7 +256,7 @@
         
         /* Notes Section */
         .notes-table {
-            margin-top: 40px;
+            margin-top: 24px;
             width: 100%;
         }
         
@@ -267,7 +268,7 @@
 
         /* Follow-up Section */
         .followup-table {
-            margin-top: 15px;
+            margin-top: 10px;
             width: 100%;
         }
         
@@ -279,8 +280,8 @@
         
         /* Footer Section */
         .footer-table {
-            margin-top: 10px;
-            font-size: 12px;
+            margin-top: 8px;
+            font-size: 10px;
             width: 100%;
         }
         

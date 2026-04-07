@@ -1308,8 +1308,7 @@ class AppointmentController extends Controller
      */
     public function downloadPrescriptionByAppointment($id)
     {
-        // Custom paper size: A5 landscape (half of A4)
-        // 1 inch = 72 points, so 8.27" = 595pt, 5.83" = 420pt
+        // A5 landscape: 210mm × 148mm — 595 × 420 pt @ 72 dpi
         $customPaper = [0, 0, 595, 420];
         
         $prescription = Prescription::with(
@@ -1350,8 +1349,7 @@ class AppointmentController extends Controller
      */
     public function downloadPrescription($id)
     {
-        // Custom paper size: A5 landscape (half of A4)
-        // 1 inch = 72 points, so 8.27" = 595pt, 5.83" = 420pt
+        // A5 landscape: 210mm × 148mm — 595 × 420 pt @ 72 dpi
         $customPaper = [0, 0, 595, 420];
         
         $prescription = Prescription::with(
@@ -1392,8 +1390,7 @@ class AppointmentController extends Controller
      */
     public function publicDownloadPrescription($id)
     {
-        // Custom paper size: A5 landscape: 210mm × 148mm (8.27" × 5.83")
-        // 1 inch = 72 points, so 8.27" = 595pt, 5.83" = 420pt
+        // A5 landscape: 595 × 420 pt
         $customPaper = [0, 0, 595, 420];
         
         $prescription = Prescription::with(
