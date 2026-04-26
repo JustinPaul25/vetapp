@@ -249,6 +249,7 @@ class WalkInClientController extends Controller
                 'existing_pet_id' => 'required|exists:patients,id',
                 'appointment_type_id' => 'nullable|exists:appointment_types,id', // Keep for backward compatibility
                 'appointment_type_ids' => 'required_without:appointment_type_id|array|min:1',
+                'appointment_date' => 'required|date',
                 'appointment_type_ids.*' => [
                     'required',
                     'exists:appointment_types,id',
@@ -278,7 +279,7 @@ class WalkInClientController extends Controller
                 }
 
                 // Create appointments for each appointment type
-                $appointmentDate = now()->toDateString();
+                $appointmentDate = $validated['appointment_date'];
                 $appointmentTime = now()->format('H:i');
                 $limitService = app(AppointmentLimitService::class);
                 $createdAppointments = [];
@@ -338,6 +339,7 @@ class WalkInClientController extends Controller
             'address' => 'nullable|string|max:500',
             'lat' => 'nullable|numeric|between:-90,90',
             'lng' => 'nullable|numeric|between:-180,180',
+            'appointment_date' => 'required|date',
             // Pets array
             'pets' => 'required|array|min:1',
             'pets.*.pet_type_id' => 'required_without:pets.*.custom_pet_type_name|nullable|string',
@@ -413,7 +415,7 @@ class WalkInClientController extends Controller
             }
 
             // Step 2: Process each pet
-            $appointmentDate = now()->toDateString();
+            $appointmentDate = $validated['appointment_date'];
             $appointmentTime = now()->format('H:i');
             $limitService = app(AppointmentLimitService::class);
             $createdPets = [];

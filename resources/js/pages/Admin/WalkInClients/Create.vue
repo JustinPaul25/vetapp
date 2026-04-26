@@ -135,6 +135,7 @@ const form = router.form({
     address: '',
     lat: null as number | null,
     lng: null as number | null,
+    appointment_date: new Date().toISOString().split('T')[0],
 });
 
 // Initialize with one empty pet
@@ -540,6 +541,7 @@ const submit = () => {
             ...data,
             appointment_type_id: appointmentTypeIds[0],
             appointment_type_ids: appointmentTypeIds,
+            appointment_date: data.appointment_date,
             symptoms: symptoms.value,
         })).post('/admin/walk_in_clients');
         return;
@@ -561,6 +563,7 @@ const submit = () => {
     form.transform((data) => ({
         ...data,
         pets: petsData,
+        appointment_date: data.appointment_date,
         symptoms: symptoms.value,
     })).post('/admin/walk_in_clients');
 };
@@ -1021,6 +1024,21 @@ const submit = () => {
                         </div>
 
                         <div class="space-y-4">
+                            <div class="space-y-2 max-w-sm">
+                                <Label for="appointment_date">Visit Date <span class="text-destructive">*</span></Label>
+                                <Input
+                                    id="appointment_date"
+                                    v-model="form.appointment_date"
+                                    type="date"
+                                    autocomplete="off"
+                                    required
+                                />
+                                <p class="text-xs text-muted-foreground">
+                                    Set the actual walk-in date for manual records.
+                                </p>
+                                <InputError :message="form.errors.appointment_date" />
+                            </div>
+
                             <div>
                                 <h4 class="text-base font-semibold mb-4">Select Pet(s) and Appointment Type(s)</h4>
                                 
