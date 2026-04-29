@@ -10,6 +10,7 @@ import { ref } from 'vue';
 import { dashboard } from '@/routes';
 import { router } from '@inertiajs/vue3';
 import ReportGenerator from '@/components/ReportGenerator.vue';
+import { displayEmailUnlessWalkInPlaceholder as displayEmail } from '@/lib/walkInPlaceholderEmail';
 
 interface Prescription {
     id: number;
@@ -193,7 +194,12 @@ const printPrescription = (prescriptionId: number) => {
                                     <td class="p-3">
                                         <div class="text-sm">
                                             <div class="font-medium">{{ prescription.owner_name }}</div>
-                                            <div class="text-muted-foreground">{{ prescription.owner_email }}</div>
+                                            <div
+                                                v-if="displayEmail(prescription.owner_email)"
+                                                class="text-muted-foreground"
+                                            >
+                                                {{ displayEmail(prescription.owner_email) }}
+                                            </div>
                                         </div>
                                     </td>
                                     <td class="p-3 text-sm text-muted-foreground">

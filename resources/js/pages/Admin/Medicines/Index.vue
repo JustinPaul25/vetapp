@@ -283,7 +283,6 @@ const getSortIcon = (column: string) => {
                                 export-url="/admin/medicines/export"
                                 report-title="Medicines"
                                 :filters="{ search: searchQuery, sort_by: sortBy, sort_direction: sortDirection }"
-                                :disable-date-filter="true"
                             />
                             <Button
                                 v-if="hasSelectedMedicines"

@@ -6,6 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Label } from '@/components/ui/label';
 import { FileText, ArrowLeft, Download, Printer } from 'lucide-vue-next';
 import { dashboard } from '@/routes';
+import { displayEmailUnlessWalkInPlaceholder as displayEmail } from '@/lib/walkInPlaceholderEmail';
 
 interface Diagnosis {
     id: number;
@@ -276,9 +277,9 @@ const printPrescription = () => {
                                     <Label class="text-sm font-medium text-muted-foreground">Owner Name</Label>
                                     <div class="text-lg font-semibold">{{ owner.name }}</div>
                                 </div>
-                                <div class="space-y-2">
+                                <div v-if="displayEmail(owner.email)" class="space-y-2">
                                     <Label class="text-sm font-medium text-muted-foreground">Email</Label>
-                                    <div class="text-lg font-semibold">{{ owner.email }}</div>
+                                    <div class="text-lg font-semibold">{{ displayEmail(owner.email) }}</div>
                                 </div>
                                 <div class="space-y-2" v-if="owner.mobile_number">
                                     <Label class="text-sm font-medium text-muted-foreground">Mobile Number</Label>

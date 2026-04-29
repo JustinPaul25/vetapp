@@ -199,7 +199,8 @@ class MedicineController extends Controller
             $query->where('name', 'LIKE', $request->search . '%');
         }
 
-        // No date filtering for medicines report - print all records
+        $this->applyDateFilter($query, $request, 'created_at');
+
         $medicines = $query->orderBy('created_at', 'desc')->get();
 
         $format = $request->get('format', 'pdf');
