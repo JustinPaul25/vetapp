@@ -8,6 +8,7 @@ import { Heart, Plus, Edit, Trash2, Eye, Search, ArrowUpDown, ArrowUp, ArrowDown
 import { computed, ref } from 'vue';
 import { dashboard } from '@/routes';
 import ReportGenerator from '@/components/ReportGenerator.vue';
+import { displayEmailUnlessWalkInPlaceholder as displayEmail } from '@/lib/walkInPlaceholderEmail';
 
 interface PetType {
     id: number;
@@ -263,7 +264,12 @@ const calculateAge = (birthDate: string | null) => {
                                     <td class="p-3 text-sm">
                                         <div v-if="patient.owner">
                                             <div class="font-medium">{{ patient.owner.name }}</div>
-                                            <div class="text-xs text-muted-foreground">{{ patient.owner.email }}</div>
+                                            <div
+                                                v-if="displayEmail(patient.owner.email)"
+                                                class="text-xs text-muted-foreground"
+                                            >
+                                                {{ displayEmail(patient.owner.email) }}
+                                            </div>
                                         </div>
                                         <span v-else>—</span>
                                     </td>

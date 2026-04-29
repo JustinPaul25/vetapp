@@ -12,6 +12,7 @@ import { ref, computed, watch } from 'vue';
 import { CalendarDatePicker } from '@/components/ui/calendar-date-picker';
 import axios from 'axios';
 import { useToast } from '@/composables/useToast';
+import { displayEmailUnlessWalkInPlaceholder as displayEmail } from '@/lib/walkInPlaceholderEmail';
 
 interface Owner {
     id: number;
@@ -761,9 +762,9 @@ const handleReschedule = () => {
                                                         <Label class="text-sm font-medium text-muted-foreground">Owner Name</Label>
                                                         <div class="text-lg font-semibold">{{ pet.owner.name }}</div>
                                                     </div>
-                                                    <div class="space-y-2">
+                                                    <div v-if="displayEmail(pet.owner.email)" class="space-y-2">
                                                         <Label class="text-sm font-medium text-muted-foreground">Email</Label>
-                                                        <div class="text-lg font-semibold">{{ pet.owner.email }}</div>
+                                                        <div class="text-lg font-semibold">{{ displayEmail(pet.owner.email) }}</div>
                                                     </div>
                                                     <div class="space-y-2" v-if="pet.owner.mobile_number">
                                                         <Label class="text-sm font-medium text-muted-foreground">Mobile Number</Label>
@@ -818,9 +819,9 @@ const handleReschedule = () => {
                                         <Label class="text-sm font-medium text-muted-foreground">Owner Name</Label>
                                         <div class="text-lg font-semibold">{{ patient.owner.name }}</div>
                                     </div>
-                                    <div class="space-y-2">
+                                    <div v-if="displayEmail(patient.owner.email)" class="space-y-2">
                                         <Label class="text-sm font-medium text-muted-foreground">Email</Label>
-                                        <div class="text-lg font-semibold">{{ patient.owner.email }}</div>
+                                        <div class="text-lg font-semibold">{{ displayEmail(patient.owner.email) }}</div>
                                     </div>
                                     <div class="space-y-2" v-if="patient.owner.mobile_number">
                                         <Label class="text-sm font-medium text-muted-foreground">Mobile Number</Label>
