@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import LocationMapPicker from '@/components/LocationMapPicker.vue';
 import { UserPlus, ArrowLeft, Edit, Heart } from 'lucide-vue-next';
 import { dashboard } from '@/routes';
+import { displayEmailUnlessWalkInPlaceholder as displayEmail } from '@/lib/walkInPlaceholderEmail';
 import { computed } from 'vue';
 
 interface PetType {
@@ -140,9 +141,9 @@ const location = computed(() => {
                                     <div class="text-lg font-semibold">{{ walkInClient.name }}</div>
                                 </div>
 
-                                <div class="space-y-2">
+                                <div v-if="displayEmail(walkInClient.email)" class="space-y-2">
                                     <Label class="text-sm font-medium text-muted-foreground">Email</Label>
-                                    <div class="text-lg font-semibold">{{ walkInClient.email }}</div>
+                                    <div class="text-lg font-semibold">{{ displayEmail(walkInClient.email) }}</div>
                                 </div>
 
                                 <div class="space-y-2">
