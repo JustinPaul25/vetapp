@@ -10,6 +10,7 @@ import { ref } from 'vue';
 import { dashboard } from '@/routes';
 import { useToast } from '@/composables/useToast';
 import ReportGenerator from '@/components/ReportGenerator.vue';
+import { displayEmailUnlessWalkInPlaceholder as displayEmail } from '@/lib/walkInPlaceholderEmail';
 
 interface Patient {
     id: number;
@@ -129,9 +130,6 @@ const getSortIcon = (column: string) => {
     return sortDirection.value === 'asc' ? ArrowUp : ArrowDown;
 };
 
-/** Synthetic email when none provided — see WalkInClientController */
-const displayEmail = (email: string) =>
-    email.endsWith('@no-email.walkin.local') ? '' : email;
 </script>
 
 <template>

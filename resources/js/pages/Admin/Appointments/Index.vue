@@ -5,8 +5,9 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Calendar, Plus, Eye, Search, ArrowUpDown, ArrowUp, ArrowDown, ChevronDown, ChevronUp, Users, CheckCircle2 } from 'lucide-vue-next';
-import { computed, ref } from 'vue';
+import { ref } from 'vue';
 import { dashboard } from '@/routes';
+import { displayEmailUnlessWalkInPlaceholder as displayEmail } from '@/lib/walkInPlaceholderEmail';
 
 interface Pet {
     id: number;
@@ -301,7 +302,7 @@ const getStatusBadgeClass = (status: string) => {
                                             </div>
                                         </td>
                                         <td class="p-3 text-sm">
-                                            {{ appointment.owner_email }}
+                                            {{ displayEmail(appointment.owner_email) }}
                                         </td>
                                         <td class="p-3 text-sm">
                                             {{ appointment.owner_mobile }}
