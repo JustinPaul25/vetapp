@@ -6,7 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { UserPlus, Plus, Edit, Trash2, Eye, Search, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-vue-next';
-import { computed, ref } from 'vue';
+import { ref } from 'vue';
 import { dashboard } from '@/routes';
 import { useToast } from '@/composables/useToast';
 import ReportGenerator from '@/components/ReportGenerator.vue';
@@ -128,6 +128,10 @@ const getSortIcon = (column: string) => {
     if (sortBy.value !== column) return ArrowUpDown;
     return sortDirection.value === 'asc' ? ArrowUp : ArrowDown;
 };
+
+/** Synthetic email when none provided — see WalkInClientController */
+const displayEmail = (email: string) =>
+    email.endsWith('@no-email.walkin.local') ? '' : email;
 </script>
 
 <template>
@@ -230,7 +234,7 @@ const getSortIcon = (column: string) => {
                                         {{ client.name }}
                                     </td>
                                     <td class="p-3 text-sm">
-                                        {{ client.email }}
+                                        {{ displayEmail(client.email) }}
                                     </td>
                                     <td class="p-3 text-sm">
                                         {{ client.mobile_number || '—' }}
