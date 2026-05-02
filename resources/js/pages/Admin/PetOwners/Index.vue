@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { UserCheck, Plus, Edit, Trash2, Eye, Search, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-vue-next';
 import { computed, ref } from 'vue';
 import { dashboard } from '@/routes';
+import { displayEmailUnlessWalkInPlaceholder as displayEmail } from '@/lib/walkInPlaceholderEmail';
 
 interface Patient {
     id: number;
@@ -25,6 +26,7 @@ interface PetOwner {
     patients_count: number;
     patients: Patient[];
     created_at: string;
+    is_walk_in_client?: boolean;
 }
 
 interface Props {
@@ -135,7 +137,7 @@ const getSortIcon = (column: string) => {
                                 Pet Owners Management
                             </CardTitle>
                             <CardDescription>
-                                Manage all pet owners and their information
+                                Registered pet owners and walk-in clients. Walk-ins show a Walk-in tag and remain listed under Walk-In Clients too.
                             </CardDescription>
                         </div>
                         <Link :href="adminPetOwnersRoute('/create')">
@@ -210,10 +212,15 @@ const getSortIcon = (column: string) => {
                                     class="border-b hover:bg-muted/50"
                                 >
                                     <td class="p-3 font-medium">
-                                        {{ petOwner.name }}
+                                        <div class="flex flex-wrap items-center gap-2">
+                                            <span>{{ petOwner.name }}</span>
+                                            <Badge v-if="petOwner.is_walk_in_client" variant="outline" class="text-xs font-normal">
+                                                Walk-in
+                                            </Badge>
+                                        </div>
                                     </td>
                                     <td class="p-3 text-sm">
-                                        {{ petOwner.email }}
+                                        {{ displayEmail(petOwner.email) || '—' }}
                                     </td>
                                     <td class="p-3 text-sm">
                                         {{ petOwner.mobile_number || '—' }}

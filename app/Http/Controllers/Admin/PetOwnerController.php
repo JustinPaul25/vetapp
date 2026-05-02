@@ -6,22 +6,30 @@ use App\Http\Controllers\Controller;
 use App\Models\User;
 use App\Rules\PhilippineMobileNumber;
 use Illuminate\Http\Request;
-use Inertia\Inertia;
 use Illuminate\Support\Facades\DB;
+use Inertia\Inertia;
 
 class PetOwnerController extends Controller
 {
+    /** Roles that identify someone as a pet-owning customer (registered app users and walk-ins). */
+    private const PET_OWNER_ROLES = ['client', 'walk_in_client'];
+
+    private function assertPetOwnerUser(User $user): void
+    {
+        abort_unless($user->hasAnyRole(self::PET_OWNER_ROLES), 404);
+    }
+
     /**
-     * Display a listing of pet owners (users with client role).
+     * Display a listing of pet owners (registered clients and walk-in clients).
      */
     public function index(Request $request)
     {
-        $query = User::role('client')
+        $query = User::role(self::PET_OWNER_ROLES)
             ->with(['patients.petType', 'roles'])
             ->withCount('patients');
 
         // Search functionality
-        if ($request->has('search') && !empty($request->search)) {
+        if ($request->has('search') && ! empty($request->search)) {
             $keyword = $request->search;
             $query->where(function ($q) use ($keyword) {
                 $q->where('name', 'LIKE', "%{$keyword}%")
@@ -36,16 +44,16 @@ class PetOwnerController extends Controller
         // Sort functionality
         $sortBy = $request->get('sort_by', 'created_at');
         $sortDirection = $request->get('sort_direction', 'desc');
-        
+
         // Validate sort_by to prevent SQL injection
         $allowedSortColumns = ['name', 'email', 'created_at'];
-        if (!in_array($sortBy, $allowedSortColumns)) {
+        if (! in_array($sortBy, $allowedSortColumns)) {
             $sortBy = 'created_at';
         }
-        
+
         // Validate sort_direction
         $sortDirection = strtolower($sortDirection) === 'asc' ? 'asc' : 'desc';
-        
+
         $query->orderBy($sortBy, $sortDirection);
 
         $petOwners = $query->paginate(15);
@@ -54,7 +62,7 @@ class PetOwnerController extends Controller
         $petOwners->getCollection()->transform(function ($user) {
             return [
                 'id' => $user->id,
-                'name' => trim(($user->first_name ?? '') . ' ' . ($user->last_name ?? '')) ?: $user->name,
+                'name' => trim(($user->first_name ?? '').' '.($user->last_name ?? '')) ?: $user->name,
                 'email' => $user->email,
                 'mobile_number' => $user->mobile_number ?? null,
                 'address' => $user->address ?? null,
@@ -68,6 +76,7 @@ class PetOwnerController extends Controller
                     ];
                 }),
                 'created_at' => $user->created_at->toISOString(),
+                'is_walk_in_client' => $user->hasRole('walk_in_client'),
             ];
         });
 
@@ -95,7 +104,7 @@ class PetOwnerController extends Controller
             'last_name' => 'nullable|string|max:255',
             'name' => 'nullable|string|max:255',
             'email' => 'required|string|email|max:255|unique:users',
-            'mobile_number' => ['nullable', new PhilippineMobileNumber()],
+            'mobile_number' => ['nullable', new PhilippineMobileNumber],
             'address' => 'nullable|string|max:500',
             'lat' => 'nullable|numeric|between:-90,90',
             'lng' => 'nullable|numeric|between:-180,180',
@@ -105,7 +114,7 @@ class PetOwnerController extends Controller
         $user = User::create([
             'first_name' => $validated['first_name'] ?? null,
             'last_name' => $validated['last_name'] ?? null,
-            'name' => $validated['name'] ?? trim(($validated['first_name'] ?? '') . ' ' . ($validated['last_name'] ?? '')),
+            'name' => $validated['name'] ?? trim(($validated['first_name'] ?? '').' '.($validated['last_name'] ?? '')),
             'email' => $validated['email'],
             'mobile_number' => $validated['mobile_number'] ?? null,
             'address' => $validated['address'] ?? null,
@@ -125,16 +134,18 @@ class PetOwnerController extends Controller
     }
 
     /**
-     * Display the specified pet owner (user with client role).
+     * Display the specified pet owner (registered client or walk-in client).
      */
     public function show(User $petOwner)
     {
+        $this->assertPetOwnerUser($petOwner);
+
         $petOwner->load(['patients.petType', 'appointments']);
-        
+
         return Inertia::render('Admin/PetOwners/Show', [
             'petOwner' => [
                 'id' => $petOwner->id,
-                'name' => trim(($petOwner->first_name ?? '') . ' ' . ($petOwner->last_name ?? '')) ?: $petOwner->name,
+                'name' => trim(($petOwner->first_name ?? '').' '.($petOwner->last_name ?? '')) ?: $petOwner->name,
                 'first_name' => $petOwner->first_name,
                 'last_name' => $petOwner->last_name,
                 'email' => $petOwner->email,
@@ -160,15 +171,18 @@ class PetOwnerController extends Controller
                 'appointments_count' => $petOwner->appointments->count(),
                 'created_at' => $petOwner->created_at->toISOString(),
                 'updated_at' => $petOwner->updated_at->toISOString(),
+                'is_walk_in_client' => $petOwner->hasRole('walk_in_client'),
             ],
         ]);
     }
 
     /**
-     * Show the form for editing the specified pet owner (user with client role).
+     * Show the form for editing the specified pet owner (registered client or walk-in client).
      */
     public function edit(User $petOwner)
     {
+        $this->assertPetOwnerUser($petOwner);
+
         return Inertia::render('Admin/PetOwners/Edit', [
             'petOwner' => [
                 'id' => $petOwner->id,
@@ -185,16 +199,18 @@ class PetOwnerController extends Controller
     }
 
     /**
-     * Update the specified pet owner (user with client role) in storage.
+     * Update the specified pet owner (registered client or walk-in client) in storage.
      */
     public function update(Request $request, User $petOwner)
     {
+        $this->assertPetOwnerUser($petOwner);
+
         $validated = $request->validate([
             'first_name' => 'nullable|string|max:255',
             'last_name' => 'nullable|string|max:255',
             'name' => 'nullable|string|max:255',
-            'email' => 'required|string|email|max:255|unique:users,email,' . $petOwner->id,
-            'mobile_number' => ['nullable', new PhilippineMobileNumber()],
+            'email' => 'required|string|email|max:255|unique:users,email,'.$petOwner->id,
+            'mobile_number' => ['nullable', new PhilippineMobileNumber],
             'address' => 'nullable|string|max:500',
             'lat' => 'nullable|numeric|between:-90,90',
             'lng' => 'nullable|numeric|between:-180,180',
@@ -204,7 +220,7 @@ class PetOwnerController extends Controller
         $updateData = [
             'first_name' => $validated['first_name'] ?? null,
             'last_name' => $validated['last_name'] ?? null,
-            'name' => $validated['name'] ?? trim(($validated['first_name'] ?? '') . ' ' . ($validated['last_name'] ?? '')),
+            'name' => $validated['name'] ?? trim(($validated['first_name'] ?? '').' '.($validated['last_name'] ?? '')),
             'email' => $validated['email'],
             'mobile_number' => $validated['mobile_number'] ?? null,
             'address' => $validated['address'] ?? null,
@@ -212,7 +228,7 @@ class PetOwnerController extends Controller
             'long' => $validated['lng'] ?? null,
         ];
 
-        if (!empty($validated['password'])) {
+        if (! empty($validated['password'])) {
             $updateData['password'] = bcrypt($validated['password']);
         }
 
@@ -223,10 +239,12 @@ class PetOwnerController extends Controller
     }
 
     /**
-     * Remove the specified pet owner (user with client role) from storage.
+     * Remove the specified pet owner (registered client or walk-in client) from storage.
      */
     public function destroy(User $petOwner)
     {
+        $this->assertPetOwnerUser($petOwner);
+
         $petOwner->delete();
 
         return redirect()->route('admin.pet_owners.index')

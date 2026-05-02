@@ -9,6 +9,7 @@ import LocationMapPicker from '@/components/LocationMapPicker.vue';
 import { UserCheck, ArrowLeft, Edit, Heart } from 'lucide-vue-next';
 import { dashboard } from '@/routes';
 import { computed } from 'vue';
+import { displayEmailUnlessWalkInPlaceholder as displayEmail } from '@/lib/walkInPlaceholderEmail';
 
 interface PetType {
     id: number;
@@ -40,6 +41,7 @@ interface PetOwner {
     appointments_count: number;
     created_at: string;
     updated_at: string;
+    is_walk_in_client?: boolean;
 }
 
 interface Props {
@@ -112,9 +114,10 @@ const location = computed(() => {
                                 </Button>
                             </Link>
                             <div>
-                                <CardTitle class="flex items-center gap-2">
+                                <CardTitle class="flex flex-wrap items-center gap-2">
                                     <UserCheck class="h-5 w-5" />
                                     View Pet Owner
+                                    <Badge v-if="petOwner.is_walk_in_client" variant="outline">Walk-in</Badge>
                                 </CardTitle>
                                 <CardDescription>
                                     Pet owner details and their pets
@@ -142,7 +145,7 @@ const location = computed(() => {
 
                                 <div class="space-y-2">
                                     <Label class="text-sm font-medium text-muted-foreground">Email</Label>
-                                    <div class="text-lg font-semibold">{{ petOwner.email }}</div>
+                                    <div class="text-lg font-semibold">{{ displayEmail(petOwner.email) || '—' }}</div>
                                 </div>
 
                                 <div class="space-y-2">
