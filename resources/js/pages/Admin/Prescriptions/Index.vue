@@ -50,7 +50,7 @@ const breadcrumbs = [
 ];
 
 const searchQuery = ref(props.filters?.search || '');
-const sortBy = ref(props.filters?.sort_by || 'created_at');
+const sortBy = ref(props.filters?.sort_by || 'appointment_date');
 const sortDirection = ref(props.filters?.sort_direction || 'desc');
 
 const buildQueryString = (page?: number) => {
@@ -171,11 +171,11 @@ const printPrescription = (prescriptionId: number) => {
                                     <th class="text-left p-3 font-semibold">Owner</th>
                                     <th class="text-left p-3 font-semibold">
                                         <button
-                                            @click="handleSort('created_at')"
+                                            @click="handleSort('appointment_date')"
                                             class="flex items-center gap-1 hover:text-primary transition-colors"
                                         >
                                             Issued On
-                                            <component :is="getSortIcon('created_at')" class="h-4 w-4" />
+                                            <component :is="getSortIcon('appointment_date')" class="h-4 w-4" />
                                         </button>
                                     </th>
                                     <th class="text-left p-3 font-semibold">Follow-up</th>

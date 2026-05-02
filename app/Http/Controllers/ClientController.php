@@ -2162,7 +2162,7 @@ class ClientController extends Controller
                 'pet_type' => $patient->petType->name ?? 'N/A',
                 'pet_breed' => $patient->pet_breed ?? 'N/A',
                 'symptoms' => $prescription->symptoms ?? 'N/A',
-                'issued_on' => $prescription->created_at->format('Y-m-d'),
+                'issued_on' => $prescription->issuedOnDisplay('Y-m-d'),
                 'created_at' => $prescription->created_at->toISOString(),
                 'follow_up_date' => $prescription->follow_up_date ? $prescription->follow_up_date->format('Y-m-d') : null,
                 'diagnoses' => $prescription->diagnoses->map(function ($diagnosis) {

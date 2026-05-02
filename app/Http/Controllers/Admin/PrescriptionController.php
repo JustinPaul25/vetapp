@@ -4,15 +4,16 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\Prescription;
-use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
-use Inertia\Inertia;
 use App\Traits\HasDateFiltering;
 use Barryvdh\DomPDF\Facade\Pdf;
+use Carbon\Carbon;
+use Illuminate\Http\Request;
+use Inertia\Inertia;
 
 class PrescriptionController extends Controller
 {
     use HasDateFiltering;
+
     /**
      * Display a listing of all prescriptions.
      */
@@ -22,42 +23,47 @@ class PrescriptionController extends Controller
             'appointment.appointment_type',
             'appointment.user',
             'patient.petType',
-            'diagnoses.disease'
+            'diagnoses.disease',
         ]);
 
         // Search functionality
-        if ($request->has('search') && !empty($request->search)) {
+        if ($request->has('search') && ! empty($request->search)) {
             $keyword = $request->search;
             $query->where(function ($q) use ($keyword) {
                 $q->whereHas('patient.petType', function ($q) use ($keyword) {
                     $q->where('name', 'LIKE', "%{$keyword}%");
                 })
-                ->orWhereHas('appointment.user', function ($q) use ($keyword) {
-                    $q->whereRaw("CONCAT(first_name, ' ', last_name) LIKE ?", ["%{$keyword}%"]);
-                })
-                ->orWhereHas('diagnoses.disease', function ($q) use ($keyword) {
-                    $q->where('name', 'LIKE', "%{$keyword}%");
-                });
+                    ->orWhereHas('appointment.user', function ($q) use ($keyword) {
+                        $q->whereRaw("CONCAT(first_name, ' ', last_name) LIKE ?", ["%{$keyword}%"]);
+                    })
+                    ->orWhereHas('diagnoses.disease', function ($q) use ($keyword) {
+                        $q->where('name', 'LIKE', "%{$keyword}%");
+                    });
             });
         }
 
-        // Date filtering
-        $this->applyDateFilter($query, $request, 'created_at');
+        // Date filtering uses visit date (appointment), not when the prescription was saved
+        $this->applyPrescriptionVisitDateFilter($query, $request);
 
         // Sort functionality
-        $sortBy = $request->get('sort_by', 'created_at');
+        $sortBy = $request->get('sort_by', 'appointment_date');
         $sortDirection = $request->get('sort_direction', 'desc');
-        
-        // Validate sort_by to prevent SQL injection
-        $allowedSortColumns = ['created_at'];
-        if (!in_array($sortBy, $allowedSortColumns)) {
-            $sortBy = 'created_at';
+
+        $allowedSortColumns = ['created_at', 'appointment_date'];
+        if (! in_array($sortBy, $allowedSortColumns, true)) {
+            $sortBy = 'appointment_date';
         }
-        
-        // Validate sort_direction
+
         $sortDirection = strtolower($sortDirection) === 'asc' ? 'asc' : 'desc';
-        
-        $query->orderBy($sortBy, $sortDirection);
+
+        if ($sortBy === 'appointment_date') {
+            $query->join('appointments', 'prescriptions.appointment_id', '=', 'appointments.id')
+                ->select('prescriptions.*')
+                ->orderBy('appointments.appointment_date', $sortDirection)
+                ->orderBy('appointments.appointment_time', $sortDirection);
+        } else {
+            $query->orderBy('prescriptions.'.$sortBy, $sortDirection);
+        }
 
         $prescriptions = $query->paginate(15);
 
@@ -66,17 +72,17 @@ class PrescriptionController extends Controller
             $appointment = $prescription->appointment;
             $patient = $prescription->patient;
             $user = $appointment->user ?? null;
-            
+
             return [
                 'id' => $prescription->id,
                 'appointment_id' => $prescription->appointment_id,
                 'appointment_type' => $appointment->appointment_type->name ?? 'N/A',
                 'pet_type' => $patient->petType->name ?? 'N/A',
                 'pet_breed' => $patient->pet_breed ?? 'N/A',
-                'owner_name' => $user ? (trim(($user->first_name ?? '') . ' ' . ($user->last_name ?? '')) ?: $user->name) : 'N/A',
+                'owner_name' => $user ? (trim(($user->first_name ?? '').' '.($user->last_name ?? '')) ?: $user->name) : 'N/A',
                 'owner_mobile' => $user->mobile_number ?? 'N/A',
                 'owner_email' => $user->email ?? 'N/A',
-                'issued_on' => $prescription->created_at->format('Y-m-d g:i A'),
+                'issued_on' => $prescription->issuedOnDisplay(),
                 'created_at' => $prescription->created_at->toISOString(),
                 'follow_up_date' => $prescription->follow_up_date ? $prescription->follow_up_date->format('Y-m-d') : null,
                 'follow_up_notified_at' => $prescription->follow_up_notified_at ? $prescription->follow_up_notified_at->format('Y-m-d H:i') : null,
@@ -100,7 +106,7 @@ class PrescriptionController extends Controller
             'patient.petType',
             'patient.user',
             'diagnoses.disease',
-            'medicines.medicine'
+            'medicines.medicine',
         ])->findOrFail($id);
 
         return Inertia::render('Admin/Prescriptions/Show', [
@@ -132,7 +138,7 @@ class PrescriptionController extends Controller
             ],
             'owner' => $prescription->appointment->user ? [
                 'id' => $prescription->appointment->user->id,
-                'name' => trim(($prescription->appointment->user->first_name ?? '') . ' ' . ($prescription->appointment->user->last_name ?? '')) ?: $prescription->appointment->user->name,
+                'name' => trim(($prescription->appointment->user->first_name ?? '').' '.($prescription->appointment->user->last_name ?? '')) ?: $prescription->appointment->user->name,
                 'email' => $prescription->appointment->user->email,
                 'mobile_number' => $prescription->appointment->user->mobile_number ?? null,
                 'address' => $prescription->appointment->user->address ?? null,
@@ -164,27 +170,32 @@ class PrescriptionController extends Controller
             'appointment.appointment_type',
             'appointment.user',
             'patient.petType',
-            'diagnoses.disease'
+            'diagnoses.disease',
         ]);
 
-        if ($request->has('search') && !empty($request->search)) {
+        if ($request->has('search') && ! empty($request->search)) {
             $keyword = $request->search;
             $query->where(function ($q) use ($keyword) {
                 $q->whereHas('patient.petType', function ($q) use ($keyword) {
                     $q->where('name', 'LIKE', "%{$keyword}%");
                 })
-                ->orWhereHas('appointment.user', function ($q) use ($keyword) {
-                    $q->whereRaw("CONCAT(first_name, ' ', last_name) LIKE ?", ["%{$keyword}%"]);
-                })
-                ->orWhereHas('diagnoses.disease', function ($q) use ($keyword) {
-                    $q->where('name', 'LIKE', "%{$keyword}%");
-                });
+                    ->orWhereHas('appointment.user', function ($q) use ($keyword) {
+                        $q->whereRaw("CONCAT(first_name, ' ', last_name) LIKE ?", ["%{$keyword}%"]);
+                    })
+                    ->orWhereHas('diagnoses.disease', function ($q) use ($keyword) {
+                        $q->where('name', 'LIKE', "%{$keyword}%");
+                    });
             });
         }
 
-        $this->applyDateFilter($query, $request, 'created_at');
+        $this->applyPrescriptionVisitDateFilter($query, $request);
 
-        $prescriptions = $query->orderBy('created_at', 'desc')->get();
+        $prescriptions = $query
+            ->join('appointments', 'prescriptions.appointment_id', '=', 'appointments.id')
+            ->select('prescriptions.*')
+            ->orderBy('appointments.appointment_date', 'desc')
+            ->orderBy('appointments.appointment_time', 'desc')
+            ->get();
 
         $format = $request->get('format', 'pdf');
 
@@ -201,22 +212,22 @@ class PrescriptionController extends Controller
             $appointment = $prescription->appointment;
             $patient = $prescription->patient;
             $user = $appointment->user ?? null;
-            
+
             return [
                 'appointment_type' => $appointment->appointment_type->name ?? 'N/A',
                 'pet_type' => $patient->petType->name ?? 'N/A',
                 'pet_breed' => $patient->pet_breed ?? 'N/A',
-                'owner_name' => $user ? (trim(($user->first_name ?? '') . ' ' . ($user->last_name ?? '')) ?: $user->name) : 'N/A',
+                'owner_name' => $user ? (trim(($user->first_name ?? '').' '.($user->last_name ?? '')) ?: $user->name) : 'N/A',
                 'owner_email' => $user->email ?? 'N/A',
                 'symptoms' => $prescription->symptoms ?? 'N/A',
-                'issued_on' => $prescription->created_at->format('Y-m-d g:i A'),
+                'issued_on' => $prescription->issuedOnDisplay(),
             ];
         });
 
         $filterInfo = $this->getFilterInfo($request);
 
-        $base64Logo = 'data:image/png;base64,' . base64_encode(file_get_contents(public_path('media/logo_for_print.png')));
-        $base64PanaboLogo = 'data:image/png;base64,' . base64_encode(file_get_contents(public_path('media/panabo.png')));
+        $base64Logo = 'data:image/png;base64,'.base64_encode(file_get_contents(public_path('media/logo_for_print.png')));
+        $base64PanaboLogo = 'data:image/png;base64,'.base64_encode(file_get_contents(public_path('media/panabo.png')));
 
         $pdf = Pdf::loadView('admin.reports.prescriptions', [
             'prescriptions' => $data,
@@ -227,14 +238,14 @@ class PrescriptionController extends Controller
             'base64PanaboLogo' => $base64PanaboLogo,
             'reportDate' => now()->format('F d, Y'),
         ])
-        ->setPaper('a4', 'portrait');
+            ->setPaper('a4', 'portrait');
 
-        return $pdf->stream('prescriptions-report-' . date('Y-m-d') . '.pdf');
+        return $pdf->stream('prescriptions-report-'.date('Y-m-d').'.pdf');
     }
 
     private function exportCsv($prescriptions)
     {
-        $filename = 'prescriptions-report-' . date('Y-m-d') . '.csv';
+        $filename = 'prescriptions-report-'.date('Y-m-d').'.csv';
         $headers = [
             'Content-Type' => 'text/csv',
             'Content-Disposition' => "attachment; filename=\"{$filename}\"",
@@ -242,22 +253,22 @@ class PrescriptionController extends Controller
 
         $callback = function () use ($prescriptions) {
             $file = fopen('php://output', 'w');
-            
+
             fputcsv($file, ['Appointment Type', 'Pet Type', 'Breed', 'Owner Name', 'Owner Email', 'Symptoms', 'Issued On']);
 
             foreach ($prescriptions as $prescription) {
                 $appointment = $prescription->appointment;
                 $patient = $prescription->patient;
                 $user = $appointment->user ?? null;
-                
+
                 fputcsv($file, [
                     $appointment->appointment_type->name ?? 'N/A',
                     $patient->petType->name ?? 'N/A',
                     $patient->pet_breed ?? 'N/A',
-                    $user ? (trim(($user->first_name ?? '') . ' ' . ($user->last_name ?? '')) ?: $user->name) : 'N/A',
+                    $user ? (trim(($user->first_name ?? '').' '.($user->last_name ?? '')) ?: $user->name) : 'N/A',
                     $user->email ?? 'N/A',
                     $prescription->symptoms ?? 'N/A',
-                    $prescription->created_at->format('Y-m-d g:i A'),
+                    $prescription->issuedOnDisplay(),
                 ]);
             }
 
@@ -267,22 +278,66 @@ class PrescriptionController extends Controller
         return response()->stream($callback, 200, $headers);
     }
 
+    /**
+     * Filter prescriptions by the linked appointment's visit date (not prescription created_at).
+     */
+    private function applyPrescriptionVisitDateFilter($query, Request $request): void
+    {
+        $filterType = $request->get('filter_type');
+
+        switch ($filterType) {
+            case 'date':
+                if ($request->filled('date')) {
+                    $date = Carbon::parse($request->date);
+                    $query->whereHas('appointment', fn ($q) => $q->whereDate('appointment_date', $date));
+                }
+                break;
+
+            case 'month':
+                if ($request->filled('month') && $request->filled('year')) {
+                    $month = (int) $request->month;
+                    $year = (int) $request->year;
+                    $query->whereHas('appointment', function ($q) use ($month, $year) {
+                        $q->whereYear('appointment_date', $year)
+                            ->whereMonth('appointment_date', $month);
+                    });
+                }
+                break;
+
+            case 'year':
+                if ($request->filled('year')) {
+                    $year = (int) $request->year;
+                    $query->whereHas('appointment', fn ($q) => $q->whereYear('appointment_date', $year));
+                }
+                break;
+
+            case 'range':
+                if ($request->filled('date_from') && $request->filled('date_to')) {
+                    $dateFrom = Carbon::parse($request->date_from)->toDateString();
+                    $dateTo = Carbon::parse($request->date_to)->toDateString();
+                    $query->whereHas('appointment', fn ($q) => $q->whereBetween('appointment_date', [$dateFrom, $dateTo]));
+                }
+                break;
+        }
+    }
+
     private function getFilterInfo($request)
     {
         $filterType = $request->get('filter_type');
-        
+
         switch ($filterType) {
             case 'date':
-                return 'Date: ' . $request->get('date');
+                return 'Date: '.$request->get('date');
             case 'month':
                 $month = $request->get('month');
                 $year = $request->get('year');
-                $monthName = date('F', mktime(0, 0, 0, (int)$month, 1));
+                $monthName = date('F', mktime(0, 0, 0, (int) $month, 1));
+
                 return "Month: {$monthName} {$year}";
             case 'year':
-                return 'Year: ' . $request->get('year');
+                return 'Year: '.$request->get('year');
             case 'range':
-                return 'Range: ' . $request->get('date_from') . ' to ' . $request->get('date_to');
+                return 'Range: '.$request->get('date_from').' to '.$request->get('date_to');
             default:
                 return 'All Records';
         }
