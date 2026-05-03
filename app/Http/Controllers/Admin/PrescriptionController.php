@@ -23,6 +23,7 @@ class PrescriptionController extends Controller
             'appointment.appointment_type',
             'appointment.user',
             'patient.petType',
+            'patient.user',
             'diagnoses.disease',
         ]);
 
@@ -71,7 +72,7 @@ class PrescriptionController extends Controller
         $prescriptions->getCollection()->transform(function ($prescription) {
             $appointment = $prescription->appointment;
             $patient = $prescription->patient;
-            $user = $appointment->user ?? null;
+            $user = $prescription->ownerUser();
 
             return [
                 'id' => $prescription->id,
@@ -79,9 +80,9 @@ class PrescriptionController extends Controller
                 'appointment_type' => $appointment->appointment_type->name ?? 'N/A',
                 'pet_type' => $patient->petType->name ?? 'N/A',
                 'pet_breed' => $patient->pet_breed ?? 'N/A',
-                'owner_name' => $user ? (trim(($user->first_name ?? '').' '.($user->last_name ?? '')) ?: $user->name) : 'N/A',
-                'owner_mobile' => $user->mobile_number ?? 'N/A',
-                'owner_email' => $user->email ?? 'N/A',
+                'owner_name' => $prescription->ownerDisplayName(),
+                'owner_mobile' => $user?->mobile_number ?? 'N/A',
+                'owner_email' => $user?->email ?? 'N/A',
                 'issued_on' => $prescription->issuedOnDisplay(),
                 'created_at' => $prescription->created_at->toISOString(),
                 'follow_up_date' => $prescription->follow_up_date ? $prescription->follow_up_date->format('Y-m-d') : null,
@@ -136,12 +137,12 @@ class PrescriptionController extends Controller
                 'pet_allergies' => $prescription->patient->pet_allergies,
                 'pet_type' => $prescription->patient->petType->name ?? 'N/A',
             ],
-            'owner' => $prescription->appointment->user ? [
-                'id' => $prescription->appointment->user->id,
-                'name' => trim(($prescription->appointment->user->first_name ?? '').' '.($prescription->appointment->user->last_name ?? '')) ?: $prescription->appointment->user->name,
-                'email' => $prescription->appointment->user->email,
-                'mobile_number' => $prescription->appointment->user->mobile_number ?? null,
-                'address' => $prescription->appointment->user->address ?? null,
+            'owner' => ($ownerUser = $prescription->ownerUser()) ? [
+                'id' => $ownerUser->id,
+                'name' => trim(($ownerUser->first_name ?? '').' '.($ownerUser->last_name ?? '')) ?: ($ownerUser->name ?? ''),
+                'email' => $ownerUser->email,
+                'mobile_number' => $ownerUser->mobile_number ?? null,
+                'address' => $ownerUser->address ?? null,
             ] : null,
             'diagnoses' => $prescription->diagnoses->map(function ($diagnosis) {
                 return [
@@ -170,6 +171,7 @@ class PrescriptionController extends Controller
             'appointment.appointment_type',
             'appointment.user',
             'patient.petType',
+            'patient.user',
             'diagnoses.disease',
         ]);
 
@@ -211,14 +213,14 @@ class PrescriptionController extends Controller
         $data = $prescriptions->map(function ($prescription) {
             $appointment = $prescription->appointment;
             $patient = $prescription->patient;
-            $user = $appointment->user ?? null;
+            $user = $prescription->ownerUser();
 
             return [
                 'appointment_type' => $appointment->appointment_type->name ?? 'N/A',
                 'pet_type' => $patient->petType->name ?? 'N/A',
                 'pet_breed' => $patient->pet_breed ?? 'N/A',
-                'owner_name' => $user ? (trim(($user->first_name ?? '').' '.($user->last_name ?? '')) ?: $user->name) : 'N/A',
-                'owner_email' => $user->email ?? 'N/A',
+                'owner_name' => $prescription->ownerDisplayName(),
+                'owner_email' => $user?->email ?? 'N/A',
                 'symptoms' => $prescription->symptoms ?? 'N/A',
                 'issued_on' => $prescription->issuedOnDisplay(),
             ];
@@ -259,14 +261,14 @@ class PrescriptionController extends Controller
             foreach ($prescriptions as $prescription) {
                 $appointment = $prescription->appointment;
                 $patient = $prescription->patient;
-                $user = $appointment->user ?? null;
+                $user = $prescription->ownerUser();
 
                 fputcsv($file, [
                     $appointment->appointment_type->name ?? 'N/A',
                     $patient->petType->name ?? 'N/A',
                     $patient->pet_breed ?? 'N/A',
-                    $user ? (trim(($user->first_name ?? '').' '.($user->last_name ?? '')) ?: $user->name) : 'N/A',
-                    $user->email ?? 'N/A',
+                    $prescription->ownerDisplayName(),
+                    $user?->email ?? 'N/A',
                     $prescription->symptoms ?? 'N/A',
                     $prescription->issuedOnDisplay(),
                 ]);

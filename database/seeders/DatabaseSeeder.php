@@ -53,5 +53,9 @@ class DatabaseSeeder extends Seeder
         // Optional: Import vaccination rows from public/dataset/vaccinationRecord.xlsx (large; run manually):
         // php artisan db:seed --class=VaccinationRecordImportSeeder
         // $this->call(VaccinationRecordImportSeeder::class);
+
+        // Optional: Import 2025–2026 CSV into disease_symptoms / disease_medicines for diagnosis ML (skip duplicate pivots):
+        // php artisan db:seed --class=PetMedicalRecordCsvSeeder
+        // $this->call(PetMedicalRecordCsvSeeder::class);
     }
 }

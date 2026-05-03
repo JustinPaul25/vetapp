@@ -42,28 +42,28 @@ class AppointmentController extends Controller
             'patient.user',
             'patients.petType',
             'patients.user',
-            'prescription.diagnoses.disease'
+            'prescription.diagnoses.disease',
         ]);
 
         // Status filtering
-        if ($request->has('status') && !empty($request->status) && $request->status !== 'all') {
+        if ($request->has('status') && ! empty($request->status) && $request->status !== 'all') {
             $status = strtolower($request->status);
             switch ($status) {
                 case 'pending':
                     $query->where('is_approved', false)
-                          ->where(function ($q) {
-                              $q->whereNull('is_completed')->orWhere('is_completed', false);
-                          })
-                          ->where(function ($q) {
-                              $q->whereNull('is_canceled')->orWhere('is_canceled', false);
-                          });
+                        ->where(function ($q) {
+                            $q->whereNull('is_completed')->orWhere('is_completed', false);
+                        })
+                        ->where(function ($q) {
+                            $q->whereNull('is_canceled')->orWhere('is_canceled', false);
+                        });
                     break;
                 case 'approved':
                     $query->where('is_approved', true)
-                          ->where('is_completed', false)
-                          ->where(function ($q) {
-                              $q->whereNull('is_canceled')->orWhere('is_canceled', false);
-                          });
+                        ->where('is_completed', false)
+                        ->where(function ($q) {
+                            $q->whereNull('is_canceled')->orWhere('is_canceled', false);
+                        });
                     break;
                 case 'completed':
                     $query->where('is_completed', true);
@@ -75,41 +75,41 @@ class AppointmentController extends Controller
         }
 
         // Search functionality
-        if ($request->has('search') && !empty($request->search)) {
+        if ($request->has('search') && ! empty($request->search)) {
             $keyword = $request->search;
             $query->where(function ($q) use ($keyword) {
                 $q->whereHas('patients.petType', function ($q) use ($keyword) {
                     $q->where('name', 'LIKE', "%{$keyword}%");
                 })
-                ->orWhereHas('patients.user', function ($q) use ($keyword) {
-                    $q->where(function ($q) use ($keyword) {
-                        $q->where(DB::raw("CONCAT(COALESCE(first_name, ''), ' ', COALESCE(last_name, ''))"), 'LIKE', "%{$keyword}%")
-                            ->orWhere('name', 'LIKE', "%{$keyword}%")
-                            ->orWhere('email', 'LIKE', "%{$keyword}%");
+                    ->orWhereHas('patients.user', function ($q) use ($keyword) {
+                        $q->where(function ($q) use ($keyword) {
+                            $q->where(DB::raw("CONCAT(COALESCE(first_name, ''), ' ', COALESCE(last_name, ''))"), 'LIKE', "%{$keyword}%")
+                                ->orWhere('name', 'LIKE', "%{$keyword}%")
+                                ->orWhere('email', 'LIKE', "%{$keyword}%");
+                        });
+                    })
+                    ->orWhereHas('patient.user', function ($q) use ($keyword) {
+                        $q->where(function ($q) use ($keyword) {
+                            $q->where(DB::raw("CONCAT(COALESCE(first_name, ''), ' ', COALESCE(last_name, ''))"), 'LIKE', "%{$keyword}%")
+                                ->orWhere('name', 'LIKE', "%{$keyword}%")
+                                ->orWhere('email', 'LIKE', "%{$keyword}%");
+                        });
+                    })
+                    ->orWhereHas('prescription.diagnoses.disease', function ($q) use ($keyword) {
+                        $q->where('name', 'LIKE', "%{$keyword}%");
                     });
-                })
-                ->orWhereHas('patient.user', function ($q) use ($keyword) {
-                    $q->where(function ($q) use ($keyword) {
-                        $q->where(DB::raw("CONCAT(COALESCE(first_name, ''), ' ', COALESCE(last_name, ''))"), 'LIKE', "%{$keyword}%")
-                            ->orWhere('name', 'LIKE', "%{$keyword}%")
-                            ->orWhere('email', 'LIKE', "%{$keyword}%");
-                    });
-                })
-                ->orWhereHas('prescription.diagnoses.disease', function ($q) use ($keyword) {
-                    $q->where('name', 'LIKE', "%{$keyword}%");
-                });
             });
         }
 
         // Sort functionality
         $sortBy = $request->get('sort_by', 'created_at');
         $sortDirection = $request->get('sort_direction', 'desc');
-        
+
         $allowedSortColumns = ['appointment_date', 'appointment_time', 'created_at'];
-        if (!in_array($sortBy, $allowedSortColumns)) {
+        if (! in_array($sortBy, $allowedSortColumns)) {
             $sortBy = 'created_at';
         }
-        
+
         $sortDirection = strtolower($sortDirection) === 'asc' ? 'asc' : 'desc';
         $query->orderBy($sortBy, $sortDirection);
 
@@ -133,25 +133,25 @@ class AppointmentController extends Controller
             if ($patients->isEmpty() && $appointment->patient) {
                 $patients = collect([$appointment->patient]);
             }
-            
+
             $petCount = $patients->count();
             $isMultiPet = $petCount >= 2;
-            
+
             $petTypes = $patients->map(function ($patient) {
                 return $patient->petType->name ?? 'N/A';
             })->unique()->join(', ');
             $petBreeds = $patients->pluck('pet_breed')->filter()->unique()->join(', ');
-            
+
             // Get owner info from first patient (all should belong to same user)
             $firstPatient = $patients->first();
-            $ownerName = $firstPatient && $firstPatient->user ? 
-                trim(($firstPatient->user->first_name ?? '') . ' ' . ($firstPatient->user->last_name ?? '')) ?: $firstPatient->user->name : 'N/A';
+            $ownerName = $firstPatient && $firstPatient->user ?
+                trim(($firstPatient->user->first_name ?? '').' '.($firstPatient->user->last_name ?? '')) ?: $firstPatient->user->name : 'N/A';
             $ownerEmail = $firstPatient && $firstPatient->user ? $firstPatient->user->email ?? 'N/A' : 'N/A';
             $ownerMobile = $firstPatient && $firstPatient->user ? $firstPatient->user->mobile_number ?? 'N/A' : 'N/A';
-            
+
             // Get appointment type name (for overall appointment display)
             $appointmentTypeName = $appointment->appointment_type->name ?? 'N/A';
-            
+
             // Get all pets details for this appointment
             // Check if each pet has a prescription for this appointment
             $allPets = $patients->map(function ($patient) use ($appointment) {
@@ -159,7 +159,7 @@ class AppointmentController extends Controller
                 $hasPrescription = Prescription::where('appointment_id', $appointment->id)
                     ->where('patient_id', $patient->id)
                     ->exists();
-                
+
                 // Get appointment types for this specific pet from the pivot table
                 $petAppointmentTypes = DB::table('appointment_patient')
                     ->where('appointment_id', $appointment->id)
@@ -167,7 +167,7 @@ class AppointmentController extends Controller
                     ->join('appointment_types', 'appointment_patient.appointment_type_id', '=', 'appointment_types.id')
                     ->pluck('appointment_types.name')
                     ->toArray();
-                
+
                 // If no appointment types found in pivot, fallback to appointment's primary type
                 if (empty($petAppointmentTypes)) {
                     if ($appointment->relationLoaded('appointment_type') && $appointment->appointment_type) {
@@ -176,11 +176,11 @@ class AppointmentController extends Controller
                         $petAppointmentTypes = ['N/A'];
                     }
                 }
-                
-                $petAppointmentTypeDisplay = count($petAppointmentTypes) > 1 
-                    ? implode(', ', $petAppointmentTypes) 
+
+                $petAppointmentTypeDisplay = count($petAppointmentTypes) > 1
+                    ? implode(', ', $petAppointmentTypes)
                     : ($petAppointmentTypes[0] ?? 'N/A');
-                
+
                 return [
                     'id' => $patient->id,
                     'pet_name' => $patient->pet_name ?? 'N/A',
@@ -190,7 +190,7 @@ class AppointmentController extends Controller
                     'has_prescription' => $hasPrescription,
                 ];
             })->toArray();
-            
+
             // Format appointment time to 12-hour format
             $formattedTime = $appointment->appointment_time;
             try {
@@ -202,7 +202,7 @@ class AppointmentController extends Controller
                     $formattedTime = $appointment->appointment_time;
                 }
             }
-            
+
             return [
                 'id' => $appointment->id,
                 'appointment_type' => $appointment->appointment_type->name ?? 'N/A',
@@ -214,7 +214,7 @@ class AppointmentController extends Controller
                 'owner_name' => $ownerName,
                 'owner_email' => $ownerEmail,
                 'owner_mobile' => $ownerMobile,
-                'disease' => $appointment->prescription && $appointment->prescription->diagnoses->isNotEmpty() 
+                'disease' => $appointment->prescription && $appointment->prescription->diagnoses->isNotEmpty()
                     ? $appointment->prescription->diagnoses->first()->disease->name ?? 'N/A'
                     : 'N/A',
                 'pet_count' => $petCount,
@@ -238,7 +238,7 @@ class AppointmentController extends Controller
 
     /**
      * Show the form for creating a new appointment.
-     * 
+     *
      * @deprecated Only clients can create appointments. This method is kept for backward compatibility but returns 403.
      */
     public function create()
@@ -250,8 +250,8 @@ class AppointmentController extends Controller
                 'pet_name' => $patient->pet_name,
                 'pet_breed' => $patient->pet_breed,
                 'pet_type' => $patient->petType->name ?? 'N/A',
-                'owner_name' => $patient->user ? 
-                    trim(($patient->user->first_name ?? '') . ' ' . ($patient->user->last_name ?? '')) ?: $patient->user->name : 'N/A',
+                'owner_name' => $patient->user ?
+                    trim(($patient->user->first_name ?? '').' '.($patient->user->last_name ?? '')) ?: $patient->user->name : 'N/A',
             ];
         });
 
@@ -270,7 +270,7 @@ class AppointmentController extends Controller
 
     /**
      * Store a newly created appointment.
-     * 
+     *
      * @deprecated Only clients can create appointments. This method is kept for backward compatibility but returns 403.
      */
     public function store(Request $request)
@@ -286,8 +286,8 @@ class AppointmentController extends Controller
         // Validate daily appointment limits
         $limitService = app(AppointmentLimitService::class);
         $limitCheck = $limitService->checkDailyLimit($request->appointment_type, $request->appointment_date);
-        
-        if (!$limitCheck['available']) {
+
+        if (! $limitCheck['available']) {
             return back()->withErrors([
                 'appointment_date' => sprintf(
                     'Daily limit reached for %s appointments. Current: %d/%d',
@@ -300,7 +300,7 @@ class AppointmentController extends Controller
 
         // Get the patient to find the owner's user_id
         $patient = Patient::findOrFail($request->patient_id);
-        
+
         $appointment = Appointment::create([
             'patient_id' => $request->patient_id,
             'appointment_type_id' => $request->appointment_type,
@@ -313,10 +313,10 @@ class AppointmentController extends Controller
 
         // Sync many-to-many relationship for patients
         $appointment->patients()->sync([$request->patient_id]);
-        
+
         // Sync many-to-many relationship for appointment types (for consistency)
         $appointment->appointment_types()->sync([$request->appointment_type]);
-        
+
         // Reload appointment with relationships
         $appointment->load('appointment_type', 'appointment_types', 'patient.petType', 'patient.user', 'patients.petType', 'patients.user');
 
@@ -329,12 +329,12 @@ class AppointmentController extends Controller
             ->get();
 
         $pet = $appointment->patient;
-        $patient_owner_full_name = trim(($pet->user->first_name ?? '') . ' ' . ($pet->user->last_name ?? '')) ?: ($pet->user->name ?? 'N/A');
+        $patient_owner_full_name = trim(($pet->user->first_name ?? '').' '.($pet->user->last_name ?? '')) ?: ($pet->user->name ?? 'N/A');
         $appointmentTypeName = $appointment->appointment_type->name ?? 'N/A';
 
-        $link = config('app.url') . '/admin/appointments/' . $appointment->id;
-        $subject = sprintf("New appointment created for %s", $pet->pet_name ?? 'patient');
-        $message = $appointmentTypeName . ' appointment scheduled for ' . $request->appointment_date . ' at ' . $request->appointment_time;
+        $link = config('app.url').'/admin/appointments/'.$appointment->id;
+        $subject = sprintf('New appointment created for %s', $pet->pet_name ?? 'patient');
+        $message = $appointmentTypeName.' appointment scheduled for '.$request->appointment_date.' at '.$request->appointment_time;
 
         // Send real-time notifications to staff via Ably
         $ablyService = app(AblyService::class);
@@ -375,7 +375,7 @@ class AppointmentController extends Controller
             'patients.user',
             'appointment_type',
             'prescription.diagnoses.disease',
-            'prescription.medicines.medicine'
+            'prescription.medicines.medicine',
         ])->findOrFail($id);
 
         $medicines = Medicine::all()->map(function ($medicine) {
@@ -398,7 +398,7 @@ class AppointmentController extends Controller
                 $formattedTime = $appointment->appointment_time;
             }
         }
-        
+
         return Inertia::render('Admin/Appointments/Show', [
             'appointment' => [
                 'id' => $appointment->id,
@@ -419,7 +419,7 @@ class AppointmentController extends Controller
                 $hasPrescription = Prescription::where('appointment_id', $appointment->id)
                     ->where('patient_id', $patient->id)
                     ->exists();
-                
+
                 // Get appointment types for this specific pet from the pivot table
                 $petAppointmentTypes = DB::table('appointment_patient')
                     ->where('appointment_id', $appointment->id)
@@ -427,7 +427,7 @@ class AppointmentController extends Controller
                     ->join('appointment_types', 'appointment_patient.appointment_type_id', '=', 'appointment_types.id')
                     ->pluck('appointment_types.name')
                     ->toArray();
-                
+
                 // If no appointment types found in pivot, fallback to appointment's primary type
                 if (empty($petAppointmentTypes)) {
                     if ($appointment->relationLoaded('appointment_type') && $appointment->appointment_type) {
@@ -436,7 +436,7 @@ class AppointmentController extends Controller
                         $petAppointmentTypes = ['N/A'];
                     }
                 }
-                
+
                 return [
                     'id' => $patient->id,
                     'pet_name' => $patient->pet_name,
@@ -449,7 +449,7 @@ class AppointmentController extends Controller
                     'has_prescription' => $hasPrescription,
                     'owner' => $patient->user ? [
                         'id' => $patient->user->id,
-                        'name' => trim(($patient->user->first_name ?? '') . ' ' . ($patient->user->last_name ?? '')) ?: $patient->user->name,
+                        'name' => trim(($patient->user->first_name ?? '').' '.($patient->user->last_name ?? '')) ?: $patient->user->name,
                         'email' => $patient->user->email,
                         'mobile_number' => $patient->user->mobile_number ?? null,
                     ] : null,
@@ -466,7 +466,7 @@ class AppointmentController extends Controller
                 'pet_type' => $appointment->patient->petType->name ?? 'N/A',
                 'owner' => $appointment->patient->user ? [
                     'id' => $appointment->patient->user->id,
-                    'name' => trim(($appointment->patient->user->first_name ?? '') . ' ' . ($appointment->patient->user->last_name ?? '')) ?: $appointment->patient->user->name,
+                    'name' => trim(($appointment->patient->user->first_name ?? '').' '.($appointment->patient->user->last_name ?? '')) ?: $appointment->patient->user->name,
                     'email' => $appointment->patient->user->email,
                     'mobile_number' => $appointment->patient->user->mobile_number ?? null,
                 ] : null,
@@ -509,31 +509,31 @@ class AppointmentController extends Controller
         ]);
 
         $appointment = Appointment::with('patients.user', 'patient.user')->findOrFail($id);
-        
+
         // Get all patients for this appointment (multi-pet support)
         $patients = $appointment->patients;
         if ($patients->isEmpty() && $appointment->patient) {
             $patients = collect([$appointment->patient]);
         }
-        
+
         // If date is changing, validate daily limits for the new date (excluding current appointment)
         if ($appointment->appointment_date->format('Y-m-d') !== $request->appointment_date) {
             $limitService = app(AppointmentLimitService::class);
-            
+
             // Get all appointment types for this appointment
             $appointmentTypeIds = $appointment->appointment_types->pluck('id')->toArray();
             if (empty($appointmentTypeIds)) {
                 // Fallback to single appointment_type_id if many-to-many is empty
                 $appointmentTypeIds = [$appointment->appointment_type_id];
             }
-            
+
             foreach ($appointmentTypeIds as $typeId) {
                 $limitCheck = $limitService->checkDailyLimit($typeId, $request->appointment_date, $appointment->id);
-                
-                if (!$limitCheck['available']) {
+
+                if (! $limitCheck['available']) {
                     $appointmentType = AppointmentType::find($typeId);
                     $typeName = $appointmentType ? $appointmentType->name : 'Unknown';
-                    
+
                     return back()->withErrors([
                         'appointment_date' => sprintf(
                             'Daily limit reached for %s appointments on the selected date. Current: %d/%d',
@@ -545,7 +545,7 @@ class AppointmentController extends Controller
                 }
             }
         }
-        
+
         $appointment->appointment_date = $request->appointment_date;
         $appointment->appointment_time = $request->appointment_time;
         $appointment->is_approved = true;
@@ -566,12 +566,12 @@ class AppointmentController extends Controller
         // Reload appointment with relationships for notification
         $appointment->load('appointment_type', 'patients.petType');
         $appointmentTypeName = $appointment->appointment_type->name ?? 'N/A';
-        
+
         // Get pet count and names for notification
         $petCount = $patients->count();
         $petNames = $patients->pluck('pet_name')->filter()->toArray();
         $petNamesList = implode(', ', $petNames);
-        
+
         // Get owner from first patient (all should belong to same user)
         $firstPatient = $patients->first();
         $owner = $firstPatient && $firstPatient->user ? $firstPatient->user : null;
@@ -593,16 +593,16 @@ class AppointmentController extends Controller
 
         // Send email notification
         if ($owner && $owner->email) {
-            $ownerName = trim(($owner->first_name ?? '') . ' ' . ($owner->last_name ?? '')) ?: $owner->name;
-            $petInfo = $petCount > 1 
+            $ownerName = trim(($owner->first_name ?? '').' '.($owner->last_name ?? '')) ?: $owner->name;
+            $petInfo = $petCount > 1
                 ? "for {$petCount} pets ({$petNamesList})"
                 : "for {$petNamesList}";
-            
+
             $details = [
                 'subject' => 'Your appointment has been approved!',
-                'body' => "Hi {$ownerName},<br><br>Your appointment {$petInfo} has been approved.<br><br>" .
-                    "Appointment Date: {$request->appointment_date}<br>" .
-                    "Appointment Time: {$formattedTime}"
+                'body' => "Hi {$ownerName},<br><br>Your appointment {$petInfo} has been approved.<br><br>".
+                    "Appointment Date: {$request->appointment_date}<br>".
+                    "Appointment Time: {$formattedTime}",
             ];
 
             Notification::route('mail', $owner->email)
@@ -611,22 +611,22 @@ class AppointmentController extends Controller
 
         // Send database notification (in-app notification) to client
         if ($owner) {
-            $link = config('app.url') . '/appointments/' . $appointment->id;
+            $link = config('app.url').'/appointments/'.$appointment->id;
             $subject = 'Your appointment has been approved!';
-            $petInfo = $petCount > 1 
+            $petInfo = $petCount > 1
                 ? "for {$petCount} pets"
                 : "for {$petNamesList}";
             $message = "Your {$appointmentTypeName} appointment {$petInfo} scheduled for {$request->appointment_date} at {$formattedTime} has been approved.";
-            
+
             $owner->notify(new DatabaseNotification($subject, $message, $link));
         }
 
         // Send real-time notification to client via Ably
         if ($owner) {
             $ablyService = app(AblyService::class);
-            $link = config('app.url') . '/appointments/' . $appointment->id;
+            $link = config('app.url').'/appointments/'.$appointment->id;
             $subject = 'Your appointment has been approved!';
-            $petInfo = $petCount > 1 
+            $petInfo = $petCount > 1
                 ? "for {$petCount} pets"
                 : "for {$petNamesList}";
             $message = "Your {$appointmentTypeName} appointment {$petInfo} scheduled for {$request->appointment_date} at {$formattedTime} has been approved.";
@@ -660,7 +660,7 @@ class AppointmentController extends Controller
         ]);
 
         $appointment = Appointment::with('patient.user', 'appointment_type')->findOrFail($id);
-        
+
         // Only allow rescheduling appointments that are pending (not approved, not completed, not canceled)
         if ($appointment->is_completed) {
             return back()->withErrors([
@@ -679,7 +679,7 @@ class AppointmentController extends Controller
                 'appointment_date' => 'Only pending appointments can be rescheduled.',
             ]);
         }
-        
+
         // Check if date is disabled
         $isDisabled = DisabledDate::where('date', $request->appointment_date)->exists();
         if ($isDisabled) {
@@ -692,25 +692,25 @@ class AppointmentController extends Controller
         $oldDate = $appointment->appointment_date->format('Y-m-d');
         $oldTime = $appointment->appointment_time; // Stored in 24-hour format
         $oldTimeFormatted = Carbon::createFromFormat('H:i', $oldTime)->format('h:i A'); // Convert to 12-hour format
-        
+
         // If date is changing, validate daily limits for the new date (excluding current appointment)
         if ($appointment->appointment_date->format('Y-m-d') !== $request->appointment_date) {
             $limitService = app(AppointmentLimitService::class);
-            
+
             // Get all appointment types for this appointment
             $appointmentTypeIds = $appointment->appointment_types->pluck('id')->toArray();
             if (empty($appointmentTypeIds)) {
                 // Fallback to single appointment_type_id if many-to-many is empty
                 $appointmentTypeIds = [$appointment->appointment_type_id];
             }
-            
+
             foreach ($appointmentTypeIds as $typeId) {
                 $limitCheck = $limitService->checkDailyLimit($typeId, $request->appointment_date, $appointment->id);
-                
-                if (!$limitCheck['available']) {
+
+                if (! $limitCheck['available']) {
                     $appointmentType = AppointmentType::find($typeId);
                     $typeName = $appointmentType ? $appointmentType->name : 'Unknown';
-                    
+
                     return back()->withErrors([
                         'appointment_date' => sprintf(
                             'Daily limit reached for %s appointments on the selected date. Current: %d/%d',
@@ -722,7 +722,7 @@ class AppointmentController extends Controller
                 }
             }
         }
-        
+
         $appointment->appointment_date = $request->appointment_date;
         $appointment->appointment_time = $request->appointment_time;
         $appointment->reschedule_reason = $request->reschedule_reason;
@@ -730,21 +730,21 @@ class AppointmentController extends Controller
 
         // Reload appointment with relationships for notification
         $appointment->load('appointment_type', 'patient.petType', 'patient.user', 'patients.petType', 'patients.user');
-        
+
         // Get all patients for this appointment
         $patients = $appointment->patients;
         if ($patients->isEmpty() && $appointment->patient) {
             $patients = collect([$appointment->patient]);
         }
-        
+
         // Get the first patient's user for notifications (all pets should belong to the same user)
         $firstPatient = $patients->first();
-        if (!$firstPatient || !$firstPatient->user) {
+        if (! $firstPatient || ! $firstPatient->user) {
             return redirect()->back()->with('success', 'Appointment has been rescheduled successfully.');
         }
 
-        $ownerName = trim(($firstPatient->user->first_name ?? '') . ' ' . ($firstPatient->user->last_name ?? '')) ?: $firstPatient->user->name;
-        
+        $ownerName = trim(($firstPatient->user->first_name ?? '').' '.($firstPatient->user->last_name ?? '')) ?: $firstPatient->user->name;
+
         // Convert new time from 24-hour format to 12-hour format for notifications
         $newTimeFormatted = Carbon::createFromFormat('H:i', $request->appointment_time)->format('h:i A');
         $newDateFormatted = Carbon::createFromFormat('Y-m-d', $request->appointment_date)->format('M d, Y');
@@ -760,7 +760,7 @@ class AppointmentController extends Controller
                 ->join('appointment_types', 'appointment_patient.appointment_type_id', '=', 'appointment_types.id')
                 ->pluck('appointment_types.name')
                 ->toArray();
-            
+
             // If no appointment types found in pivot, fallback to appointment's primary type
             if (empty($petAppointmentTypes)) {
                 if ($appointment->appointment_type) {
@@ -769,12 +769,12 @@ class AppointmentController extends Controller
                     $petAppointmentTypes = ['N/A'];
                 }
             }
-            
+
             $appointmentTypesList = implode(', ', $petAppointmentTypes);
-            $petDetailsHtml .= "Pet Name: {$pet->pet_name}<br>" .
+            $petDetailsHtml .= "Pet Name: {$pet->pet_name}<br>".
                 "Appointment Type(s): {$appointmentTypesList}<br><br>";
         }
-        
+
         // Get all unique appointment types for database/Ably notification message
         $allAppointmentTypes = [];
         foreach ($patients as $pet) {
@@ -784,11 +784,11 @@ class AppointmentController extends Controller
                 ->join('appointment_types', 'appointment_patient.appointment_type_id', '=', 'appointment_types.id')
                 ->pluck('appointment_types.name')
                 ->toArray();
-            
+
             if (empty($petAppointmentTypes) && $appointment->appointment_type) {
                 $petAppointmentTypes = [$appointment->appointment_type->name];
             }
-            
+
             $allAppointmentTypes = array_merge($allAppointmentTypes, $petAppointmentTypes);
         }
         $allAppointmentTypes = array_unique($allAppointmentTypes);
@@ -798,21 +798,21 @@ class AppointmentController extends Controller
         }
 
         // Send notifications to client when admin/staff reschedules
-        $clientLink = config('app.url') . '/appointments/' . $appointment->id;
+        $clientLink = config('app.url').'/appointments/'.$appointment->id;
         $clientSubject = 'Your appointment has been rescheduled';
         $rescheduleReason = $request->reschedule_reason;
-        
-        $clientMessage = "Hi {$ownerName},<br><br>" .
-            "Your appointment has been rescheduled by our staff.<br><br>" .
-            "Reason for Rescheduling: {$rescheduleReason}<br><br>" .
-            "Appointment Details:<br><br>" .
-            $petDetailsHtml .
-            "Previous Date: {$oldDateFormatted}<br>" .
-            "Previous Time: {$oldTimeFormatted}<br>" .
-            "New Date: {$newDateFormatted}<br>" .
-            "New Time: {$newTimeFormatted}<br><br>" .
-            "Please note that your appointment status has been reset to pending and will need to be approved again.<br><br>" .
-            "<p style='text-align:center'><a href='" . $clientLink . "' style='background-color: #4CAF50; border: none; color: white; padding: 15px 32px; text-align: center; text-decoration: none; font-size: 12px; border-radius: 15px;'>View Appointment</a></p>";
+
+        $clientMessage = "Hi {$ownerName},<br><br>".
+            'Your appointment has been rescheduled by our staff.<br><br>'.
+            "Reason for Rescheduling: {$rescheduleReason}<br><br>".
+            'Appointment Details:<br><br>'.
+            $petDetailsHtml.
+            "Previous Date: {$oldDateFormatted}<br>".
+            "Previous Time: {$oldTimeFormatted}<br>".
+            "New Date: {$newDateFormatted}<br>".
+            "New Time: {$newTimeFormatted}<br><br>".
+            'Please note that your appointment status has been reset to pending and will need to be approved again.<br><br>'.
+            "<p style='text-align:center'><a href='".$clientLink."' style='background-color: #4CAF50; border: none; color: white; padding: 15px 32px; text-align: center; text-decoration: none; font-size: 12px; border-radius: 15px;'>View Appointment</a></p>";
 
         // Send email notification to client
         if ($firstPatient->user->email) {
@@ -837,7 +837,7 @@ class AppointmentController extends Controller
         // Send real-time notification to client via Ably
         $ablyService = app(AblyService::class);
         $clientAppointmentMessage = "Your {$appointmentTypesText} appointment has been rescheduled from {$oldDateFormatted} at {$oldTimeFormatted} to {$newDateFormatted} at {$newTimeFormatted}";
-        
+
         $ablyService->publishToUser($firstPatient->user->id, 'appointment.rescheduled', [
             'appointment_id' => $appointment->id,
             'subject' => $clientSubject,
@@ -869,54 +869,54 @@ class AppointmentController extends Controller
                     'name' => $symptom->name,
                 ];
             });
-        
+
         $instructions = PrescriptionMedicine::selectRaw('DISTINCT(instructions) as instructions')
             ->whereNotNull('instructions')
             ->where('instructions', '!=', '')
             ->pluck('instructions');
-        
+
         $appointment = Appointment::with([
-            'patient.petType', 
+            'patient.petType',
             'patients.petType', // Load all patients for the appointment
-            'appointment_type', 
-            'user'
+            'appointment_type',
+            'user',
         ])
             ->where('is_approved', 1)
             ->where('id', $id)
             ->firstOrFail();
-        
+
         // Get all pets associated with this appointment
         $allPatients = $appointment->patients;
-        
+
         // If patient_id is provided in request, use that; otherwise use primary patient
         $requestedPatientId = $request->get('patient_id');
         $patient = null;
-        
+
         if ($requestedPatientId) {
             // Find the requested patient among the appointment's patients
             $patient = $allPatients->firstWhere('id', $requestedPatientId);
         }
-        
+
         // If patient not found or not provided, use primary patient
-        if (!$patient) {
+        if (! $patient) {
             $patient = $appointment->patient;
         }
-        
+
         // Verify the patient belongs to this appointment
-        if (!$allPatients->contains('id', $patient->id)) {
+        if (! $allPatients->contains('id', $patient->id)) {
             abort(404, 'Patient not found in this appointment.');
         }
-        
+
         // Check if this patient already has a prescription for this appointment
         $existingPrescription = Prescription::where('appointment_id', $appointment->id)
             ->where('patient_id', $patient->id)
             ->first();
-        
+
         if ($existingPrescription) {
             return redirect()->route('admin.appointments.show', $appointment->id)
                 ->with('error', "A prescription already exists for {$patient->pet_name} in this appointment.");
         }
-        
+
         $medicines = Medicine::all()->map(function ($medicine) {
             return [
                 'id' => $medicine->id,
@@ -925,13 +925,13 @@ class AppointmentController extends Controller
                 'stock' => $medicine->stock,
             ];
         });
-        
+
         // Prepare list of all pets for selection
         $patientsList = $allPatients->map(function ($p) use ($appointment) {
             $hasPrescription = Prescription::where('appointment_id', $appointment->id)
                 ->where('patient_id', $p->id)
                 ->exists();
-            
+
             return [
                 'id' => $p->id,
                 'pet_name' => $p->pet_name,
@@ -940,7 +940,7 @@ class AppointmentController extends Controller
                 'has_prescription' => $hasPrescription,
             ];
         });
-        
+
         // Get appointment type for the specific selected patient from the pivot table
         $petAppointmentTypes = DB::table('appointment_patient')
             ->where('appointment_id', $appointment->id)
@@ -948,7 +948,7 @@ class AppointmentController extends Controller
             ->join('appointment_types', 'appointment_patient.appointment_type_id', '=', 'appointment_types.id')
             ->pluck('appointment_types.name')
             ->toArray();
-        
+
         // If no appointment types found in pivot, fallback to appointment's primary type
         if (empty($petAppointmentTypes)) {
             if ($appointment->relationLoaded('appointment_type') && $appointment->appointment_type) {
@@ -957,12 +957,12 @@ class AppointmentController extends Controller
                 $petAppointmentTypes = ['N/A'];
             }
         }
-        
+
         // Use the first appointment type (or comma-separated if multiple)
-        $patientAppointmentType = count($petAppointmentTypes) > 1 
-            ? implode(', ', $petAppointmentTypes) 
+        $patientAppointmentType = count($petAppointmentTypes) > 1
+            ? implode(', ', $petAppointmentTypes)
             : ($petAppointmentTypes[0] ?? 'N/A');
-        
+
         // Format appointment time to 12-hour format
         $formattedTime = $appointment->appointment_time;
         try {
@@ -977,7 +977,7 @@ class AppointmentController extends Controller
                 $formattedTime = $appointment->appointment_time;
             }
         }
-        
+
         return Inertia::render('Admin/Prescriptions/Create', [
             'appointment' => [
                 'id' => $appointment->id,
@@ -1043,30 +1043,31 @@ class AppointmentController extends Controller
         }
 
         $request->validate($validationRules);
-        
+
         // Get the patient for this prescription
         $prescriptionPatientId = $request->patient_id;
-        
+
         // Verify the patient belongs to this appointment
-        if (!$appointment->patients->contains('id', $prescriptionPatientId)) {
+        if (! $appointment->patients->contains('id', $prescriptionPatientId)) {
             return back()->withErrors([
                 'patient_id' => ['The selected patient does not belong to this appointment.'],
             ])->withInput();
         }
-        
+
         // Check if this specific patient already has a prescription for this appointment
         $existingPrescription = Prescription::where('appointment_id', $appointment->id)
             ->where('patient_id', $prescriptionPatientId)
             ->first();
-        
+
         if ($existingPrescription) {
             $patient = $appointment->patients->firstWhere('id', $prescriptionPatientId);
+
             return back()->withErrors([
                 'patient_id' => ["A prescription already exists for {$patient->pet_name} in this appointment."],
             ])->withInput();
         }
-        
-        return DB::transaction(function () use ($appointment, $request, $prescriptionPatientId, $hasOptionalFields) {
+
+        return DB::transaction(function () use ($appointment, $request, $prescriptionPatientId) {
             // Normalize + de-duplicate symptoms so the prescription doesn't store duplicates.
             $normalizedSymptoms = [];
             if (is_array($request->symptoms) && count($request->symptoms) > 0) {
@@ -1122,9 +1123,9 @@ class AppointmentController extends Controller
                             ]
                         );
                     }
-                    
+
                     // Create disease-symptom relationships for machine learning only if symptoms are provided
-                    if (!empty($normalizedSymptoms)) {
+                    if (! empty($normalizedSymptoms)) {
                         foreach ($normalizedSymptoms as $symptom) {
                             $symptom_data = trim((string) $symptom);
                             $symptomModel = Symptom::firstOrCreate(['name' => $symptom_data]);
@@ -1144,10 +1145,10 @@ class AppointmentController extends Controller
                     }
                 }
             }
-            
+
             // Track if anti-rabies vaccination was given
             $hasAntiRabies = false;
-            
+
             // Create prescription medicines and deduct stock
             foreach ($request->medicines as $medicine) {
                 PrescriptionMedicine::create([
@@ -1160,30 +1161,30 @@ class AppointmentController extends Controller
 
                 // Deduct stock from inventory
                 $medicineModel = Medicine::findOrFail($medicine['id']);
-                
+
                 // Check if this is an anti-rabies vaccination
                 $medicineName = strtolower($medicineModel->name);
-                if (str_contains($medicineName, 'anti-rabies') || str_contains($medicineName, 'antirabies') || 
-                    (str_contains($medicineName, 'rabies') && !str_contains($medicineName, 'test'))) {
+                if (str_contains($medicineName, 'anti-rabies') || str_contains($medicineName, 'antirabies') ||
+                    (str_contains($medicineName, 'rabies') && ! str_contains($medicineName, 'test'))) {
                     $hasAntiRabies = true;
                 }
-                
+
                 // Parse quantity string to extract numeric value (e.g., "1 Pcs." -> 1, "2 Bottles" -> 2)
                 $quantityString = $medicine['quantity'];
                 preg_match('/(\d+(?:\.\d+)?)/', $quantityString, $matches);
-                $quantityToDeduct = isset($matches[1]) ? (int)floatval($matches[1]) : 1;
-                
+                $quantityToDeduct = isset($matches[1]) ? (int) floatval($matches[1]) : 1;
+
                 // Deduct stock (ensure it doesn't go below 0)
                 $newStock = max(0, $medicineModel->stock - $quantityToDeduct);
                 $medicineModel->update(['stock' => $newStock]);
             }
-            
+
             // Update anti-rabies tracking if vaccination was given
             if ($hasAntiRabies) {
                 $patient = Patient::findOrFail($prescriptionPatientId);
                 $vaccinationDate = $appointment->appointment_date;
                 $nextDueDate = $vaccinationDate->copy()->addYear();
-                
+
                 $patient->update([
                     'last_anti_rabies_date' => $vaccinationDate,
                     'next_anti_rabies_due_date' => $nextDueDate,
@@ -1197,12 +1198,12 @@ class AppointmentController extends Controller
                 ->whereIn('patient_id', $allPatients->pluck('id'))
                 ->distinct('patient_id')
                 ->count('patient_id');
-            
+
             // If all pets have prescriptions, mark appointment as completed
             if ($patientsWithPrescriptions >= $allPatients->count()) {
                 // Generate appointment summary
                 $summary = $this->generateAppointmentSummary($appointment, $request, $prescription);
-                
+
                 $appointment->is_completed = true;
                 $appointment->summary = $summary;
                 $appointment->save();
@@ -1225,76 +1226,78 @@ class AppointmentController extends Controller
     private function generateAppointmentSummary($appointment, $request, $prescription)
     {
         $summaryParts = [];
-        
+
         // Appointment Information
-        $summaryParts[] = "APPOINTMENT SUMMARY";
-        $summaryParts[] = "Date: " . $appointment->appointment_date->format('F d, Y');
-        
+        $summaryParts[] = 'APPOINTMENT SUMMARY';
+        $summaryParts[] = 'Date: '.$appointment->appointment_date->format('F d, Y');
+
         // Format time from 24-hour to 12-hour format
         $timeParts = explode(':', $appointment->appointment_time);
-        $hour = (int)$timeParts[0];
+        $hour = (int) $timeParts[0];
         $minute = $timeParts[1] ?? '00';
         $ampm = $hour >= 12 ? 'PM' : 'AM';
         $hour12 = $hour % 12;
-        if ($hour12 == 0) $hour12 = 12;
+        if ($hour12 == 0) {
+            $hour12 = 12;
+        }
         $formattedTime = sprintf('%d:%s %s', $hour12, $minute, $ampm);
-        $summaryParts[] = "Time: " . $formattedTime;
-        $summaryParts[] = "Type: " . ($appointment->appointment_type ? $appointment->appointment_type->name : 'N/A');
-        
+        $summaryParts[] = 'Time: '.$formattedTime;
+        $summaryParts[] = 'Type: '.($appointment->appointment_type ? $appointment->appointment_type->name : 'N/A');
+
         // Patient Information
         $patient = $appointment->patient;
         if ($patient) {
-            $summaryParts[] = "";
-            $summaryParts[] = "PATIENT INFORMATION";
-            $summaryParts[] = "Pet Name: " . $patient->pet_name;
-            $summaryParts[] = "Pet Type: " . ($patient->petType ? $patient->petType->name : 'N/A');
-            $summaryParts[] = "Breed: " . ($patient->pet_breed ?? 'N/A');
-            $summaryParts[] = "Current Weight: " . $request->pet_current_weight . " kg";
+            $summaryParts[] = '';
+            $summaryParts[] = 'PATIENT INFORMATION';
+            $summaryParts[] = 'Pet Name: '.$patient->pet_name;
+            $summaryParts[] = 'Pet Type: '.($patient->petType ? $patient->petType->name : 'N/A');
+            $summaryParts[] = 'Breed: '.($patient->pet_breed ?? 'N/A');
+            $summaryParts[] = 'Current Weight: '.$request->pet_current_weight.' kg';
         }
-        
+
         // Symptoms
-        if (!empty($prescription->symptoms)) {
-            $summaryParts[] = "";
-            $summaryParts[] = "SYMPTOMS OBSERVED";
+        if (! empty($prescription->symptoms)) {
+            $summaryParts[] = '';
+            $summaryParts[] = 'SYMPTOMS OBSERVED';
             $summaryParts[] = $prescription->symptoms;
         }
-        
+
         // Diagnoses
-        if (!empty($request->disease_ids)) {
+        if (! empty($request->disease_ids)) {
             $diseases = Disease::whereIn('id', $request->disease_ids)->pluck('name')->toArray();
-            $summaryParts[] = "";
-            $summaryParts[] = "DIAGNOSES";
+            $summaryParts[] = '';
+            $summaryParts[] = 'DIAGNOSES';
             $summaryParts[] = implode(', ', $diseases);
         }
-        
+
         // Prescribed Medicines
-        if (!empty($request->medicines)) {
-            $summaryParts[] = "";
-            $summaryParts[] = "PRESCRIBED MEDICINES";
+        if (! empty($request->medicines)) {
+            $summaryParts[] = '';
+            $summaryParts[] = 'PRESCRIBED MEDICINES';
             foreach ($request->medicines as $medicine) {
                 $medicineModel = Medicine::find($medicine['id']);
                 $medicineName = $medicineModel ? $medicineModel->name : 'Unknown';
-                $summaryParts[] = "- " . $medicineName . " (" . $medicine['dosage'] . ") - " . $medicine['instructions'] . " - Quantity: " . $medicine['quantity'];
+                $summaryParts[] = '- '.$medicineName.' ('.$medicine['dosage'].') - '.$medicine['instructions'].' - Quantity: '.$medicine['quantity'];
             }
         }
-        
+
         // Notes
-        if (!empty($request->notes)) {
-            $summaryParts[] = "";
-            $summaryParts[] = "ADDITIONAL NOTES";
+        if (! empty($request->notes)) {
+            $summaryParts[] = '';
+            $summaryParts[] = 'ADDITIONAL NOTES';
             $summaryParts[] = $request->notes;
         }
-        
+
         // Follow-up Date
-        if (!empty($request->follow_up_date)) {
-            $summaryParts[] = "";
-            $summaryParts[] = "FOLLOW-UP APPOINTMENT";
-            $summaryParts[] = "Scheduled for: " . date('F d, Y', strtotime($request->follow_up_date));
+        if (! empty($request->follow_up_date)) {
+            $summaryParts[] = '';
+            $summaryParts[] = 'FOLLOW-UP APPOINTMENT';
+            $summaryParts[] = 'Scheduled for: '.date('F d, Y', strtotime($request->follow_up_date));
         }
-        
-        $summaryParts[] = "";
-        $summaryParts[] = "Appointment completed on " . now()->format('F d, Y \a\t g:i A');
-        
+
+        $summaryParts[] = '';
+        $summaryParts[] = 'Appointment completed on '.now()->format('F d, Y \a\t g:i A');
+
         return implode("\n", $summaryParts);
     }
 
@@ -1304,23 +1307,25 @@ class AppointmentController extends Controller
     /**
      * Download prescription PDF by appointment ID (backward compatibility).
      * Gets the first prescription for the appointment.
-     * @param int $id The appointment ID
+     *
+     * @param  int  $id  The appointment ID
      */
     public function downloadPrescriptionByAppointment($id)
     {
         // A5 landscape: 210mm × 148mm — 595 × 420 pt @ 72 dpi
         $customPaper = [0, 0, 595, 420];
-        
+
         $prescription = Prescription::with(
             'medicines.medicine',
             'appointment.user',
             'patient.petType',
+            'patient.user',
             'diagnoses.disease'
         )->where('appointment_id', $id)->firstOrFail();
 
-        $base64Logo = 'data:image/png;base64,' . base64_encode(file_get_contents(public_path('media/logo_for_print.png')));
-        $base64PanaboLogo = 'data:image/png;base64,' . base64_encode(file_get_contents(public_path('media/panabo.png')));
-        $base64PrescriptionLogo = 'data:image/png;base64,' . base64_encode(file_get_contents(public_path('media/prescription.png')));
+        $base64Logo = 'data:image/png;base64,'.base64_encode(file_get_contents(public_path('media/logo_for_print.png')));
+        $base64PanaboLogo = 'data:image/png;base64,'.base64_encode(file_get_contents(public_path('media/panabo.png')));
+        $base64PrescriptionLogo = 'data:image/png;base64,'.base64_encode(file_get_contents(public_path('media/prescription.png')));
 
         // Get veterinarian information from settings
         $veterinarianName = Setting::get('veterinarian_name', '');
@@ -1331,37 +1336,39 @@ class AppointmentController extends Controller
             'isHtml5ParserEnabled' => true,
             'isPhpEnabled' => true,
         ])
-        ->loadView('admin.appointments.pdf', compact(
-            'prescription',
-            'base64Logo',
-            'base64PanaboLogo',
-            'base64PrescriptionLogo',
-            'veterinarianName',
-            'veterinarianLicense'
-        ))
-        ->setPaper($customPaper, 'landscape')
-        ->stream('prescription-' . $prescription->id . '.pdf');
+            ->loadView('admin.appointments.pdf', compact(
+                'prescription',
+                'base64Logo',
+                'base64PanaboLogo',
+                'base64PrescriptionLogo',
+                'veterinarianName',
+                'veterinarianLicense'
+            ))
+            ->setPaper($customPaper, 'landscape')
+            ->stream('prescription-'.$prescription->id.'.pdf');
     }
 
     /**
      * Download prescription PDF.
-     * @param int $id The prescription ID
+     *
+     * @param  int  $id  The prescription ID
      */
     public function downloadPrescription($id)
     {
         // A5 landscape: 210mm × 148mm — 595 × 420 pt @ 72 dpi
         $customPaper = [0, 0, 595, 420];
-        
+
         $prescription = Prescription::with(
             'medicines.medicine',
             'appointment.user',
             'patient.petType',
+            'patient.user',
             'diagnoses.disease'
         )->findOrFail($id);
 
-        $base64Logo = 'data:image/png;base64,' . base64_encode(file_get_contents(public_path('media/logo_for_print.png')));
-        $base64PanaboLogo = 'data:image/png;base64,' . base64_encode(file_get_contents(public_path('media/panabo.png')));
-        $base64PrescriptionLogo = 'data:image/png;base64,' . base64_encode(file_get_contents(public_path('media/prescription.png')));
+        $base64Logo = 'data:image/png;base64,'.base64_encode(file_get_contents(public_path('media/logo_for_print.png')));
+        $base64PanaboLogo = 'data:image/png;base64,'.base64_encode(file_get_contents(public_path('media/panabo.png')));
+        $base64PrescriptionLogo = 'data:image/png;base64,'.base64_encode(file_get_contents(public_path('media/prescription.png')));
 
         // Get veterinarian information from settings
         $veterinarianName = Setting::get('veterinarian_name', '');
@@ -1372,16 +1379,16 @@ class AppointmentController extends Controller
             'isHtml5ParserEnabled' => true,
             'isPhpEnabled' => true,
         ])
-        ->loadView('admin.appointments.pdf', compact(
-            'prescription',
-            'base64Logo',
-            'base64PanaboLogo',
-            'base64PrescriptionLogo',
-            'veterinarianName',
-            'veterinarianLicense'
-        ))
-        ->setPaper($customPaper, 'landscape')
-        ->stream('prescription-' . $prescription->id . '.pdf');
+            ->loadView('admin.appointments.pdf', compact(
+                'prescription',
+                'base64Logo',
+                'base64PanaboLogo',
+                'base64PrescriptionLogo',
+                'veterinarianName',
+                'veterinarianLicense'
+            ))
+            ->setPaper($customPaper, 'landscape')
+            ->stream('prescription-'.$prescription->id.'.pdf');
     }
 
     /**
@@ -1392,41 +1399,41 @@ class AppointmentController extends Controller
     {
         // A5 landscape: 595 × 420 pt
         $customPaper = [0, 0, 595, 420];
-        
+
         $prescription = Prescription::with(
             'medicines.medicine',
-            'appointment',
+            'appointment.user',
             'patient.petType',
             'patient.user',
             'diagnoses.disease'
         )->findOrFail($id);
 
-        $base64Logo = 'data:image/png;base64,' . base64_encode(file_get_contents(public_path('media/logo_for_print.png')));
-        $base64PanaboLogo = 'data:image/png;base64,' . base64_encode(file_get_contents(public_path('media/panabo.png')));
-        $base64PrescriptionLogo = 'data:image/png;base64,' . base64_encode(file_get_contents(public_path('media/prescription.png')));
+        $base64Logo = 'data:image/png;base64,'.base64_encode(file_get_contents(public_path('media/logo_for_print.png')));
+        $base64PanaboLogo = 'data:image/png;base64,'.base64_encode(file_get_contents(public_path('media/panabo.png')));
+        $base64PrescriptionLogo = 'data:image/png;base64,'.base64_encode(file_get_contents(public_path('media/prescription.png')));
 
         // Get veterinarian information from settings
         $veterinarianName = Setting::get('veterinarian_name', '');
         $veterinarianLicense = Setting::get('veterinarian_license_number', '');
 
         $prescriptionNumber = str_pad($prescription->id, 6, '0', STR_PAD_LEFT);
-        $fileName = 'prescription-' . $prescriptionNumber . '.pdf';
+        $fileName = 'prescription-'.$prescriptionNumber.'.pdf';
 
         return Pdf::setOptions([
             'isRemoteEnabled' => true,
             'isHtml5ParserEnabled' => true,
             'isPhpEnabled' => true,
         ])
-        ->loadView('admin.appointments.pdf', compact(
-            'prescription',
-            'base64Logo',
-            'base64PanaboLogo',
-            'base64PrescriptionLogo',
-            'veterinarianName',
-            'veterinarianLicense'
-        ))
-        ->setPaper($customPaper, 'landscape')
-        ->download($fileName);
+            ->loadView('admin.appointments.pdf', compact(
+                'prescription',
+                'base64Logo',
+                'base64PanaboLogo',
+                'base64PrescriptionLogo',
+                'veterinarianName',
+                'veterinarianLicense'
+            ))
+            ->setPaper($customPaper, 'landscape')
+            ->download($fileName);
     }
 
     /**
@@ -1436,14 +1443,15 @@ class AppointmentController extends Controller
     {
         $prescription = Prescription::with(
             'medicines.medicine',
-            'appointment',
-            'patient',
+            'appointment.user',
+            'patient.petType',
+            'patient.user',
             'diagnoses.disease'
         )->where('appointment_id', $id)->firstOrFail();
 
-        $base64Logo = 'data:image/png;base64,' . base64_encode(file_get_contents(public_path('media/logo_for_print.png')));
-        $base64PanaboLogo = 'data:image/png;base64,' . base64_encode(file_get_contents(public_path('media/panabo.png')));
-        $base64PrescriptionLogo = 'data:image/png;base64,' . base64_encode(file_get_contents(public_path('media/prescription.png')));
+        $base64Logo = 'data:image/png;base64,'.base64_encode(file_get_contents(public_path('media/logo_for_print.png')));
+        $base64PanaboLogo = 'data:image/png;base64,'.base64_encode(file_get_contents(public_path('media/panabo.png')));
+        $base64PrescriptionLogo = 'data:image/png;base64,'.base64_encode(file_get_contents(public_path('media/prescription.png')));
 
         // Get veterinarian information from settings
         $veterinarianName = Setting::get('veterinarian_name', '');
@@ -1462,7 +1470,8 @@ class AppointmentController extends Controller
     /**
      * Print-friendly HTML view for prescription by appointment ID (backward compatibility).
      * Gets the first prescription for the appointment.
-     * @param int $id The appointment ID
+     *
+     * @param  int  $id  The appointment ID
      */
     public function printPrescriptionByAppointment($id)
     {
@@ -1470,12 +1479,13 @@ class AppointmentController extends Controller
             'medicines.medicine',
             'appointment.user',
             'patient.petType',
+            'patient.user',
             'diagnoses.disease'
         )->where('appointment_id', $id)->firstOrFail();
 
-        $base64Logo = 'data:image/png;base64,' . base64_encode(file_get_contents(public_path('media/logo_for_print.png')));
-        $base64PanaboLogo = 'data:image/png;base64,' . base64_encode(file_get_contents(public_path('media/panabo.png')));
-        $base64PrescriptionLogo = 'data:image/png;base64,' . base64_encode(file_get_contents(public_path('media/prescription.png')));
+        $base64Logo = 'data:image/png;base64,'.base64_encode(file_get_contents(public_path('media/logo_for_print.png')));
+        $base64PanaboLogo = 'data:image/png;base64,'.base64_encode(file_get_contents(public_path('media/panabo.png')));
+        $base64PrescriptionLogo = 'data:image/png;base64,'.base64_encode(file_get_contents(public_path('media/prescription.png')));
 
         // Get veterinarian information from settings
         $veterinarianName = Setting::get('veterinarian_name', '');
@@ -1493,7 +1503,8 @@ class AppointmentController extends Controller
 
     /**
      * Print-friendly HTML view for prescription.
-     * @param int $id The prescription ID
+     *
+     * @param  int  $id  The prescription ID
      */
     public function printPrescription($id)
     {
@@ -1501,12 +1512,13 @@ class AppointmentController extends Controller
             'medicines.medicine',
             'appointment.user',
             'patient.petType',
+            'patient.user',
             'diagnoses.disease'
         )->findOrFail($id);
 
-        $base64Logo = 'data:image/png;base64,' . base64_encode(file_get_contents(public_path('media/logo_for_print.png')));
-        $base64PanaboLogo = 'data:image/png;base64,' . base64_encode(file_get_contents(public_path('media/panabo.png')));
-        $base64PrescriptionLogo = 'data:image/png;base64,' . base64_encode(file_get_contents(public_path('media/prescription.png')));
+        $base64Logo = 'data:image/png;base64,'.base64_encode(file_get_contents(public_path('media/logo_for_print.png')));
+        $base64PanaboLogo = 'data:image/png;base64,'.base64_encode(file_get_contents(public_path('media/panabo.png')));
+        $base64PrescriptionLogo = 'data:image/png;base64,'.base64_encode(file_get_contents(public_path('media/prescription.png')));
 
         // Get veterinarian information from settings
         $veterinarianName = Setting::get('veterinarian_name', '');
@@ -1535,7 +1547,7 @@ class AppointmentController extends Controller
                     'id' => $date->id,
                     'date' => $date->date->format('Y-m-d'),
                     'reason' => $date->reason,
-                    'disabled_by' => $date->disabledBy ? ($date->disabledBy->name ?? ($date->disabledBy->first_name . ' ' . $date->disabledBy->last_name)) : null,
+                    'disabled_by' => $date->disabledBy ? ($date->disabledBy->name ?? ($date->disabledBy->first_name.' '.$date->disabledBy->last_name)) : null,
                     'created_at' => $date->created_at->toDateTimeString(),
                 ];
             });
@@ -1577,7 +1589,7 @@ class AppointmentController extends Controller
                 'id' => $disabledDate->id,
                 'date' => $disabledDate->date->format('Y-m-d'),
                 'reason' => $disabledDate->reason,
-                'disabled_by' => $disabledDate->disabledBy ? ($disabledDate->disabledBy->name ?? ($disabledDate->disabledBy->first_name . ' ' . $disabledDate->disabledBy->last_name)) : null,
+                'disabled_by' => $disabledDate->disabledBy ? ($disabledDate->disabledBy->name ?? ($disabledDate->disabledBy->first_name.' '.$disabledDate->disabledBy->last_name)) : null,
                 'created_at' => $disabledDate->created_at->toDateTimeString(),
             ],
         ]);

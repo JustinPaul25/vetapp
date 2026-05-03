@@ -2251,6 +2251,7 @@ class ClientController extends Controller
             'medicines.medicine',
             'appointment.user',
             'patient.petType',
+            'patient.user',
             'diagnoses.disease'
         )->whereHas('patient', function ($q) {
             $q->where('user_id', auth()->id());
@@ -2293,6 +2294,7 @@ class ClientController extends Controller
             'medicines.medicine',
             'appointment.user',
             'patient.petType',
+            'patient.user',
             'diagnoses.disease'
         )->whereHas('patient', function ($q) {
             $q->where('user_id', auth()->id());

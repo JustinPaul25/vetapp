@@ -67,4 +67,26 @@ class Prescription extends Model
             return $this->created_at->format($format);
         }
     }
+
+    /**
+     * Client/pet owner for labels (print, PDF, admin UI).
+     * Prefer the patient's linked user so walk-ins still show the correct name when
+     * appointments.user_id is null (column is nullable) but patients.user_id is set.
+     */
+    public function ownerUser(): ?User
+    {
+        return $this->patient?->user ?? $this->appointment?->user;
+    }
+
+    public function ownerDisplayName(): string
+    {
+        $user = $this->ownerUser();
+        if (! $user) {
+            return 'N/A';
+        }
+
+        $fromParts = trim(($user->first_name ?? '').' '.($user->last_name ?? ''));
+
+        return $fromParts !== '' ? $fromParts : ($user->name ?: 'N/A');
+    }
 }
