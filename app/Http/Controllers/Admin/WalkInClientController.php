@@ -27,6 +27,26 @@ class WalkInClientController extends Controller
      * Generate a unique placeholder email when a walk-in client does not have one.
      * Note: the `users.email` column is required + unique in the current schema.
      */
+    /**
+     * Normalize HTML time input (H:i or H:i:s) to H:i for validation and storage.
+     */
+    private function normalizeWalkInAppointmentTime(Request $request): void
+    {
+        $raw = $request->input('appointment_time');
+        if (!is_string($raw) || $raw === '') {
+            return;
+        }
+
+        $raw = trim($raw);
+        if (preg_match('/^(\d{1,2}):(\d{2})(?::\d{2})?$/', $raw, $m)) {
+            $hour = (int) $m[1];
+            $minute = (int) $m[2];
+            if ($hour >= 0 && $hour <= 23 && $minute >= 0 && $minute <= 59) {
+                $request->merge(['appointment_time' => sprintf('%02d:%02d', $hour, $minute)]);
+            }
+        }
+    }
+
     private function generatePlaceholderEmail(): string
     {
         $domain = 'no-email.walkin.local';
@@ -239,6 +259,8 @@ class WalkInClientController extends Controller
             'email' => $request->input('email') ? trim($request->input('email')) : null,
         ]);
 
+        $this->normalizeWalkInAppointmentTime($request);
+
         // Check if using existing pet and owner
         $usingExistingRecords = $request->filled('existing_pet_id') && $request->filled('existing_owner_id');
 
@@ -250,6 +272,7 @@ class WalkInClientController extends Controller
                 'appointment_type_id' => 'nullable|exists:appointment_types,id', // Keep for backward compatibility
                 'appointment_type_ids' => 'required_without:appointment_type_id|array|min:1',
                 'appointment_date' => 'required|date',
+                'appointment_time' => 'required|date_format:H:i',
                 'appointment_type_ids.*' => [
                     'required',
                     'exists:appointment_types,id',
@@ -280,7 +303,7 @@ class WalkInClientController extends Controller
 
                 // Create appointments for each appointment type
                 $appointmentDate = $validated['appointment_date'];
-                $appointmentTime = now()->format('H:i');
+                $appointmentTime = $validated['appointment_time'];
                 $limitService = app(AppointmentLimitService::class);
                 $createdAppointments = [];
 
@@ -340,6 +363,7 @@ class WalkInClientController extends Controller
             'lat' => 'nullable|numeric|between:-90,90',
             'lng' => 'nullable|numeric|between:-180,180',
             'appointment_date' => 'required|date',
+            'appointment_time' => 'required|date_format:H:i',
             // Pets array
             'pets' => 'required|array|min:1',
             'pets.*.pet_type_id' => 'required_without:pets.*.custom_pet_type_name|nullable|string',
@@ -416,7 +440,7 @@ class WalkInClientController extends Controller
 
             // Step 2: Process each pet
             $appointmentDate = $validated['appointment_date'];
-            $appointmentTime = now()->format('H:i');
+            $appointmentTime = $validated['appointment_time'];
             $limitService = app(AppointmentLimitService::class);
             $createdPets = [];
             $createdAppointments = [];

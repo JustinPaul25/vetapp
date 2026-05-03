@@ -56,6 +56,12 @@ interface Props {
 
 const props = defineProps<Props>();
 
+function formatLocalTimeForInput(date = new Date()): string {
+    const h = date.getHours().toString().padStart(2, '0');
+    const m = date.getMinutes().toString().padStart(2, '0');
+    return `${h}:${m}`;
+}
+
 const breadcrumbs = [
     { title: 'Dashboard', href: dashboard().url },
     { title: 'Walk-In Clients', href: '/admin/walk_in_clients' },
@@ -136,6 +142,7 @@ const form = router.form({
     lat: null as number | null,
     lng: null as number | null,
     appointment_date: new Date().toISOString().split('T')[0],
+    appointment_time: formatLocalTimeForInput(),
 });
 
 // Initialize with one empty pet
@@ -1024,20 +1031,33 @@ const submit = () => {
                         </div>
 
                         <div class="space-y-4">
-                            <div class="space-y-2 max-w-sm">
-                                <Label for="appointment_date">Visit Date <span class="text-destructive">*</span></Label>
-                                <Input
-                                    id="appointment_date"
-                                    v-model="form.appointment_date"
-                                    type="date"
-                                    autocomplete="off"
-                                    required
-                                />
-                                <p class="text-xs text-muted-foreground">
-                                    Set the actual walk-in date for manual records.
-                                </p>
-                                <InputError :message="form.errors.appointment_date" />
+                            <div class="grid gap-4 sm:grid-cols-2 sm:max-w-xl">
+                                <div class="space-y-2">
+                                    <Label for="appointment_date">Visit Date <span class="text-destructive">*</span></Label>
+                                    <Input
+                                        id="appointment_date"
+                                        v-model="form.appointment_date"
+                                        type="date"
+                                        autocomplete="off"
+                                        required
+                                    />
+                                    <InputError :message="form.errors.appointment_date" />
+                                </div>
+                                <div class="space-y-2">
+                                    <Label for="appointment_time">Visit Time <span class="text-destructive">*</span></Label>
+                                    <Input
+                                        id="appointment_time"
+                                        v-model="form.appointment_time"
+                                        type="time"
+                                        autocomplete="off"
+                                        required
+                                    />
+                                    <InputError :message="form.errors.appointment_time" />
+                                </div>
                             </div>
+                            <p class="text-xs text-muted-foreground -mt-1">
+                                Set the actual walk-in date and time for manual records.
+                            </p>
 
                             <div>
                                 <h4 class="text-base font-semibold mb-4">Select Pet(s) and Appointment Type(s)</h4>

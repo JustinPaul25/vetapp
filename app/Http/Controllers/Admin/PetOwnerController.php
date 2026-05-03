@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\User;
 use App\Rules\PhilippineMobileNumber;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
@@ -26,7 +27,8 @@ class PetOwnerController extends Controller
     {
         $query = User::role(self::PET_OWNER_ROLES)
             ->with(['patients.petType', 'roles'])
-            ->withCount('patients');
+            ->withCount('patients')
+            ->withMin('appointments', 'appointment_date');
 
         // Search functionality
         if ($request->has('search') && ! empty($request->search)) {
@@ -60,6 +62,12 @@ class PetOwnerController extends Controller
 
         // Transform the data for Inertia
         $petOwners->getCollection()->transform(function ($user) {
+            $isWalkIn = $user->hasRole('walk_in_client');
+            $firstVisit = $user->appointments_min_appointment_date ?? null;
+            $listDate = ($isWalkIn && $firstVisit)
+                ? Carbon::parse($firstVisit)->startOfDay()->toISOString()
+                : $user->created_at->toISOString();
+
             return [
                 'id' => $user->id,
                 'name' => trim(($user->first_name ?? '').' '.($user->last_name ?? '')) ?: $user->name,
@@ -76,7 +84,8 @@ class PetOwnerController extends Controller
                     ];
                 }),
                 'created_at' => $user->created_at->toISOString(),
-                'is_walk_in_client' => $user->hasRole('walk_in_client'),
+                'list_date' => $listDate,
+                'is_walk_in_client' => $isWalkIn,
             ];
         });
 
@@ -142,6 +151,9 @@ class PetOwnerController extends Controller
 
         $petOwner->load(['patients.petType', 'appointments']);
 
+        $firstVisitRaw = $petOwner->appointments()->min('appointment_date');
+        $firstVisitDate = $firstVisitRaw ? Carbon::parse($firstVisitRaw)->format('Y-m-d') : null;
+
         return Inertia::render('Admin/PetOwners/Show', [
             'petOwner' => [
                 'id' => $petOwner->id,
@@ -170,6 +182,7 @@ class PetOwnerController extends Controller
                 }),
                 'appointments_count' => $petOwner->appointments->count(),
                 'created_at' => $petOwner->created_at->toISOString(),
+                'first_visit_date' => $firstVisitDate,
                 'updated_at' => $petOwner->updated_at->toISOString(),
                 'is_walk_in_client' => $petOwner->hasRole('walk_in_client'),
             ],
