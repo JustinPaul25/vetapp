@@ -11,10 +11,13 @@
             box-sizing: border-box;
         }
         
-        /* A5 portrait: 148mm × 210mm (5.83" × 8.27") */
+        /*
+         * Screen: readable preview width (not tied to A5 — avoids confusion).
+         * Print: size auto uses the paper chosen in the print dialog (Letter, A4, A5, etc.)
+         * so content fills the sheet instead of a narrow A5 box centered on larger paper.
+         */
         @page {
-            size: A5 portrait;
-            margin: 0.22in 0.2in;
+            margin: 0.35in 0.18in;
         }
         
         body {
@@ -22,25 +25,26 @@
             font-size: 11px;
             color: #000;
             line-height: 1.25;
-            padding: 0.22in 0.2in;
-            width: 5.83in;
-            max-width: 5.83in;
+            padding: 0.35in 0.18in;
+            width: 100%;
+            max-width: 8.5in;
             margin: 0 auto;
+            box-sizing: border-box;
         }
         
-        /* Print styles */
         @media print {
             body {
                 padding: 0;
                 margin: 0;
-                width: 5.83in;
+                width: 100%;
+                max-width: none;
                 -webkit-print-color-adjust: exact;
                 print-color-adjust: exact;
             }
             
             @page {
-                size: A5 portrait;
-                margin: 0.22in 0.2in;
+                size: auto;
+                margin: 0.35in 0.18in;
             }
         }
         

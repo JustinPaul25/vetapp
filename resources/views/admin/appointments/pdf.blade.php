@@ -11,10 +11,10 @@
             box-sizing: border-box;
         }
         
-        /* A5 portrait: 148mm × 210mm (5.83" × 8.27") */
+        /* A5 portrait PDF — tighter horizontal margins for more usable width */
         @page {
             size: A5 portrait;
-            margin: 0.22in 0.2in;
+            margin: 0.2in 0.1in;
         }
         
         body {
@@ -23,9 +23,10 @@
             color: #000;
             line-height: 1.25;
             padding: 0;
-            width: 5.83in;
-            max-width: 5.83in;
+            width: 100%;
+            max-width: 100%;
             margin: 0;
+            box-sizing: border-box;
         }
         
         /* Print color adjustment */
