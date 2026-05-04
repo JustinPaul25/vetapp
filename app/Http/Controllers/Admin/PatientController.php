@@ -222,7 +222,7 @@ class PatientController extends Controller
             'appointmentPatients.appointment_type',
             'prescriptions.appointment.appointment_type',
             'prescriptions.medicines.medicine',
-            'weightHistory',
+            'weightHistory.prescription.appointment',
             'vaccinationRecords',
         ]);
 
@@ -343,18 +343,23 @@ class PatientController extends Controller
                     return [
                         'id' => $prescription->id,
                         'appointment_id' => $prescription->appointment_id,
-                        'created_at' => $prescription->created_at->toISOString(),
+                        // Visit date/time (matches appointment / issued-on), not DB created_at
+                        'created_at' => $prescription->visitDateTime()->toISOString(),
                     ];
                 }),
                 'weight_history' => $patient->weightHistory->map(function ($entry) {
+                    $at = $entry->prescription
+                        ? $entry->prescription->visitDateTime()
+                        : $entry->recorded_at;
+
                     return [
                         'id' => $entry->id,
                         'weight' => (float) $entry->weight,
-                        'recorded_at' => $entry->recorded_at->toISOString(),
+                        'recorded_at' => $at->toISOString(),
                         'notes' => $entry->notes,
                         'prescription_id' => $entry->prescription_id,
                     ];
-                }),
+                })->sortByDesc('recorded_at')->values()->all(),
                 'vaccination_records' => $vaccinationRecords,
                 'last_anti_rabies_date' => $patient->last_anti_rabies_date ? $patient->last_anti_rabies_date->toDateString() : null,
                 'next_anti_rabies_due_date' => $patient->next_anti_rabies_due_date ? $patient->next_anti_rabies_due_date->toDateString() : null,
@@ -448,15 +453,24 @@ class PatientController extends Controller
      */
     public function getWeightHistory(Patient $patient)
     {
-        $weightHistory = $patient->weightHistory()->get()->map(function ($entry) {
-            return [
-                'id' => $entry->id,
-                'weight' => (float) $entry->weight,
-                'recorded_at' => $entry->recorded_at->toISOString(),
-                'notes' => $entry->notes,
-                'prescription_id' => $entry->prescription_id,
-            ];
-        });
+        $weightHistory = $patient->weightHistory()
+            ->with('prescription.appointment')
+            ->get()
+            ->map(function ($entry) {
+                $at = $entry->prescription
+                    ? $entry->prescription->visitDateTime()
+                    : $entry->recorded_at;
+
+                return [
+                    'id' => $entry->id,
+                    'weight' => (float) $entry->weight,
+                    'recorded_at' => $at->toISOString(),
+                    'notes' => $entry->notes,
+                    'prescription_id' => $entry->prescription_id,
+                ];
+            })
+            ->sortByDesc('recorded_at')
+            ->values();
 
         return response()->json($weightHistory);
     }

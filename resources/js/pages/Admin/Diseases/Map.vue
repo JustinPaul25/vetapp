@@ -2,8 +2,8 @@
 import AppLayout from '@/layouts/AppLayout.vue';
 import { Head, router } from '@inertiajs/vue3';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { MapPin, AlertCircle } from 'lucide-vue-next';
-import { nextTick, onMounted, ref, watch } from 'vue';
+import { MapPin, AlertCircle, Play, Pause } from 'lucide-vue-next';
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { dashboard } from '@/routes';
@@ -70,6 +70,12 @@ const selectedDisease = ref<string | null>(null);
 const map2Container = ref<HTMLElement | null>(null);
 const map2 = ref<L.Map | null>(null);
 const individualMarkersLayer = ref<L.LayerGroup | null>(null);
+const hotspotMarkersLayer = ref<L.LayerGroup | null>(null);
+
+const LIST_COLLAPSE_DISEASES = 5;
+const LIST_COLLAPSE_HOTSPOTS = 8;
+const showAllDiseases = ref(false);
+const showAllHotspots = ref(false);
 
 function applyConditionFilter(value: string) {
     const condition = value === 'all' ? undefined : value;
@@ -95,6 +101,115 @@ const formatDate = (dateString: string | null) => {
     const date = new Date(year, month - 1, day);
     return date.toLocaleDateString();
 };
+
+function aggregateZones(cases: DiseaseCase[]): OutbreakZone[] {
+    const byAddress = new Map<string, DiseaseCase[]>();
+    for (const c of cases) {
+        const addr = c.address || 'Unknown';
+        if (!byAddress.has(addr)) byAddress.set(addr, []);
+        byAddress.get(addr)!.push(c);
+    }
+    const rows: OutbreakZone[] = [];
+    byAddress.forEach((arr, address) => {
+        const count = arr.length;
+        if (count === 0) return;
+        const latSum = arr.reduce((s, x) => s + Number(x.lat), 0);
+        const lngSum = arr.reduce((s, x) => s + Number(x.lng), 0);
+        rows.push({
+            address,
+            lat: latSum / count,
+            lng: lngSum / count,
+            count,
+        });
+    });
+    return rows.sort((a, b) => b.count - a.count);
+}
+
+const timelineDates = computed(() => {
+    const set = new Set<string>();
+    for (const c of props.cases) {
+        if (c.appointment_date) set.add(c.appointment_date);
+    }
+    return Array.from(set).sort();
+});
+
+const timelineMaxIdx = computed(() => Math.max(0, timelineDates.value.length - 1));
+
+const timelineIndex = ref(0);
+
+watch(
+    timelineDates,
+    (dates) => {
+        timelineIndex.value = dates.length > 0 ? dates.length - 1 : 0;
+    },
+    { immediate: true },
+);
+
+const effectiveCases = computed(() => {
+    const dates = timelineDates.value;
+    if (dates.length === 0) return props.cases;
+    const idx = Math.min(Math.max(0, timelineIndex.value), dates.length - 1);
+    const cutoff = dates[idx]!;
+    return props.cases.filter((c) => {
+        if (!c.appointment_date) return idx >= dates.length - 1;
+        return c.appointment_date <= cutoff;
+    });
+});
+
+const effectiveZones = computed(() => aggregateZones(effectiveCases.value));
+
+const displayedDiseases = computed(() => {
+    const list = props.topDiseases;
+    if (showAllDiseases.value || list.length <= LIST_COLLAPSE_DISEASES) return list;
+    return list.slice(0, LIST_COLLAPSE_DISEASES);
+});
+
+const displayedHotspots = computed(() => {
+    const list = effectiveZones.value;
+    if (showAllHotspots.value || list.length <= LIST_COLLAPSE_HOTSPOTS) return list;
+    return list.slice(0, LIST_COLLAPSE_HOTSPOTS);
+});
+
+const hasTimeline = computed(() => timelineDates.value.length > 0);
+
+const timelineLabel = computed(() => {
+    if (!hasTimeline.value) return '';
+    const dates = timelineDates.value;
+    const d = dates[Math.min(timelineIndex.value, dates.length - 1)];
+    return d ? formatDate(d) : '';
+});
+
+let playInterval: ReturnType<typeof setInterval> | null = null;
+const isPlaying = ref(false);
+
+function stopPlayback() {
+    if (playInterval !== null) {
+        clearInterval(playInterval);
+        playInterval = null;
+    }
+    isPlaying.value = false;
+}
+
+function toggleTimelinePlay() {
+    if (!hasTimeline.value) return;
+    if (isPlaying.value) {
+        stopPlayback();
+        return;
+    }
+    isPlaying.value = true;
+    timelineIndex.value = 0;
+    playInterval = setInterval(() => {
+        if (timelineIndex.value >= timelineMaxIdx.value) {
+            stopPlayback();
+            return;
+        }
+        timelineIndex.value += 1;
+    }, 550);
+}
+
+onUnmounted(() => {
+    stopPlayback();
+});
 
 // Group cases by location (round coordinates to handle slight variations)
 interface GroupedLocation {
@@ -376,26 +491,18 @@ function renderIndividualDiseaseMarkers(casesToShow: DiseaseCase[], fitToMarkers
     }
 }
 
-onMounted(() => {
-    if (!mapContainer.value) return;
+function renderHotspotMarkers(zones: OutbreakZone[], casesForLookup: DiseaseCase[]) {
+    const layer = hotspotMarkersLayer.value;
+    if (!layer) return;
 
-    // Initialize map centered on Panabo City
-    map.value = L.map(mapContainer.value).setView([7.3075, 125.6830], 13);
-
-    // Add OpenStreetMap tile layer
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '© OpenStreetMap contributors',
-        maxZoom: 19,
-    }).addTo(map.value as any);
-
-    const hotspotMap = buildHotspotMap(props.outbreakZones);
-    const hotspotMarkers: L.Marker[] = [];
+    layer.clearLayers();
+    if (zones.length === 0) return;
 
     const minHotspotSize = 16;
     const maxHotspotSize = 44;
-    const maxHotspotCount = Math.max(1, ...props.outbreakZones.map((z) => Number(z.count) || 0));
+    const maxHotspotCount = Math.max(1, ...zones.map((z) => Number(z.count) || 0));
 
-    props.outbreakZones.forEach((zone) => {
+    zones.forEach((zone) => {
         const lat = Number(zone.lat);
         const lng = Number(zone.lng);
         if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
@@ -439,24 +546,21 @@ onMounted(() => {
             iconAnchor: [anchor, anchor],
             popupAnchor: [0, -anchor],
         });
-        
-        // Add red marker for hotspot with higher z-index
+
         const hotspotMarker = L.marker([lat, lng], {
             icon: redMarkerIcon,
-            zIndexOffset: 1000, // Ensure hotspots appear on top
+            zIndexOffset: 1000,
         });
-        
-        // Collect diseases for this hotspot address
-        const hotspotDiseases = props.cases
+
+        const hotspotDiseases = casesForLookup
             .filter((caseItem) => {
                 const caseKey = `${Math.round(caseItem.lat / HOTSPOT_TOLERANCE) * HOTSPOT_TOLERANCE},${Math.round(caseItem.lng / HOTSPOT_TOLERANCE) * HOTSPOT_TOLERANCE}`;
                 return caseKey === hotspotKey || caseItem.address === zone.address;
             })
             .map((c) => c.disease_name);
-        
+
         const uniqueHotspotDiseases = Array.from(new Set(hotspotDiseases));
-        
-        // Build popup content for hotspot
+
         let hotspotPopupContent = `
             <div style="min-width: 200px;">
                 <strong style="color: #dc2626;">🔥 Hotspot</strong><br/>
@@ -465,14 +569,14 @@ onMounted(() => {
                     Cases: ${zone.count}
                 </div>
         `;
-        
+
         if (uniqueHotspotDiseases.length > 0) {
             hotspotPopupContent += `
                 <div style="margin-top: 8px; border-top: 1px solid #e5e7eb; padding-top: 8px;">
                     <strong style="font-size: 12px;">Diseases:</strong><br/>
                     <div style="margin-top: 4px;">
             `;
-            uniqueHotspotDiseases.forEach((disease, idx) => {
+            uniqueHotspotDiseases.forEach((disease) => {
                 const color = props.diseaseColors[disease] || '#3388ff';
                 hotspotPopupContent += `
                     <div style="margin-bottom: 4px;">
@@ -483,33 +587,74 @@ onMounted(() => {
             });
             hotspotPopupContent += `</div></div>`;
         }
-        
+
         hotspotPopupContent += `</div>`;
-        
+
         hotspotMarker
-            .addTo(map.value! as any)
+            .addTo(layer as L.LayerGroup)
             .bindPopup(hotspotPopupContent, {
                 maxWidth: 300,
-                className: 'hotspot-popup-container'
+                className: 'hotspot-popup-container',
             })
             .bindTooltip(`🔥 Hotspot: ${zone.address} (${zone.count} cases)`, {
                 permanent: false,
                 direction: 'top',
-                offset: [0, -6]
+                offset: [0, -6],
             });
-        
-        hotspotMarkers.push(hotspotMarker);
     });
+}
+
+function syncMainMapLayers(fitDiseaseMarkers: boolean) {
+    const zones = effectiveZones.value;
+    const hotspotMap = buildHotspotMap(zones);
+    const filteredCases = selectedDisease.value
+        ? effectiveCases.value.filter((c) => c.disease_name === selectedDisease.value)
+        : effectiveCases.value;
+    renderHotspotMarkers(zones, effectiveCases.value);
+    renderDiseaseMarkers(filteredCases, hotspotMap, fitDiseaseMarkers);
+}
+
+onMounted(() => {
+    if (!mapContainer.value) return;
+
+    // Initialize map centered on Panabo City
+    map.value = L.map(mapContainer.value).setView([7.3075, 125.6830], 13);
+
+    // Add OpenStreetMap tile layer
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '© OpenStreetMap contributors',
+        maxZoom: 19,
+    }).addTo(map.value as any);
+
+    const hotspotLayer = L.layerGroup().addTo(map.value! as L.Map);
+    hotspotMarkersLayer.value = hotspotLayer;
 
     const layerGroup = L.layerGroup();
     layerGroup.addTo(map.value! as any);
     diseaseMarkersLayer.value = layerGroup;
 
-    const filteredCases = selectedDisease.value
-        ? props.cases.filter((c) => c.disease_name === selectedDisease.value)
-        : props.cases;
-    renderDiseaseMarkers(filteredCases, hotspotMap, false);
+    syncMainMapLayers(false);
 });
+
+watch([timelineIndex, effectiveCases, effectiveZones], () => {
+    if (!map.value || !diseaseMarkersLayer.value || !hotspotMarkersLayer.value) return;
+    syncMainMapLayers(false);
+    if (selectedDisease.value && map2.value && individualMarkersLayer.value) {
+        const filteredCases = effectiveCases.value.filter((c) => c.disease_name === selectedDisease.value);
+        renderIndividualDiseaseMarkers(filteredCases, false);
+    }
+});
+
+watch(
+    () => [props.conditionFilter, props.diseaseFilter] as const,
+    () => {
+        showAllDiseases.value = false;
+        showAllHotspots.value = false;
+        nextTick(() => {
+            timelineIndex.value = timelineMaxIdx.value;
+        });
+    },
+);
 
 function initMap2() {
     if (!map2Container.value) return;
@@ -533,13 +678,12 @@ function destroyMap2() {
 
 watch(selectedDisease, async () => {
     const filteredCases = selectedDisease.value
-        ? props.cases.filter((c) => c.disease_name === selectedDisease.value)
-        : props.cases;
+        ? effectiveCases.value.filter((c) => c.disease_name === selectedDisease.value)
+        : effectiveCases.value;
 
     if (selectedDisease.value) {
-        if (map.value && diseaseMarkersLayer.value) {
-            const hotspotMap = buildHotspotMap(props.outbreakZones);
-            renderDiseaseMarkers(filteredCases, hotspotMap, true);
+        if (map.value && diseaseMarkersLayer.value && hotspotMarkersLayer.value) {
+            syncMainMapLayers(true);
         }
         await nextTick();
         if (!map2.value && map2Container.value) {
@@ -551,9 +695,8 @@ watch(selectedDisease, async () => {
         }
     } else {
         destroyMap2();
-        if (map.value && diseaseMarkersLayer.value) {
-            const hotspotMap = buildHotspotMap(props.outbreakZones);
-            renderDiseaseMarkers(filteredCases, hotspotMap, true);
+        if (map.value && diseaseMarkersLayer.value && hotspotMarkersLayer.value) {
+            syncMainMapLayers(true);
         }
         await nextTick();
         map.value?.invalidateSize?.();
@@ -636,17 +779,17 @@ function selectDisease(name: string) {
 
                         <!-- Legend and Stats -->
                         <div class="space-y-4">
-                            <!-- Top Diseases Legend -->
+                            <!-- Diseases (full list, collapsible) -->
                             <Card>
                                 <CardHeader class="pb-3">
                                     <CardTitle class="text-sm flex items-center gap-2">
                                         <AlertCircle class="h-4 w-4" />
-                                        Top Diseases
+                                        Diseases
                                     </CardTitle>
                                 </CardHeader>
                                 <CardContent class="space-y-2">
                                     <button
-                                        v-for="disease in topDiseases"
+                                        v-for="disease in displayedDiseases"
                                         :key="disease.name"
                                         type="button"
                                         class="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-sm transition-colors hover:bg-muted/80 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
@@ -663,6 +806,14 @@ function selectDisease(name: string) {
                                         <span class="shrink-0 text-muted-foreground font-semibold">
                                             {{ disease.count }}
                                         </span>
+                                    </button>
+                                    <button
+                                        v-if="topDiseases.length > LIST_COLLAPSE_DISEASES"
+                                        type="button"
+                                        class="w-full rounded-md py-1.5 text-left text-sm font-medium text-primary hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                                        @click="showAllDiseases = !showAllDiseases"
+                                    >
+                                        {{ showAllDiseases ? 'Show less' : `See all (${topDiseases.length})` }}
                                     </button>
                                     <div v-if="topDiseases.length === 0" class="text-sm text-muted-foreground">
                                         No disease data available
@@ -697,24 +848,73 @@ function selectDisease(name: string) {
                                 </CardContent>
                             </Card>
 
-                            <!-- Hotspots -->
+                            <!-- Hotspots (time slider + collapsible list) -->
                             <Card>
                                 <CardHeader class="pb-3">
                                     <CardTitle class="text-sm">Hotspots</CardTitle>
+                                    <CardDescription v-if="hasTimeline" class="text-xs">
+                                        Drag the slider or play to see how cumulative cases grow by appointment date.
+                                    </CardDescription>
                                 </CardHeader>
-                                <CardContent class="space-y-2">
+                                <CardContent class="space-y-3">
                                     <div
-                                        v-for="(zone, index) in outbreakZones"
-                                        :key="index"
-                                        class="text-sm"
+                                        v-if="hasTimeline"
+                                        class="space-y-2 rounded-md border border-border bg-muted/30 p-3"
                                     >
-                                        <div class="font-medium truncate">{{ zone.address }}</div>
-                                        <div class="text-muted-foreground">
-                                            {{ zone.count }} case{{ zone.count !== 1 ? 's' : '' }}
+                                        <div class="flex items-center justify-between gap-2">
+                                            <span class="text-xs font-medium text-muted-foreground">Cases through</span>
+                                            <span class="text-xs font-semibold tabular-nums">{{ timelineLabel }}</span>
                                         </div>
+                                        <input
+                                            v-model.number="timelineIndex"
+                                            type="range"
+                                            :min="0"
+                                            :max="timelineMaxIdx"
+                                            class="h-2 w-full cursor-pointer accent-primary"
+                                            :aria-valuemin="0"
+                                            :aria-valuemax="timelineMaxIdx"
+                                            :aria-valuenow="timelineIndex"
+                                            aria-label="Hotspot timeline"
+                                        />
+                                        <button
+                                            type="button"
+                                            class="inline-flex w-full items-center justify-center gap-2 rounded-md border border-input bg-background px-3 py-2 text-xs font-medium shadow-sm transition-colors hover:bg-muted/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                                            @click="toggleTimelinePlay"
+                                        >
+                                            <Play v-if="!isPlaying" class="h-3.5 w-3.5 shrink-0" />
+                                            <Pause v-else class="h-3.5 w-3.5 shrink-0" />
+                                            {{ isPlaying ? 'Pause' : 'Play over time' }}
+                                        </button>
                                     </div>
-                                    <div v-if="outbreakZones.length === 0" class="text-sm text-muted-foreground">
-                                        No hotspots detected
+                                    <p v-else class="text-xs text-muted-foreground">
+                                        No appointment dates in this view — hotspots show all cases together.
+                                    </p>
+                                    <div class="space-y-2">
+                                        <div
+                                            v-for="(zone, index) in displayedHotspots"
+                                            :key="zone.address + '-' + index"
+                                            class="text-sm"
+                                        >
+                                            <div class="font-medium truncate">{{ zone.address }}</div>
+                                            <div class="text-muted-foreground">
+                                                {{ zone.count }} case{{ zone.count !== 1 ? 's' : '' }}
+                                            </div>
+                                        </div>
+                                        <button
+                                            v-if="effectiveZones.length > LIST_COLLAPSE_HOTSPOTS"
+                                            type="button"
+                                            class="w-full rounded-md py-1.5 text-left text-sm font-medium text-primary hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                                            @click="showAllHotspots = !showAllHotspots"
+                                        >
+                                            {{
+                                                showAllHotspots
+                                                    ? 'Show less'
+                                                    : `See all (${effectiveZones.length})`
+                                            }}
+                                        </button>
+                                        <div v-if="effectiveZones.length === 0" class="text-sm text-muted-foreground">
+                                            No hotspots detected
+                                        </div>
                                     </div>
                                 </CardContent>
                             </Card>
@@ -735,7 +935,7 @@ function selectDisease(name: string) {
                                     </div>
                                     <div class="flex justify-between">
                                         <span class="text-muted-foreground">Hotspots:</span>
-                                        <span class="font-semibold">{{ outbreakZones.length }}</span>
+                                        <span class="font-semibold">{{ effectiveZones.length }}</span>
                                     </div>
                                     <div class="flex justify-between">
                                         <span class="text-muted-foreground">Diseases Tracked:</span>

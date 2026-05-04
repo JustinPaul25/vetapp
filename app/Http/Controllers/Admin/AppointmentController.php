@@ -1095,7 +1095,7 @@ class AppointmentController extends Controller
                 PatientWeightHistory::create([
                     'patient_id' => $prescriptionPatientId, // Use the patient from request
                     'weight' => $request->pet_current_weight,
-                    'recorded_at' => now(),
+                    'recorded_at' => $appointment->visitDateTime(),
                     'prescription_id' => $prescription->id,
                     'notes' => 'Recorded during appointment',
                 ]);

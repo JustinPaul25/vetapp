@@ -5,9 +5,8 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\Disease;
 use App\Models\Medicine;
-use App\Models\Symptom;
 use App\Models\PrescriptionDiagnosis;
-use App\Models\Appointment;
+use App\Models\Symptom;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
@@ -22,23 +21,23 @@ class DiseaseController extends Controller
         $query = Disease::withCount(['symptoms', 'medicines']);
 
         // Search functionality
-        if ($request->has('search') && !empty($request->search)) {
-            $query->where('name', 'LIKE', $request->search . '%');
+        if ($request->has('search') && ! empty($request->search)) {
+            $query->where('name', 'LIKE', $request->search.'%');
         }
 
         // Sort functionality
         $sortBy = $request->get('sort_by', 'created_at');
         $sortDirection = $request->get('sort_direction', 'desc');
-        
+
         // Validate sort_by to prevent SQL injection
         $allowedSortColumns = ['name', 'created_at'];
-        if (!in_array($sortBy, $allowedSortColumns)) {
+        if (! in_array($sortBy, $allowedSortColumns)) {
             $sortBy = 'created_at';
         }
-        
+
         // Validate sort_direction
         $sortDirection = strtolower($sortDirection) === 'asc' ? 'asc' : 'desc';
-        
+
         $query->orderBy($sortBy, $sortDirection);
 
         $diseases = $query->paginate(15);
@@ -50,7 +49,7 @@ class DiseaseController extends Controller
                 'name' => $disease->name,
                 'symptoms_count' => $disease->symptoms_count ?? 0,
                 'medicines_count' => $disease->medicines_count ?? 0,
-                'home_remedy' => $disease->home_remedy ? substr($disease->home_remedy, 0, 50) . '...' : null,
+                'home_remedy' => $disease->home_remedy ? substr($disease->home_remedy, 0, 50).'...' : null,
                 'created_at' => $disease->created_at->toISOString(),
             ];
         });
@@ -98,12 +97,12 @@ class DiseaseController extends Controller
         ]);
 
         // Attach symptoms if provided
-        if (!empty($validated['symptoms'])) {
+        if (! empty($validated['symptoms'])) {
             $disease->symptoms()->sync($validated['symptoms']);
         }
 
         // Attach medicines if provided
-        if (!empty($validated['medicines'])) {
+        if (! empty($validated['medicines'])) {
             $disease->medicines()->sync($validated['medicines']);
         }
 
@@ -123,11 +122,11 @@ class DiseaseController extends Controller
                 'id' => $disease->id,
                 'name' => $disease->name,
                 'home_remedy' => $disease->home_remedy,
-                'symptoms' => ($disease->symptoms ?? collect())->map(fn($s) => [
+                'symptoms' => ($disease->symptoms ?? collect())->map(fn ($s) => [
                     'id' => $s->id,
                     'name' => $s->name,
                 ]),
-                'medicines' => ($disease->medicines ?? collect())->map(fn($m) => [
+                'medicines' => ($disease->medicines ?? collect())->map(fn ($m) => [
                     'id' => $m->id,
                     'name' => $m->name,
                     'dosage' => $m->dosage,
@@ -145,7 +144,7 @@ class DiseaseController extends Controller
     public function edit(Disease $disease)
     {
         $disease->load(['symptoms', 'medicines']);
-        
+
         // Exclude general "Diarrhea" and "Vomiting" when specific types exist
         $allSymptoms = Symptom::whereNotIn('name', ['Diarrhea', 'Vomiting'])
             ->orderBy('name')
@@ -171,7 +170,7 @@ class DiseaseController extends Controller
     public function update(Request $request, Disease $disease)
     {
         $validated = $request->validate([
-            'name' => 'required|string|max:100|unique:diseases,name,' . $disease->id,
+            'name' => 'required|string|max:100|unique:diseases,name,'.$disease->id,
             'symptoms' => 'nullable|array',
             'symptoms.*' => 'exists:symptoms,id',
             'medicines' => 'nullable|array',
@@ -207,7 +206,7 @@ class DiseaseController extends Controller
         // Detach related data
         $disease->symptoms()->detach();
         $disease->medicines()->detach();
-        
+
         $disease->delete();
 
         return redirect()->route('admin.diseases.index')
@@ -220,7 +219,7 @@ class DiseaseController extends Controller
     public function search(Request $request)
     {
         $keyword = $request->get('keyword', '');
-        
+
         $diseases = Disease::where('name', 'LIKE', "%{$keyword}%")
             ->limit(20)
             ->get()
@@ -230,7 +229,7 @@ class DiseaseController extends Controller
                     'name' => $disease->name,
                 ];
             });
-        
+
         return response()->json($diseases);
     }
 
@@ -241,48 +240,48 @@ class DiseaseController extends Controller
     {
         // Check if KNN prediction is enabled
         $knnEnabled = \App\Models\Setting::get('enable_knn_prediction', true);
-        
-        if (!$knnEnabled) {
+
+        if (! $knnEnabled) {
             // Return empty array if KNN is disabled
             return response()->json([]);
         }
-        
+
         $symptoms = $request->get('symptoms', []);
-        
+
         if (empty($symptoms)) {
             return response()->json([]);
         }
-        
+
         // Get symptom IDs
         $symptomIds = Symptom::whereIn('name', $symptoms)
             ->pluck('id')
             ->toArray();
-        
+
         if (empty($symptomIds)) {
             return response()->json([]);
         }
-        
+
         // Count matching symptoms per disease
         $diseaseMatches = DB::table('disease_symptoms')
             ->whereIn('symptom_id', $symptomIds)
             ->select('disease_id', DB::raw('COUNT(*) as match_count'))
             ->groupBy('disease_id')
             ->get();
-        
+
         // Get total symptoms per disease
         $diseaseTotals = DB::table('disease_symptoms')
             ->select('disease_id', DB::raw('COUNT(*) as total_symptoms'))
             ->groupBy('disease_id')
             ->get()
             ->keyBy('disease_id');
-        
+
         $results = [];
         foreach ($diseaseMatches as $match) {
             $total = $diseaseTotals->get($match->disease_id);
             if ($total) {
                 $accuracy = ($match->match_count / $total->total_symptoms) * 100;
                 $disease = Disease::find($match->disease_id);
-                
+
                 if ($disease) {
                     $results[] = [
                         'id' => $disease->id,
@@ -294,12 +293,12 @@ class DiseaseController extends Controller
                 }
             }
         }
-        
+
         // Sort by accuracy descending
         usort($results, function ($a, $b) {
             return $b['accuracy'] <=> $a['accuracy'];
         });
-        
+
         return response()->json($results);
     }
 
@@ -309,7 +308,7 @@ class DiseaseController extends Controller
     public function getMedicines($id)
     {
         $disease = Disease::findOrFail($id);
-        
+
         $medicines = $disease->medicines()
             ->select('medicines.id', 'medicines.name', 'medicines.dosage', 'medicines.stock')
             ->get()
@@ -321,7 +320,7 @@ class DiseaseController extends Controller
                     'stock' => $medicine->stock,
                 ];
             });
-        
+
         return response()->json($medicines);
     }
 
@@ -352,7 +351,7 @@ class DiseaseController extends Controller
             ->map(function ($diagnosis) {
                 $user = $diagnosis->prescription->patient->user ?? null;
 
-                if (!$user) {
+                if (! $user) {
                     return null;
                 }
 
@@ -373,7 +372,7 @@ class DiseaseController extends Controller
             ->filter(function ($case) {
                 return $case !== null
                     && isset($case['lat'], $case['lng'])
-                    && !is_nan($case['lat']) && !is_nan($case['lng']);
+                    && ! is_nan($case['lat']) && ! is_nan($case['lng']);
             });
 
         $filteredCount = $cases->count();
@@ -414,14 +413,13 @@ class DiseaseController extends Controller
                 ];
             })
             ->sortByDesc('count')
-            ->take(5)
             ->values();
 
         $diseaseColors = $topDiseases->mapWithKeys(function ($disease) {
             return [$disease['name'] => $this->generateColor($disease['name'])];
         })->toArray();
 
-        if ($diseaseFilter && $diseaseFilter !== 'all' && !isset($diseaseColors[$diseaseFilter])) {
+        if ($diseaseFilter && $diseaseFilter !== 'all' && ! isset($diseaseColors[$diseaseFilter])) {
             $diseaseColors[$diseaseFilter] = $this->generateColor($diseaseFilter);
         }
 
@@ -459,20 +457,20 @@ class DiseaseController extends Controller
         // Group by disease and create feature vectors
         $diseases = Disease::all()->keyBy('id');
         $medicines = Medicine::all()->keyBy('id');
-        
+
         $trainingData = [];
         foreach ($data as $row) {
             $diseaseId = $row->disease_id;
             $medicineId = $row->medicine_id;
-            
-            if (!isset($trainingData[$diseaseId])) {
+
+            if (! isset($trainingData[$diseaseId])) {
                 $trainingData[$diseaseId] = [
                     'disease_id' => $diseaseId,
                     'disease_name' => $row->disease_name,
                     'medicines' => [],
                 ];
             }
-            
+
             $trainingData[$diseaseId]['medicines'][] = [
                 'medicine_id' => $medicineId,
                 'medicine_name' => $row->medicine_name,
@@ -506,20 +504,20 @@ class DiseaseController extends Controller
 
         // Group by disease
         $symptoms = Symptom::all()->keyBy('id');
-        
+
         $trainingData = [];
         foreach ($data as $row) {
             $diseaseId = $row->disease_id;
             $symptomId = $row->symptom_id;
-            
-            if (!isset($trainingData[$diseaseId])) {
+
+            if (! isset($trainingData[$diseaseId])) {
                 $trainingData[$diseaseId] = [
                     'disease_id' => $diseaseId,
                     'disease_name' => $row->disease_name,
                     'symptoms' => [],
                 ];
             }
-            
+
             $trainingData[$diseaseId]['symptoms'][] = [
                 'symptom_id' => $symptomId,
                 'symptom_name' => $row->symptom_name,
@@ -563,7 +561,7 @@ class DiseaseController extends Controller
         $top10Diseases = $topDiseases->take(10);
         $top10Count = $top10Diseases->sum('count');
         $othersCount = $totalMonthCases - $top10Count;
-        
+
         $top10Diseases = $top10Diseases->map(function ($item) {
             return [
                 'id' => $item->id,
@@ -571,7 +569,7 @@ class DiseaseController extends Controller
                 'count' => $item->count,
             ];
         });
-        
+
         if ($othersCount > 0) {
             $top10Diseases->push([
                 'id' => 0,
@@ -617,7 +615,7 @@ class DiseaseController extends Controller
         // Build monthly data for top 10 diseases
         $monthlyData = [];
         $monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-        
+
         for ($m = 1; $m <= 12; $m++) {
             $monthData = [];
             $othersCount = 0;
@@ -635,7 +633,7 @@ class DiseaseController extends Controller
                 ->whereYear('appointments.appointment_date', $year)
                 ->whereMonth('appointments.appointment_date', $m)
                 ->count();
-            
+
             $othersCount = $monthTotal - $totalMonthCases;
             $monthData[] = $othersCount;
 
@@ -680,6 +678,7 @@ class DiseaseController extends Controller
     private function generateColor($text)
     {
         $hash = md5($text);
-        return '#' . substr($hash, 0, 6);
+
+        return '#'.substr($hash, 0, 6);
     }
 }
