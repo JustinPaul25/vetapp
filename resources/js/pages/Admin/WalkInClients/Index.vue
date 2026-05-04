@@ -5,7 +5,14 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { UserPlus, Plus, Edit, Trash2, Eye, Search, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-vue-next';
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuGroup,
+    DropdownMenuItem,
+    DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { UserPlus, Plus, Edit, Trash2, Eye, Search, ArrowUpDown, ArrowUp, ArrowDown, ChevronDown } from 'lucide-vue-next';
 import { ref } from 'vue';
 import { dashboard } from '@/routes';
 import { useToast } from '@/composables/useToast';
@@ -252,12 +259,38 @@ function formatFirstVisit(iso: string | null): string {
                                         <Badge variant="secondary">
                                             {{ client.patients_count }} pet{{ client.patients_count !== 1 ? 's' : '' }}
                                         </Badge>
-                                        <div v-if="client.patients.length > 0" class="text-xs text-muted-foreground mt-1">
-                                            <span v-for="(patient, idx) in client.patients" :key="patient.id">
-                                                {{ patient.pet_name || 'Unnamed' }} ({{ patient.pet_type }})
-                                                <span v-if="idx < client.patients.length - 1">, </span>
-                                            </span>
+                                        <div
+                                            v-if="client.patients.length === 1"
+                                            class="text-xs text-muted-foreground mt-1"
+                                        >
+                                            {{ client.patients[0].pet_name || 'Unnamed' }} ({{
+                                                client.patients[0].pet_type
+                                            }})
                                         </div>
+                                        <DropdownMenu v-else-if="client.patients.length >= 2">
+                                            <DropdownMenuTrigger as-child>
+                                                <Button
+                                                    variant="ghost"
+                                                    size="sm"
+                                                    class="mt-1 h-7 gap-1 px-2 text-xs text-muted-foreground hover:text-foreground"
+                                                >
+                                                    View pets
+                                                    <ChevronDown class="h-3 w-3 shrink-0 opacity-70" />
+                                                </Button>
+                                            </DropdownMenuTrigger>
+                                            <DropdownMenuContent align="start" class="min-w-[12rem]">
+                                                <DropdownMenuGroup>
+                                                    <DropdownMenuItem
+                                                        v-for="patient in client.patients"
+                                                        :key="patient.id"
+                                                        class="cursor-default focus:bg-muted"
+                                                        @select.prevent
+                                                    >
+                                                        {{ patient.pet_name || 'Unnamed' }} ({{ patient.pet_type }})
+                                                    </DropdownMenuItem>
+                                                </DropdownMenuGroup>
+                                            </DropdownMenuContent>
+                                        </DropdownMenu>
                                     </td>
                                     <td class="p-3 text-sm text-muted-foreground whitespace-nowrap">
                                         {{ formatFirstVisit(client.first_visit_at) }}
