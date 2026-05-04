@@ -18,15 +18,12 @@ use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Auth;
 use App\Traits\HasDateFiltering;
 use Barryvdh\DomPDF\Facade\Pdf;
+use Illuminate\Support\Carbon;
 
 class WalkInClientController extends Controller
 {
     use HasDateFiltering;
 
-    /**
-     * Generate a unique placeholder email when a walk-in client does not have one.
-     * Note: the `users.email` column is required + unique in the current schema.
-     */
     /**
      * Normalize HTML time input (H:i or H:i:s) to H:i for validation and storage.
      */
@@ -47,6 +44,10 @@ class WalkInClientController extends Controller
         }
     }
 
+    /**
+     * Generate a unique placeholder email when a walk-in client does not have one.
+     * Note: the `users.email` column is required + unique in the current schema.
+     */
     private function generatePlaceholderEmail(): string
     {
         $domain = 'no-email.walkin.local';
@@ -56,13 +57,54 @@ class WalkInClientController extends Controller
 
         return $email;
     }
+
+    /**
+     * Earliest visit datetime (from appointments) for list display.
+     */
+    private function firstWalkInVisitIso(User $user): ?string
+    {
+        if (!$user->relationLoaded('appointments') || $user->appointments->isEmpty()) {
+            return null;
+        }
+
+        $first = $user->appointments
+            ->sortBy(function ($a) {
+                $t = $a->appointment_time ?: '00:00';
+                if (strlen($t) === 5) {
+                    $t .= ':00';
+                }
+
+                return $a->appointment_date->format('Y-m-d') . ' ' . $t;
+            })
+            ->first();
+
+        if (!$first) {
+            return null;
+        }
+
+        $time = $first->appointment_time ?: '00:00';
+        if (strlen($time) === 5) {
+            $time .= ':00';
+        }
+
+        return Carbon::parse($first->appointment_date->format('Y-m-d') . ' ' . $time)->toIso8601String();
+    }
+
     /**
      * Display a listing of walk-in clients (users with walk_in_client role).
      */
     public function index(Request $request)
     {
         $query = User::role('walk_in_client')
-            ->with(['patients.petType', 'roles'])
+            ->with([
+                'patients.petType',
+                'roles',
+                'appointments' => function ($q) {
+                    $q->select('id', 'user_id', 'appointment_date', 'appointment_time')
+                        ->orderBy('appointment_date')
+                        ->orderBy('appointment_time');
+                },
+            ])
             ->withCount('patients');
 
         // Search functionality
@@ -116,6 +158,7 @@ class WalkInClientController extends Controller
                     ];
                 }),
                 'created_at' => $user->created_at->toISOString(),
+                'first_visit_at' => $this->firstWalkInVisitIso($user),
             ];
         });
 

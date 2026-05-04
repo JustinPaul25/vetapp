@@ -27,6 +27,8 @@ interface WalkInClient {
     address: string | null;
     patients_count: number;
     patients: Patient[];
+    /** ISO 8601 from earliest appointment (visit date + time), or null */
+    first_visit_at: string | null;
     created_at: string;
 }
 
@@ -130,6 +132,14 @@ const getSortIcon = (column: string) => {
     return sortDirection.value === 'asc' ? ArrowUp : ArrowDown;
 };
 
+function formatFirstVisit(iso: string | null): string {
+    if (!iso) return '—';
+    return new Date(iso).toLocaleString(undefined, {
+        dateStyle: 'short',
+        timeStyle: 'short',
+    });
+}
+
 </script>
 
 <template>
@@ -209,6 +219,7 @@ const getSortIcon = (column: string) => {
                                     </th>
                                     <th class="text-left p-3 font-semibold">Mobile</th>
                                     <th class="text-left p-3 font-semibold">Pet</th>
+                                    <th class="text-left p-3 font-semibold">First visit</th>
                                     <th class="text-left p-3 font-semibold">
                                         <button
                                             @click="handleSort('created_at')"
@@ -247,6 +258,9 @@ const getSortIcon = (column: string) => {
                                             </span>
                                         </div>
                                     </td>
+                                    <td class="p-3 text-sm text-muted-foreground whitespace-nowrap">
+                                        {{ formatFirstVisit(client.first_visit_at) }}
+                                    </td>
                                     <td class="p-3 text-sm text-muted-foreground">
                                         {{ new Date(client.created_at).toLocaleDateString() }}
                                     </td>
@@ -273,7 +287,7 @@ const getSortIcon = (column: string) => {
                                     </td>
                                 </tr>
                                 <tr v-if="walkInClients.data.length === 0">
-                                    <td colspan="6" class="p-8 text-center text-muted-foreground">
+                                    <td colspan="7" class="p-8 text-center text-muted-foreground">
                                         No walk-in clients found
                                     </td>
                                 </tr>
