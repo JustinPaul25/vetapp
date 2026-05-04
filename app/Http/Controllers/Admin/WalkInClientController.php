@@ -142,6 +142,8 @@ class WalkInClientController extends Controller
 
         // Transform the data for Inertia
         $walkInClients->getCollection()->transform(function ($user) {
+            $firstVisitIso = $this->firstWalkInVisitIso($user);
+
             return [
                 'id' => $user->id,
                 'name' => trim(($user->first_name ?? '') . ' ' . ($user->last_name ?? '')) ?: $user->name,
@@ -157,8 +159,9 @@ class WalkInClientController extends Controller
                         'pet_type' => $patient->petType->name ?? null,
                     ];
                 }),
-                'created_at' => $user->created_at->toISOString(),
-                'first_visit_at' => $this->firstWalkInVisitIso($user),
+                // Match list "Created" to earliest walk-in visit when appointments exist.
+                'created_at' => $firstVisitIso ?? $user->created_at->toISOString(),
+                'first_visit_at' => $firstVisitIso,
             ];
         });
 
@@ -649,8 +652,17 @@ class WalkInClientController extends Controller
             abort(404);
         }
 
-        $walkInClient->load(['patients.petType', 'appointments']);
-        
+        $walkInClient->load([
+            'patients.petType',
+            'appointments' => function ($q) {
+                $q->select('id', 'user_id', 'appointment_date', 'appointment_time')
+                    ->orderBy('appointment_date')
+                    ->orderBy('appointment_time');
+            },
+        ]);
+
+        $firstVisitIso = $this->firstWalkInVisitIso($walkInClient);
+
         return Inertia::render('Admin/WalkInClients/Show', [
             'walkInClient' => [
                 'id' => $walkInClient->id,
@@ -678,7 +690,7 @@ class WalkInClientController extends Controller
                     ];
                 }),
                 'appointments_count' => $walkInClient->appointments->count(),
-                'created_at' => $walkInClient->created_at->toISOString(),
+                'created_at' => $firstVisitIso ?? $walkInClient->created_at->toISOString(),
                 'updated_at' => $walkInClient->updated_at->toISOString(),
             ],
         ]);
@@ -774,7 +786,15 @@ class WalkInClientController extends Controller
     public function export(Request $request)
     {
         $query = User::role('walk_in_client')
-            ->with(['patients.petType', 'roles'])
+            ->with([
+                'patients.petType',
+                'roles',
+                'appointments' => function ($q) {
+                    $q->select('id', 'user_id', 'appointment_date', 'appointment_time')
+                        ->orderBy('appointment_date')
+                        ->orderBy('appointment_time');
+                },
+            ])
             ->withCount('patients');
 
         if ($request->has('search') && !empty($request->search)) {
@@ -805,13 +825,15 @@ class WalkInClientController extends Controller
     private function exportPdf($walkInClients, $request)
     {
         $data = $walkInClients->map(function ($user) {
+            $displayCreated = $this->firstWalkInVisitIso($user) ?? $user->created_at->toISOString();
+
             return [
                 'name' => trim(($user->first_name ?? '') . ' ' . ($user->last_name ?? '')) ?: $user->name,
                 'email' => $user->email,
                 'mobile_number' => $user->mobile_number ?? 'N/A',
                 'address' => $user->address ?? 'N/A',
                 'patients_count' => $user->patients_count,
-                'created_at' => $user->created_at->format('Y-m-d'),
+                'created_at' => Carbon::parse($displayCreated)->format('Y-m-d'),
             ];
         });
 
@@ -847,13 +869,14 @@ class WalkInClientController extends Controller
             fputcsv($file, ['Name', 'Email', 'Mobile Number', 'Address', 'Patients Count', 'Created At']);
 
             foreach ($walkInClients as $user) {
+                $displayCreated = $this->firstWalkInVisitIso($user) ?? $user->created_at->toISOString();
                 fputcsv($file, [
                     trim(($user->first_name ?? '') . ' ' . ($user->last_name ?? '')) ?: $user->name,
                     $user->email,
                     $user->mobile_number ?? 'N/A',
                     $user->address ?? 'N/A',
                     $user->patients_count,
-                    $user->created_at->format('Y-m-d'),
+                    Carbon::parse($displayCreated)->format('Y-m-d'),
                 ]);
             }
 

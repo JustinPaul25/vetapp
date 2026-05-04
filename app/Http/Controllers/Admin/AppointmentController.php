@@ -1312,9 +1312,6 @@ class AppointmentController extends Controller
      */
     public function downloadPrescriptionByAppointment($id)
     {
-        // A5 landscape: 210mm × 148mm — 595 × 420 pt @ 72 dpi
-        $customPaper = [0, 0, 595, 420];
-
         $prescription = Prescription::with(
             'medicines.medicine',
             'appointment.user',
@@ -1344,7 +1341,7 @@ class AppointmentController extends Controller
                 'veterinarianName',
                 'veterinarianLicense'
             ))
-            ->setPaper($customPaper, 'landscape')
+            ->setPaper('a5', 'portrait')
             ->stream('prescription-'.$prescription->id.'.pdf');
     }
 
@@ -1355,9 +1352,6 @@ class AppointmentController extends Controller
      */
     public function downloadPrescription($id)
     {
-        // A5 landscape: 210mm × 148mm — 595 × 420 pt @ 72 dpi
-        $customPaper = [0, 0, 595, 420];
-
         $prescription = Prescription::with(
             'medicines.medicine',
             'appointment.user',
@@ -1387,7 +1381,7 @@ class AppointmentController extends Controller
                 'veterinarianName',
                 'veterinarianLicense'
             ))
-            ->setPaper($customPaper, 'landscape')
+            ->setPaper('a5', 'portrait')
             ->stream('prescription-'.$prescription->id.'.pdf');
     }
 
@@ -1397,9 +1391,6 @@ class AppointmentController extends Controller
      */
     public function publicDownloadPrescription($id)
     {
-        // A5 landscape: 595 × 420 pt
-        $customPaper = [0, 0, 595, 420];
-
         $prescription = Prescription::with(
             'medicines.medicine',
             'appointment.user',
@@ -1432,7 +1423,7 @@ class AppointmentController extends Controller
                 'veterinarianName',
                 'veterinarianLicense'
             ))
-            ->setPaper($customPaper, 'landscape')
+            ->setPaper('a5', 'portrait')
             ->download($fileName);
     }
 

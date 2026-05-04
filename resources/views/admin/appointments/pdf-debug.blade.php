@@ -24,8 +24,8 @@
         
         .debug-container {
             background-color: white;
-            width: 210mm; /* A5 landscape (half A4) */
-            min-height: 148mm;
+            width: 148mm; /* A5 portrait */
+            min-height: 210mm;
             padding: 12.7mm; /* 0.5 inch margin */
             box-shadow: 0 0 10px rgba(0,0,0,0.1);
             position: relative;

@@ -2257,9 +2257,6 @@ class ClientController extends Controller
             $q->where('user_id', auth()->id());
         })->findOrFail($id);
 
-        // A5 landscape: 595 × 420 pt
-        $customPaper = [0, 0, 595, 420];
-
         $base64Logo = 'data:image/png;base64,'.base64_encode(file_get_contents(public_path('media/logo_for_print.png')));
         $base64PanaboLogo = 'data:image/png;base64,'.base64_encode(file_get_contents(public_path('media/panabo.png')));
         $base64PrescriptionLogo = 'data:image/png;base64,'.base64_encode(file_get_contents(public_path('media/prescription.png')));
@@ -2281,7 +2278,7 @@ class ClientController extends Controller
                 'veterinarianName',
                 'veterinarianLicense'
             ))
-            ->setPaper($customPaper, 'landscape')
+            ->setPaper('a5', 'portrait')
             ->stream('prescription-'.$prescription->id.'.pdf');
     }
 

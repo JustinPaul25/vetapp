@@ -29,6 +29,7 @@ interface WalkInClient {
     patients: Patient[];
     /** ISO 8601 from earliest appointment (visit date + time), or null */
     first_visit_at: string | null;
+    /** Same as first visit when the client has appointments; otherwise user row created_at */
     created_at: string;
 }
 

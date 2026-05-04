@@ -52,9 +52,6 @@ class PrescriptionEmailNotification extends Notification
         $petName = $patient->pet_name ?? 'Your Pet';
         $prescriptionNumber = str_pad($this->prescription->id, 6, '0', STR_PAD_LEFT);
 
-        // A5 landscape: 210mm × 148mm (595 × 420 pt)
-        $customPaper = [0, 0, 595, 420];
-        
         $base64Logo = 'data:image/png;base64,' . base64_encode(file_get_contents(public_path('media/logo_for_print.png')));
         $base64PanaboLogo = 'data:image/png;base64,' . base64_encode(file_get_contents(public_path('media/panabo.png')));
         $base64PrescriptionLogo = 'data:image/png;base64,' . base64_encode(file_get_contents(public_path('media/prescription.png')));
@@ -76,7 +73,7 @@ class PrescriptionEmailNotification extends Notification
             'veterinarianName' => $veterinarianName,
             'veterinarianLicense' => $veterinarianLicense,
         ])
-        ->setPaper($customPaper, 'landscape');
+        ->setPaper('a5', 'portrait');
 
         $pdfContent = $pdf->output();
         $fileName = 'prescription-' . $prescriptionNumber . '.pdf';

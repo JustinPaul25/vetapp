@@ -11,9 +11,9 @@
             box-sizing: border-box;
         }
         
-        /* A5 landscape: 210mm × 148mm (8.27" × 5.83") — half A4 by area */
+        /* A5 portrait: 148mm × 210mm (5.83" × 8.27") */
         @page {
-            size: A5 landscape;
+            size: A5 portrait;
             margin: 0.22in 0.2in;
         }
         
@@ -23,8 +23,8 @@
             color: #000;
             line-height: 1.25;
             padding: 0.22in 0.2in;
-            width: 8.27in;
-            max-width: 8.27in;
+            width: 5.83in;
+            max-width: 5.83in;
             margin: 0 auto;
         }
         
@@ -33,13 +33,13 @@
             body {
                 padding: 0;
                 margin: 0;
-                width: 8.27in;
+                width: 5.83in;
                 -webkit-print-color-adjust: exact;
                 print-color-adjust: exact;
             }
             
             @page {
-                size: A5 landscape;
+                size: A5 portrait;
                 margin: 0.22in 0.2in;
             }
         }
