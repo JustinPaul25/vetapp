@@ -16,6 +16,7 @@ import {
 } from '@/components/ui/dialog';
 import { Heart, ArrowLeft, Edit, Plus, TrendingUp } from 'lucide-vue-next';
 import { dashboard } from '@/routes';
+import { displayEmailUnlessWalkInPlaceholder as displayEmail } from '@/lib/walkInPlaceholderEmail';
 import { ref } from 'vue';
 import InputError from '@/components/InputError.vue';
 
@@ -271,7 +272,9 @@ const getWeightChange = () => {
 
                                 <div class="space-y-2">
                                     <Label class="text-sm font-medium text-muted-foreground">Email</Label>
-                                    <div class="text-lg font-semibold">{{ patient.owner.email }}</div>
+                                    <div class="text-lg font-semibold">
+                                        {{ displayEmail(patient.owner.email) || '—' }}
+                                    </div>
                                 </div>
 
                                 <div class="space-y-2" v-if="patient.owner.mobile_number">
