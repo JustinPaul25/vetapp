@@ -17,6 +17,7 @@ interface Patient {
     pet_name: string | null;
     pet_breed: string;
     pet_type: string | null;
+    appointment_type: string | null;
     has_prescription: boolean;
 }
 
@@ -264,6 +265,9 @@ function formatFirstVisit(iso: string | null): string {
                                                 class="text-xs text-muted-foreground mt-1 flex items-center gap-2"
                                             >
                                                 <span>{{ client.patients[0].pet_name || 'Unnamed' }} ({{ client.patients[0].pet_type }})</span>
+                                                <span v-if="client.patients[0].appointment_type">
+                                                    - {{ client.patients[0].appointment_type }}
+                                                </span>
                                                 <span
                                                     v-if="client.patients[0].has_prescription"
                                                     class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200"
@@ -324,7 +328,7 @@ function formatFirstVisit(iso: string | null): string {
                                                     :key="patient.id"
                                                     class="flex items-center justify-between p-3 bg-muted/30 rounded-lg"
                                                 >
-                                                    <div class="grid grid-cols-2 gap-4 flex-1">
+                                                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 flex-1">
                                                         <div>
                                                             <span class="text-xs text-muted-foreground">Pet Name</span>
                                                             <p class="text-sm font-medium flex items-center gap-2">
@@ -341,6 +345,10 @@ function formatFirstVisit(iso: string | null): string {
                                                         <div>
                                                             <span class="text-xs text-muted-foreground">Pet Type</span>
                                                             <p class="text-sm">{{ patient.pet_type || '—' }}</p>
+                                                        </div>
+                                                        <div>
+                                                            <span class="text-xs text-muted-foreground">Appointment Type</span>
+                                                            <p class="text-sm">{{ patient.appointment_type || '—' }}</p>
                                                         </div>
                                                     </div>
                                                 </div>

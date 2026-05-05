@@ -153,11 +153,20 @@ class WalkInClientController extends Controller
                 'address' => $user->address ?? null,
                 'patients_count' => $user->patients_count,
                 'patients' => $user->patients->map(function ($patient) {
+                    $appointmentTypes = DB::table('appointment_patient')
+                        ->where('patient_id', $patient->id)
+                        ->whereNotNull('appointment_type_id')
+                        ->join('appointment_types', 'appointment_patient.appointment_type_id', '=', 'appointment_types.id')
+                        ->pluck('appointment_types.name')
+                        ->unique()
+                        ->values();
+
                     return [
                         'id' => $patient->id,
                         'pet_name' => $patient->pet_name,
                         'pet_breed' => $patient->pet_breed,
                         'pet_type' => $patient->petType->name ?? null,
+                        'appointment_type' => $appointmentTypes->isNotEmpty() ? $appointmentTypes->join(', ') : null,
                         'has_prescription' => $patient->prescriptions->isNotEmpty(),
                     ];
                 }),
