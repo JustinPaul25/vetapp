@@ -1002,9 +1002,8 @@ function selectDisease(name: string) {
     z-index: 1000 !important;
 }
 
-/* Custom marker styling */
+/* Keep marker stacking only; Leaflet controls absolute positioning */
 .custom-marker {
-    position: relative;
     z-index: 100;
 }
 </style>

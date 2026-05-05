@@ -14,6 +14,18 @@ use Illuminate\Support\Facades\Log;
 class UserController extends Controller
 {
     use HasDateFiltering;
+
+    private const WALK_IN_PLACEHOLDER_EMAIL_SUFFIX = '@no-email.walkin.local';
+
+    private function formatEmailForDisplay(?string $email): string
+    {
+        $value = trim((string) $email);
+        if ($value === '' || str_ends_with($value, self::WALK_IN_PLACEHOLDER_EMAIL_SUFFIX)) {
+            return 'No email';
+        }
+
+        return $value;
+    }
     /**
      * Display a listing of the resource.
      */
@@ -55,7 +67,7 @@ class UserController extends Controller
             return [
                 'id' => $user->id,
                 'name' => $user->name,
-                'email' => $user->email,
+                'email' => $this->formatEmailForDisplay($user->email),
                 'roles' => $user->roles->map(fn($role) => ['name' => $role->name]),
                 'created_at' => $user->created_at->toISOString(),
             ];
@@ -237,7 +249,7 @@ class UserController extends Controller
         $data = $users->map(function ($user) {
             return [
                 'name' => $user->name,
-                'email' => $user->email,
+                'email' => $this->formatEmailForDisplay($user->email),
                 'roles' => $user->roles->pluck('name')->join(', ') ?: 'No roles',
                 'created_at' => $user->created_at->format('Y-m-d'),
             ];
@@ -281,7 +293,7 @@ class UserController extends Controller
             foreach ($users as $user) {
                 fputcsv($file, [
                     $user->name,
-                    $user->email,
+                    $this->formatEmailForDisplay($user->email),
                     $user->roles->pluck('name')->join(', ') ?: 'No roles',
                     $user->created_at->format('Y-m-d'),
                 ]);

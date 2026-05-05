@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
+import { displayEmailUnlessWalkInPlaceholder } from '@/lib/walkInPlaceholderEmail';
 import { Users, Plus, Edit, Trash2, Search, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-vue-next';
 import { ref, computed } from 'vue';
 import { dashboard } from '@/routes';
@@ -102,6 +103,10 @@ const handleSort = (column: string) => {
 const getSortIcon = (column: string) => {
     if (sortBy.value !== column) return ArrowUpDown;
     return sortDirection.value === 'asc' ? ArrowUp : ArrowDown;
+};
+
+const getUserEmailDisplay = (email: string | null | undefined) => {
+    return displayEmailUnlessWalkInPlaceholder(email) || 'No email';
 };
 
 const adminUsersRoute = (path: string) => {
@@ -207,7 +212,7 @@ const adminUsersRoute = (path: string) => {
                                     class="border-b hover:bg-muted/50"
                                 >
                                     <td class="p-3">{{ user.name }}</td>
-                                    <td class="p-3">{{ user.email }}</td>
+                                    <td class="p-3">{{ getUserEmailDisplay(user.email) }}</td>
                                     <td class="p-3">
                                         <div class="flex gap-1 flex-wrap">
                                             <Badge

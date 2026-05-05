@@ -156,7 +156,7 @@
                 <th>Pet Type</th>
                 <th>Breed</th>
                 <th>Owner Name</th>
-                <th>Owner Email</th>
+                <th>Phone Number</th>
                 <th>Symptoms</th>
                 <th>Issued On</th>
             </tr>
@@ -168,7 +168,7 @@
                     <td>{{ $prescription['pet_type'] }}</td>
                     <td>{{ $prescription['pet_breed'] }}</td>
                     <td>{{ $prescription['owner_name'] }}</td>
-                    <td>{{ $prescription['owner_email'] }}</td>
+                    <td>{{ $prescription['owner_phone'] }}</td>
                     <td>{{ $prescription['symptoms'] ?? 'N/A' }}</td>
                     <td>{{ $prescription['issued_on'] }}</td>
                 </tr>

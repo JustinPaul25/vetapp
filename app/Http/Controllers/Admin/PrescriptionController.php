@@ -220,7 +220,7 @@ class PrescriptionController extends Controller
                 'pet_type' => $patient->petType->name ?? 'N/A',
                 'pet_breed' => $patient->pet_breed ?? 'N/A',
                 'owner_name' => $prescription->ownerDisplayName(),
-                'owner_email' => $user?->email ?? 'N/A',
+                'owner_phone' => $user?->mobile_number ?? 'N/A',
                 'symptoms' => $prescription->symptoms ?? 'N/A',
                 'issued_on' => $prescription->issuedOnDisplay(),
             ];
@@ -256,7 +256,7 @@ class PrescriptionController extends Controller
         $callback = function () use ($prescriptions) {
             $file = fopen('php://output', 'w');
 
-            fputcsv($file, ['Appointment Type', 'Pet Type', 'Breed', 'Owner Name', 'Owner Email', 'Symptoms', 'Issued On']);
+            fputcsv($file, ['Appointment Type', 'Pet Type', 'Breed', 'Owner Name', 'Phone Number', 'Symptoms', 'Issued On']);
 
             foreach ($prescriptions as $prescription) {
                 $appointment = $prescription->appointment;
@@ -268,7 +268,7 @@ class PrescriptionController extends Controller
                     $patient->petType->name ?? 'N/A',
                     $patient->pet_breed ?? 'N/A',
                     $prescription->ownerDisplayName(),
-                    $user?->email ?? 'N/A',
+                    $user?->mobile_number ?? 'N/A',
                     $prescription->symptoms ?? 'N/A',
                     $prescription->issuedOnDisplay(),
                 ]);

@@ -520,10 +520,7 @@ class PatientController extends Controller
             });
         }
 
-        // Apply date filtering only if filter_type is provided
-        if ($request->has('filter_type')) {
-            $this->applyDateFilter($query, $request, 'created_at');
-        }
+        $this->applyPatientReportDateFilter($query, $request);
 
         $patients = $query->orderBy('created_at', 'desc')->get();
 
@@ -534,6 +531,24 @@ class PatientController extends Controller
         }
 
         return $this->exportPdf($patients, $request);
+    }
+
+    /**
+     * Apply patient report date filtering using appointment dates.
+     */
+    private function applyPatientReportDateFilter($query, Request $request): void
+    {
+        if (! $request->filled('filter_type')) {
+            return;
+        }
+
+        $query->where(function ($q) use ($request) {
+            $q->whereHas('appointments', function ($appointmentQuery) use ($request) {
+                $this->applyDateFilter($appointmentQuery, $request, 'appointment_date');
+            })->orWhereHas('appointmentPatients', function ($appointmentQuery) use ($request) {
+                $this->applyDateFilter($appointmentQuery, $request, 'appointment_date');
+            });
+        });
     }
 
     private function exportPdf($patients, $request)

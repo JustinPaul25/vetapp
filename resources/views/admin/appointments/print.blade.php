@@ -139,6 +139,10 @@
         .header-address {
             font-size: 10px;
         }
+
+        .header-contact {
+            font-size: 10px;
+        }
         
         .header-section-name {
             font-size: 11px;
@@ -156,9 +160,9 @@
             width: 22px;
             height: auto;
             display: block;
-            margin-left: 10px;
+            margin-left: 0;
             margin-right: auto;
-            margin-bottom: 8px;
+            margin-bottom: 6px;
         }
         
         /* Patient Information Section */
@@ -333,6 +337,7 @@
             <td class="header-center">
                 <p class="header-org-name">City of Panabo</p>
                 <p class="header-org-name">City Mayor's Office</p>
+                <p class="header-section-name">Panabo City Veterinary Section</p>
             </td>
             <td class="header-right">
                 <img src="{{ $base64Logo }}" alt="Logo" class="header-logo">
@@ -341,12 +346,13 @@
         <tr>
             <td colspan="3" class="header-center address-line" style="text-align: center; padding-top: 5px;">
                 <p class="header-address">Prk. 1 Along, National Highway, Brgy. Salvacion Panabo city</p>
+                <p class="header-contact">Panabo City Veterinary Section / panabocityvet@gmail.com</p>
             </td>
         </tr>
     </table>
     
     <!-- Prescription Logo -->
-    <div style="text-align: left; margin-bottom: 10px;">
+    <div style="text-align: left; margin-top: -2px; margin-bottom: 6px;">
         <img src="{{ $base64PrescriptionLogo }}" alt="Prescription Logo" class="prescription-logo">
     </div>
     
@@ -354,7 +360,7 @@
     <table class="patient-info-table noborder-table">
         <tr>
             <td>
-                <span class="patient-info-label">Clients Name:</span>
+                <span class="patient-info-label">Client's Name:</span>
                 {{ $prescription->ownerDisplayName() }}
             </td>
             <td>
@@ -364,7 +370,7 @@
         </tr>
         <tr>
             <td>
-                <span class="patient-info-label">Patients Name:</span>
+                <span class="patient-info-label">Patient's Name:</span>
                 {{ $prescription->patient->pet_name ?? 'N/A' }}
             </td>
             <td>

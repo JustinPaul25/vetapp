@@ -23,6 +23,34 @@ use Illuminate\Support\Carbon;
 class WalkInClientController extends Controller
 {
     use HasDateFiltering;
+    private const WALK_IN_PLACEHOLDER_EMAIL_SUFFIX = '@no-email.walkin.local';
+
+    /**
+     * Normalize first/last/full name fields so full name can be entered directly.
+     */
+    private function normalizeClientNameFields(array $validated): array
+    {
+        $firstName = trim((string) ($validated['first_name'] ?? ''));
+        $lastName = trim((string) ($validated['last_name'] ?? ''));
+        $fullName = trim((string) ($validated['name'] ?? ''));
+
+        if ($fullName === '' && ($firstName !== '' || $lastName !== '')) {
+            $fullName = trim($firstName . ' ' . $lastName);
+        }
+
+        // If only full name is provided, derive first/last to keep separate columns useful.
+        if ($fullName !== '' && $firstName === '' && $lastName === '') {
+            $parts = preg_split('/\s+/', $fullName, 2);
+            $firstName = $parts[0] ?? '';
+            $lastName = $parts[1] ?? '';
+        }
+
+        return [
+            'first_name' => $firstName !== '' ? $firstName : null,
+            'last_name' => $lastName !== '' ? $lastName : null,
+            'name' => $fullName !== '' ? $fullName : null,
+        ];
+    }
 
     /**
      * Normalize HTML time input (H:i or H:i:s) to H:i for validation and storage.
@@ -56,6 +84,18 @@ class WalkInClientController extends Controller
         } while (User::where('email', $email)->exists());
 
         return $email;
+    }
+
+    /**
+     * Keep placeholder walk-in emails hidden in reports/exports.
+     */
+    private function displayEmailUnlessWalkInPlaceholder(?string $email): string
+    {
+        if (!$email) {
+            return '';
+        }
+
+        return str_ends_with($email, self::WALK_IN_PLACEHOLDER_EMAIL_SUFFIX) ? '' : $email;
     }
 
     /**
@@ -466,6 +506,8 @@ class WalkInClientController extends Controller
         ]);
 
         return DB::transaction(function () use ($validated) {
+            $normalizedNames = $this->normalizeClientNameFields($validated);
+
             // Step 1: Check if client already exists
             // Check by email first (primary identifier)
             $existingClient = null;
@@ -491,9 +533,9 @@ class WalkInClientController extends Controller
                 }
 
                 $existingClient = User::create([
-                    'first_name' => $validated['first_name'] ?? null,
-                    'last_name' => $validated['last_name'] ?? null,
-                    'name' => $validated['name'] ?? trim(($validated['first_name'] ?? '') . ' ' . ($validated['last_name'] ?? '')),
+                    'first_name' => $normalizedNames['first_name'],
+                    'last_name' => $normalizedNames['last_name'],
+                    'name' => $normalizedNames['name'],
                     'email' => $emailToStore,
                     'mobile_number' => $validated['mobile_number'] ?? null,
                     'address' => $validated['address'] ?? null,
@@ -778,10 +820,12 @@ class WalkInClientController extends Controller
             'lng' => 'nullable|numeric|between:-180,180',
         ]);
 
+        $normalizedNames = $this->normalizeClientNameFields($validated);
+
         $updateData = [
-            'first_name' => $validated['first_name'] ?? null,
-            'last_name' => $validated['last_name'] ?? null,
-            'name' => $validated['name'] ?? trim(($validated['first_name'] ?? '') . ' ' . ($validated['last_name'] ?? '')),
+            'first_name' => $normalizedNames['first_name'],
+            'last_name' => $normalizedNames['last_name'],
+            'name' => $normalizedNames['name'],
             'email' => $validated['email'] ?? $walkInClient->email,
             'mobile_number' => $validated['mobile_number'] ?? null,
             'address' => $validated['address'] ?? null,
@@ -840,7 +884,7 @@ class WalkInClientController extends Controller
             });
         }
 
-        $this->applyDateFilter($query, $request, 'created_at');
+        $this->applyWalkInReportDateFilter($query, $request);
 
         $walkInClients = $query->orderBy('created_at', 'desc')->get();
 
@@ -853,6 +897,20 @@ class WalkInClientController extends Controller
         return $this->exportPdf($walkInClients, $request);
     }
 
+    /**
+     * Apply walk-in report date filtering using appointment dates.
+     */
+    private function applyWalkInReportDateFilter($query, Request $request): void
+    {
+        if (!$request->filled('filter_type')) {
+            return;
+        }
+
+        $query->whereHas('appointments', function ($appointmentQuery) use ($request) {
+            $this->applyDateFilter($appointmentQuery, $request, 'appointment_date');
+        });
+    }
+
     private function exportPdf($walkInClients, $request)
     {
         $data = $walkInClients->map(function ($user) {
@@ -860,7 +918,7 @@ class WalkInClientController extends Controller
 
             return [
                 'name' => trim(($user->first_name ?? '') . ' ' . ($user->last_name ?? '')) ?: $user->name,
-                'email' => $user->email,
+                'email' => $this->displayEmailUnlessWalkInPlaceholder($user->email),
                 'mobile_number' => $user->mobile_number ?? 'N/A',
                 'address' => $user->address ?? 'N/A',
                 'patients_count' => $user->patients_count,
@@ -903,7 +961,7 @@ class WalkInClientController extends Controller
                 $displayCreated = $this->firstWalkInVisitIso($user) ?? $user->created_at->toISOString();
                 fputcsv($file, [
                     trim(($user->first_name ?? '') . ' ' . ($user->last_name ?? '')) ?: $user->name,
-                    $user->email,
+                    $this->displayEmailUnlessWalkInPlaceholder($user->email),
                     $user->mobile_number ?? 'N/A',
                     $user->address ?? 'N/A',
                     $user->patients_count,
