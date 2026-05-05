@@ -56,17 +56,21 @@ class PetOwnerController extends Controller
         // Validate sort_direction
         $sortDirection = strtolower($sortDirection) === 'asc' ? 'asc' : 'desc';
 
-        $query->orderBy($sortBy, $sortDirection);
+        if ($sortBy === 'created_at') {
+            $query->orderByRaw("COALESCE(appointments_min_appointment_date, users.created_at) {$sortDirection}");
+        } else {
+            $query->orderBy($sortBy, $sortDirection);
+        }
 
         $petOwners = $query->paginate(15);
 
         // Transform the data for Inertia
         $petOwners->getCollection()->transform(function ($user) {
-            $isWalkIn = $user->hasRole('walk_in_client');
             $firstVisit = $user->appointments_min_appointment_date ?? null;
-            $listDate = ($isWalkIn && $firstVisit)
-                ? Carbon::parse($firstVisit)->startOfDay()->toISOString()
+            $effectiveCreatedAt = $firstVisit
+                ? Carbon::parse($firstVisit)->toISOString()
                 : $user->created_at->toISOString();
+            $isWalkIn = $user->hasRole('walk_in_client');
 
             return [
                 'id' => $user->id,
@@ -83,8 +87,8 @@ class PetOwnerController extends Controller
                         'pet_type' => $patient->petType->name ?? null,
                     ];
                 }),
-                'created_at' => $user->created_at->toISOString(),
-                'list_date' => $listDate,
+                'created_at' => $effectiveCreatedAt,
+                'list_date' => $effectiveCreatedAt,
                 'is_walk_in_client' => $isWalkIn,
             ];
         });
