@@ -53,6 +53,7 @@ interface PatientOption {
     pet_breed: string;
     pet_type: string;
     has_prescription: boolean;
+    appointment_id?: number;
 }
 
 interface Props {
@@ -617,8 +618,10 @@ const switchPet = (petId: number) => {
         return;
     }
     
+    const appointmentId = pet?.appointment_id ?? props.appointment.id;
+
     // Reload page with selected pet
-    router.visit(`/admin/appointments/${props.appointment.id}/prescription/create?patient_id=${petId}`, {
+    router.visit(`/admin/appointments/${appointmentId}/prescription/create?patient_id=${petId}`, {
         preserveState: false,
         preserveScroll: false,
     });
@@ -810,7 +813,7 @@ const submit = () => {
                                                         Selected
                                                     </Badge>
                                                     <Badge v-if="pet.has_prescription" variant="outline" class="text-xs">
-                                                        Has Prescription
+                                                        ✅ Prescribed
                                                     </Badge>
                                                 </div>
                                                 <div class="text-sm text-muted-foreground mt-1">

@@ -885,8 +885,44 @@ class AppointmentController extends Controller
             ->where('id', $id)
             ->firstOrFail();
 
-        // Get all pets associated with this appointment
+        // Get all pets associated with this appointment.
+        // For walk-in clients, pets may be split across separate appointments created at the same visit time.
         $allPatients = $appointment->patients;
+        $patientAppointmentMap = collect();
+
+        $isWalkInClient = $appointment->user && method_exists($appointment->user, 'hasRole')
+            ? $appointment->user->hasRole('walk_in_client')
+            : false;
+
+        if ($isWalkInClient) {
+            $relatedAppointments = Appointment::with(['patients.petType', 'patient.petType', 'appointment_type'])
+                ->where('is_approved', 1)
+                ->where('is_canceled', 0)
+                ->where('user_id', $appointment->user_id)
+                ->whereDate('appointment_date', $appointment->appointment_date)
+                ->where('appointment_time', $appointment->appointment_time)
+                ->get();
+
+            $allPatients = collect();
+            foreach ($relatedAppointments as $relatedAppointment) {
+                $relatedPatients = $relatedAppointment->patients;
+                if ($relatedPatients->isEmpty() && $relatedAppointment->patient) {
+                    $relatedPatients = collect([$relatedAppointment->patient]);
+                }
+
+                foreach ($relatedPatients as $relatedPatient) {
+                    $allPatients->push($relatedPatient);
+                    $patientAppointmentMap->put($relatedPatient->id, $relatedAppointment);
+                }
+            }
+
+            $allPatients = $allPatients->unique('id')->values();
+        } else {
+            // Default behavior for regular appointments.
+            foreach ($allPatients as $appointmentPatient) {
+                $patientAppointmentMap->put($appointmentPatient->id, $appointment);
+            }
+        }
 
         // If patient_id is provided in request, use that; otherwise use primary patient
         $requestedPatientId = $request->get('patient_id');
@@ -926,9 +962,10 @@ class AppointmentController extends Controller
             ];
         });
 
-        // Prepare list of all pets for selection
-        $patientsList = $allPatients->map(function ($p) use ($appointment) {
-            $hasPrescription = Prescription::where('appointment_id', $appointment->id)
+        // Prepare list of all pets for selection.
+        $patientsList = $allPatients->map(function ($p) use ($appointment, $patientAppointmentMap) {
+            $petAppointment = $patientAppointmentMap->get($p->id, $appointment);
+            $hasPrescription = Prescription::where('appointment_id', $petAppointment->id)
                 ->where('patient_id', $p->id)
                 ->exists();
 
@@ -938,6 +975,7 @@ class AppointmentController extends Controller
                 'pet_breed' => $p->pet_breed,
                 'pet_type' => $p->petType->name ?? 'N/A',
                 'has_prescription' => $hasPrescription,
+                'appointment_id' => $petAppointment->id,
             ];
         });
 

@@ -359,7 +359,7 @@
             </td>
             <td>
                 <span class="patient-info-label">Date:</span>
-                {{ $prescription->created_at->format('F d, Y') }}
+                {{ $prescription->issuedOnDisplay('F d, Y') }}
             </td>
         </tr>
         <tr>
