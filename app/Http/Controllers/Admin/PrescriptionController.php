@@ -221,7 +221,7 @@ class PrescriptionController extends Controller
                 'pet_breed' => $patient->pet_breed ?? 'N/A',
                 'owner_name' => $prescription->ownerDisplayName(),
                 'owner_phone' => $user?->mobile_number ?? 'N/A',
-                'symptoms' => $prescription->symptoms ?? 'N/A',
+                'symptoms' => $this->normalizeSymptomsForReport($prescription->symptoms),
                 'issued_on' => $prescription->issuedOnDisplay(),
             ];
         });
@@ -269,7 +269,7 @@ class PrescriptionController extends Controller
                     $patient->pet_breed ?? 'N/A',
                     $prescription->ownerDisplayName(),
                     $user?->mobile_number ?? 'N/A',
-                    $prescription->symptoms ?? 'N/A',
+                    $this->normalizeSymptomsForReport($prescription->symptoms),
                     $prescription->issuedOnDisplay(),
                 ]);
             }
@@ -278,6 +278,25 @@ class PrescriptionController extends Controller
         };
 
         return response()->stream($callback, 200, $headers);
+    }
+
+    /**
+     * Normalize symptoms for reports and remove repeated entries.
+     */
+    private function normalizeSymptomsForReport(?string $symptoms): string
+    {
+        if (blank($symptoms)) {
+            return 'N/A';
+        }
+
+        $normalized = collect(explode(',', $symptoms))
+            ->map(fn ($symptom) => trim((string) $symptom))
+            ->filter()
+            ->unique(fn ($symptom) => mb_strtolower($symptom))
+            ->values()
+            ->implode(', ');
+
+        return $normalized !== '' ? $normalized : 'N/A';
     }
 
     /**
