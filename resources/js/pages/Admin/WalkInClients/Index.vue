@@ -5,14 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import {
-    DropdownMenu,
-    DropdownMenuContent,
-    DropdownMenuGroup,
-    DropdownMenuItem,
-    DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
-import { UserPlus, Plus, Edit, Trash2, Eye, Search, ArrowUpDown, ArrowUp, ArrowDown, ChevronDown } from 'lucide-vue-next';
+import { UserPlus, Plus, Edit, Trash2, Eye, Search, ArrowUpDown, ArrowUp, ArrowDown, ChevronDown, ChevronRight, CheckCircle2 } from 'lucide-vue-next';
 import { ref } from 'vue';
 import { dashboard } from '@/routes';
 import { useToast } from '@/composables/useToast';
@@ -24,6 +17,7 @@ interface Patient {
     pet_name: string | null;
     pet_breed: string;
     pet_type: string | null;
+    has_prescription: boolean;
 }
 
 interface WalkInClient {
@@ -65,6 +59,7 @@ const breadcrumbs = [
 const searchQuery = ref(props.filters?.search || '');
 const sortBy = ref(props.filters?.sort_by || 'created_at');
 const sortDirection = ref(props.filters?.sort_direction || 'desc');
+const expandedClients = ref<Set<number>>(new Set());
 
 const { error: showError } = useToast();
 
@@ -138,6 +133,14 @@ const handleSort = (column: string) => {
 const getSortIcon = (column: string) => {
     if (sortBy.value !== column) return ArrowUpDown;
     return sortDirection.value === 'asc' ? ArrowUp : ArrowDown;
+};
+
+const toggleClientPets = (clientId: number) => {
+    if (expandedClients.value.has(clientId)) {
+        expandedClients.value.delete(clientId);
+    } else {
+        expandedClients.value.add(clientId);
+    }
 };
 
 function formatFirstVisit(iso: string | null): string {
@@ -241,85 +244,110 @@ function formatFirstVisit(iso: string | null): string {
                                 </tr>
                             </thead>
                             <tbody>
-                                <tr
-                                    v-for="client in walkInClients.data"
-                                    :key="client.id"
-                                    class="border-b hover:bg-muted/50"
-                                >
-                                    <td class="p-3 font-medium">
-                                        {{ client.name }}
-                                    </td>
-                                    <td class="p-3 text-sm">
-                                        {{ displayEmail(client.email) }}
-                                    </td>
-                                    <td class="p-3 text-sm">
-                                        {{ client.mobile_number || '—' }}
-                                    </td>
-                                    <td class="p-3">
-                                        <Badge variant="secondary">
-                                            {{ client.patients_count }} pet{{ client.patients_count !== 1 ? 's' : '' }}
-                                        </Badge>
-                                        <div
-                                            v-if="client.patients.length === 1"
-                                            class="text-xs text-muted-foreground mt-1"
-                                        >
-                                            {{ client.patients[0].pet_name || 'Unnamed' }} ({{
-                                                client.patients[0].pet_type
-                                            }})
-                                        </div>
-                                        <DropdownMenu v-else-if="client.patients.length >= 2">
-                                            <DropdownMenuTrigger as-child>
-                                                <Button
-                                                    variant="ghost"
-                                                    size="sm"
-                                                    class="mt-1 h-7 gap-1 px-2 text-xs text-muted-foreground hover:text-foreground"
-                                                >
-                                                    View pets
-                                                    <ChevronDown class="h-3 w-3 shrink-0 opacity-70" />
-                                                </Button>
-                                            </DropdownMenuTrigger>
-                                            <DropdownMenuContent align="start" class="min-w-[12rem]">
-                                                <DropdownMenuGroup>
-                                                    <DropdownMenuItem
-                                                        v-for="patient in client.patients"
-                                                        :key="patient.id"
-                                                        class="cursor-default focus:bg-muted"
-                                                        @select.prevent
-                                                    >
-                                                        {{ patient.pet_name || 'Unnamed' }} ({{ patient.pet_type }})
-                                                    </DropdownMenuItem>
-                                                </DropdownMenuGroup>
-                                            </DropdownMenuContent>
-                                        </DropdownMenu>
-                                    </td>
-                                    <td class="p-3 text-sm text-muted-foreground whitespace-nowrap">
-                                        {{ formatFirstVisit(client.first_visit_at) }}
-                                    </td>
-                                    <td class="p-3 text-sm text-muted-foreground">
-                                        {{ new Date(client.created_at).toLocaleDateString() }}
-                                    </td>
-                                    <td class="p-3">
-                                        <div class="flex justify-end gap-2">
-                                            <Link :href="adminWalkInClientsRoute(`/${client.id}`)">
-                                                <Button variant="outline" size="sm">
-                                                    <Eye class="h-4 w-4" />
-                                                </Button>
-                                            </Link>
-                                            <Link :href="adminWalkInClientsRoute(`/${client.id}/edit`)">
-                                                <Button variant="outline" size="sm">
-                                                    <Edit class="h-4 w-4" />
-                                                </Button>
-                                            </Link>
-                                            <Button
-                                                variant="outline"
-                                                size="sm"
-                                                @click="deleteWalkInClient(client.id, client.name)"
+                                <template v-for="client in walkInClients.data" :key="client.id">
+                                    <tr class="border-b hover:bg-muted/50">
+                                        <td class="p-3 font-medium">
+                                            {{ client.name }}
+                                        </td>
+                                        <td class="p-3 text-sm">
+                                            {{ displayEmail(client.email) }}
+                                        </td>
+                                        <td class="p-3 text-sm">
+                                            {{ client.mobile_number || '—' }}
+                                        </td>
+                                        <td class="p-3">
+                                            <Badge variant="secondary">
+                                                {{ client.patients_count }} pet{{ client.patients_count !== 1 ? 's' : '' }}
+                                            </Badge>
+                                            <div
+                                                v-if="client.patients.length === 1"
+                                                class="text-xs text-muted-foreground mt-1 flex items-center gap-2"
                                             >
-                                                <Trash2 class="h-4 w-4 text-destructive" />
+                                                <span>{{ client.patients[0].pet_name || 'Unnamed' }} ({{ client.patients[0].pet_type }})</span>
+                                                <span
+                                                    v-if="client.patients[0].has_prescription"
+                                                    class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200"
+                                                >
+                                                    <CheckCircle2 class="h-3 w-3" />
+                                                    Prescribed
+                                                </span>
+                                            </div>
+                                            <Button
+                                                v-else-if="client.patients.length >= 2"
+                                                type="button"
+                                                variant="ghost"
+                                                size="sm"
+                                                class="mt-1 h-7 gap-1 px-2 text-xs text-muted-foreground hover:text-foreground"
+                                                @click="toggleClientPets(client.id)"
+                                            >
+                                                <component :is="expandedClients.has(client.id) ? ChevronDown : ChevronRight" class="h-3 w-3 shrink-0 opacity-70" />
+                                                {{ expandedClients.has(client.id) ? 'Hide pets' : 'View pets' }}
                                             </Button>
-                                        </div>
-                                    </td>
-                                </tr>
+                                        </td>
+                                        <td class="p-3 text-sm text-muted-foreground whitespace-nowrap">
+                                            {{ formatFirstVisit(client.first_visit_at) }}
+                                        </td>
+                                        <td class="p-3 text-sm text-muted-foreground">
+                                            {{ new Date(client.created_at).toLocaleDateString() }}
+                                        </td>
+                                        <td class="p-3">
+                                            <div class="flex justify-end gap-2">
+                                                <Link :href="adminWalkInClientsRoute(`/${client.id}`)">
+                                                    <Button variant="outline" size="sm">
+                                                        <Eye class="h-4 w-4" />
+                                                    </Button>
+                                                </Link>
+                                                <Link :href="adminWalkInClientsRoute(`/${client.id}/edit`)">
+                                                    <Button variant="outline" size="sm">
+                                                        <Edit class="h-4 w-4" />
+                                                    </Button>
+                                                </Link>
+                                                <Button
+                                                    variant="outline"
+                                                    size="sm"
+                                                    @click="deleteWalkInClient(client.id, client.name)"
+                                                >
+                                                    <Trash2 class="h-4 w-4 text-destructive" />
+                                                </Button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                    <tr
+                                        v-if="client.patients.length >= 2 && expandedClients.has(client.id)"
+                                        class="border-b bg-muted/30"
+                                    >
+                                        <td class="p-3" colspan="7">
+                                            <div class="pl-8 space-y-3">
+                                                <div class="text-sm font-semibold mb-2">Pets for this walk-in client:</div>
+                                                <div
+                                                    v-for="patient in client.patients"
+                                                    :key="patient.id"
+                                                    class="flex items-center justify-between p-3 bg-muted/30 rounded-lg"
+                                                >
+                                                    <div class="grid grid-cols-2 gap-4 flex-1">
+                                                        <div>
+                                                            <span class="text-xs text-muted-foreground">Pet Name</span>
+                                                            <p class="text-sm font-medium flex items-center gap-2">
+                                                                {{ patient.pet_name || 'Unnamed' }}
+                                                                <span
+                                                                    v-if="patient.has_prescription"
+                                                                    class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200"
+                                                                >
+                                                                    <CheckCircle2 class="h-3 w-3" />
+                                                                    Prescribed
+                                                                </span>
+                                                            </p>
+                                                        </div>
+                                                        <div>
+                                                            <span class="text-xs text-muted-foreground">Pet Type</span>
+                                                            <p class="text-sm">{{ patient.pet_type || '—' }}</p>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                </template>
                                 <tr v-if="walkInClients.data.length === 0">
                                     <td colspan="7" class="p-8 text-center text-muted-foreground">
                                         No walk-in clients found

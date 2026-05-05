@@ -98,6 +98,7 @@ class WalkInClientController extends Controller
         $query = User::role('walk_in_client')
             ->with([
                 'patients.petType',
+                'patients.prescriptions:id,patient_id',
                 'roles',
                 'appointments' => function ($q) {
                     $q->select('id', 'user_id', 'appointment_date', 'appointment_time')
@@ -151,12 +152,13 @@ class WalkInClientController extends Controller
                 'mobile_number' => $user->mobile_number ?? null,
                 'address' => $user->address ?? null,
                 'patients_count' => $user->patients_count,
-                'patients' => $user->patients->take(3)->map(function ($patient) {
+                'patients' => $user->patients->map(function ($patient) {
                     return [
                         'id' => $patient->id,
                         'pet_name' => $patient->pet_name,
                         'pet_breed' => $patient->pet_breed,
                         'pet_type' => $patient->petType->name ?? null,
+                        'has_prescription' => $patient->prescriptions->isNotEmpty(),
                     ];
                 }),
                 // Match list "Created" to earliest walk-in visit when appointments exist.

@@ -5,8 +5,15 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { UserCheck, Plus, Edit, Trash2, Eye, Search, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-vue-next';
-import { computed, ref } from 'vue';
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuGroup,
+    DropdownMenuItem,
+    DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { UserCheck, Plus, Edit, Trash2, Eye, Search, ArrowUpDown, ArrowUp, ArrowDown, ChevronDown } from 'lucide-vue-next';
+import { ref } from 'vue';
 import { dashboard } from '@/routes';
 import { displayEmailUnlessWalkInPlaceholder as displayEmail } from '@/lib/walkInPlaceholderEmail';
 
@@ -229,12 +236,38 @@ const getSortIcon = (column: string) => {
                                         <Badge variant="secondary">
                                             {{ petOwner.patients_count }} pet{{ petOwner.patients_count !== 1 ? 's' : '' }}
                                         </Badge>
-                                        <div v-if="petOwner.patients.length > 0" class="text-xs text-muted-foreground mt-1">
-                                            <span v-for="(patient, idx) in petOwner.patients" :key="patient.id">
-                                                {{ patient.pet_name || 'Unnamed' }} ({{ patient.pet_type }})
-                                                <span v-if="idx < petOwner.patients.length - 1">, </span>
-                                            </span>
+                                        <div
+                                            v-if="petOwner.patients.length === 1"
+                                            class="text-xs text-muted-foreground mt-1"
+                                        >
+                                            {{ petOwner.patients[0].pet_name || 'Unnamed' }} ({{
+                                                petOwner.patients[0].pet_type
+                                            }})
                                         </div>
+                                        <DropdownMenu v-else-if="petOwner.patients.length >= 2">
+                                            <DropdownMenuTrigger as-child>
+                                                <Button
+                                                    variant="ghost"
+                                                    size="sm"
+                                                    class="mt-1 h-7 gap-1 px-2 text-xs text-muted-foreground hover:text-foreground"
+                                                >
+                                                    View pets
+                                                    <ChevronDown class="h-3 w-3 shrink-0 opacity-70" />
+                                                </Button>
+                                            </DropdownMenuTrigger>
+                                            <DropdownMenuContent align="start" class="min-w-[12rem]">
+                                                <DropdownMenuGroup>
+                                                    <DropdownMenuItem
+                                                        v-for="patient in petOwner.patients"
+                                                        :key="patient.id"
+                                                        class="cursor-default focus:bg-muted"
+                                                        @select.prevent
+                                                    >
+                                                        {{ patient.pet_name || 'Unnamed' }} ({{ patient.pet_type }})
+                                                    </DropdownMenuItem>
+                                                </DropdownMenuGroup>
+                                            </DropdownMenuContent>
+                                        </DropdownMenu>
                                     </td>
                                     <td class="p-3 text-sm text-muted-foreground">
                                         {{ new Date(petOwner.created_at).toLocaleDateString() }}
