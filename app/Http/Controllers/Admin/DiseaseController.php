@@ -220,15 +220,21 @@ class DiseaseController extends Controller
     {
         $keyword = $request->get('keyword', '');
 
-        $diseases = Disease::where('name', 'LIKE', "%{$keyword}%")
+        $rawDiseases = Disease::where('name', 'LIKE', "%{$keyword}%")
             ->limit(20)
-            ->get()
-            ->map(function ($disease) {
+            ->get();
+
+        $diseases = $rawDiseases
+            ->groupBy(fn ($disease) => $this->canonicalLabelKey((string) $disease->name))
+            ->map(function ($group) {
+                $picked = $group->sortBy('id')->first();
+
                 return [
-                    'id' => $disease->id,
-                    'name' => $disease->name,
+                    'id' => $picked->id,
+                    'name' => $picked->name,
                 ];
-            });
+            })
+            ->values();
 
         return response()->json($diseases);
     }
@@ -293,6 +299,22 @@ class DiseaseController extends Controller
                 }
             }
         }
+
+        // Collapse near-duplicate disease names (case/punctuation variants).
+        $grouped = [];
+        foreach ($results as $result) {
+            $key = $this->canonicalLabelKey($result['name']);
+            if (! isset($grouped[$key])) {
+                $grouped[$key] = $result;
+                continue;
+            }
+
+            if ($result['accuracy'] > $grouped[$key]['accuracy']) {
+                $grouped[$key] = $result;
+            }
+        }
+
+        $results = array_values($grouped);
 
         // Sort by accuracy descending
         usort($results, function ($a, $b) {
@@ -680,5 +702,15 @@ class DiseaseController extends Controller
         $hash = md5($text);
 
         return '#'.substr($hash, 0, 6);
+    }
+
+    /**
+     * Normalize labels for dedupe matching.
+     */
+    private function canonicalLabelKey(string $value): string
+    {
+        $normalized = preg_replace('/\s+/u', ' ', trim($value)) ?? '';
+
+        return preg_replace('/[^a-z0-9]+/u', '', mb_strtolower($normalized)) ?? '';
     }
 }

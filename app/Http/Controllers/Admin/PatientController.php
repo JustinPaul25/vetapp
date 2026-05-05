@@ -560,7 +560,7 @@ class PatientController extends Controller
                 'pet_breed' => $patient->pet_breed,
                 'pet_gender' => $patient->pet_gender ?? 'N/A',
                 'owner' => $patient->user ? (trim(($patient->user->first_name ?? '').' '.($patient->user->last_name ?? '')) ?: $patient->user->name) : 'N/A',
-                'owner_email' => $patient->user->email ?? 'N/A',
+                'owner_phone' => $patient->user->mobile_number ?? 'N/A',
                 'created_at' => $patient->created_at->format('Y-m-d'),
             ];
         });
@@ -595,7 +595,7 @@ class PatientController extends Controller
             $file = fopen('php://output', 'w');
 
             // Header row
-            fputcsv($file, ['Pet Name', 'Pet Type', 'Breed', 'Gender', 'Owner', 'Owner Email', 'Created At']);
+            fputcsv($file, ['Pet Name', 'Pet Type', 'Breed', 'Gender', 'Owner', 'Owner Phone', 'Created At']);
 
             // Data rows
             foreach ($patients as $patient) {
@@ -605,7 +605,7 @@ class PatientController extends Controller
                     $patient->pet_breed,
                     $patient->pet_gender ?? 'N/A',
                     $patient->user ? (trim(($patient->user->first_name ?? '').' '.($patient->user->last_name ?? '')) ?: $patient->user->name) : 'N/A',
-                    $patient->user->email ?? 'N/A',
+                    $patient->user->mobile_number ?? 'N/A',
                     $patient->created_at->format('Y-m-d'),
                 ]);
             }

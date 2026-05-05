@@ -863,12 +863,15 @@ class AppointmentController extends Controller
         $symptoms = Symptom::whereNotIn('name', ['Diarrhea', 'Vomiting'])
             ->orderBy('name')
             ->get()
-            ->map(function ($symptom) {
+            ->groupBy(fn ($symptom) => $this->canonicalLabelKey((string) $symptom->name))
+            ->map(function ($group) {
+                $symptom = $group->sortBy('id')->first();
                 return [
                     'id' => $symptom->id,
                     'name' => $symptom->name,
                 ];
-            });
+            })
+            ->values();
 
         $instructions = PrescriptionMedicine::selectRaw('DISTINCT(instructions) as instructions')
             ->whereNotNull('instructions')
@@ -1635,5 +1638,15 @@ class AppointmentController extends Controller
         return response()->json([
             'message' => 'Date enabled successfully.',
         ]);
+    }
+
+    /**
+     * Normalize labels for dedupe matching.
+     */
+    private function canonicalLabelKey(string $value): string
+    {
+        $normalized = preg_replace('/\s+/u', ' ', trim($value)) ?? '';
+
+        return preg_replace('/[^a-z0-9]+/u', '', mb_strtolower($normalized)) ?? '';
     }
 }

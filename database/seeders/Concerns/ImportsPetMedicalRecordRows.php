@@ -10,6 +10,29 @@ use Illuminate\Support\Facades\DB;
 trait ImportsPetMedicalRecordRows
 {
     /**
+     * @var array<string, \App\Models\Symptom>
+     */
+    protected array $symptomCache = [];
+
+    /**
+     * @var array<string, \App\Models\Disease>
+     */
+    protected array $diseaseCache = [];
+
+    /**
+     * Build a normalization key so near-identical labels map together.
+     */
+    protected function canonicalKey(string $value): string
+    {
+        $normalized = preg_replace('/\s+/u', ' ', trim($value)) ?? '';
+        $normalized = str_replace(['–', '—', '_'], '-', $normalized);
+        $normalized = preg_replace('/\s*-\s*/u', '-', $normalized) ?? $normalized;
+
+        // Compare by alphanumeric-only key to catch punctuation/case variants.
+        return preg_replace('/[^a-z0-9]+/u', '', mb_strtolower($normalized)) ?? '';
+    }
+
+    /**
      * Import one tabular row into symptoms, diseases, medicines, and pivot tables for ML training.
      *
      * @return array{
@@ -36,7 +59,7 @@ trait ImportsPetMedicalRecordRows
             if (! empty($symptomName)) {
                 $cleanedSymptom = $this->cleanSymptomName($symptomName);
                 if (! empty($cleanedSymptom)) {
-                    $symptom = Symptom::firstOrCreate(['name' => $cleanedSymptom]);
+                    $symptom = $this->findOrCreateNormalizedSymptom($cleanedSymptom);
                     if ($symptom->wasRecentlyCreated) {
                         $result['symptoms_new']++;
                     }
@@ -49,9 +72,9 @@ trait ImportsPetMedicalRecordRows
         $diseaseModels = [];
         foreach ($diagnoses as $diagnosisName) {
             if (! empty($diagnosisName)) {
-                $cleanedDiagnosis = trim($diagnosisName);
+                $cleanedDiagnosis = $this->cleanDiagnosisName($diagnosisName);
                 if (! empty($cleanedDiagnosis)) {
-                    $disease = Disease::firstOrCreate(['name' => $cleanedDiagnosis]);
+                    $disease = $this->findOrCreateNormalizedDisease($cleanedDiagnosis);
                     if ($disease->wasRecentlyCreated) {
                         $result['diseases_new']++;
                     }
@@ -68,7 +91,7 @@ trait ImportsPetMedicalRecordRows
         $medicineModels = [];
         foreach ($prescriptions as $prescriptionName) {
             if (! empty($prescriptionName)) {
-                $cleanedPrescription = trim($prescriptionName);
+                $cleanedPrescription = $this->cleanMedicineName($prescriptionName);
                 if (! empty($cleanedPrescription)) {
                     $medicine = Medicine::firstOrCreate(['name' => $cleanedPrescription], [
                         'dosage' => 'As prescribed',
@@ -171,13 +194,19 @@ trait ImportsPetMedicalRecordRows
     protected function extractSymptoms(array $row, array $columnIndices): array
     {
         $symptoms = [];
+        $seen = [];
 
         for ($i = 1; $i <= 9; $i++) {
             $index = $columnIndices['symptom_'.$i] ?? null;
             if ($index !== null && isset($row[$index])) {
                 $symptom = trim((string) $row[$index]);
                 if ($symptom !== '') {
-                    $symptoms[] = $symptom;
+                    $cleaned = $this->cleanSymptomName($symptom);
+                    $key = $this->canonicalKey($cleaned);
+                    if ($cleaned !== '' && $key !== '' && ! isset($seen[$key])) {
+                        $seen[$key] = true;
+                        $symptoms[] = $cleaned;
+                    }
                 }
             }
         }
@@ -194,7 +223,7 @@ trait ImportsPetMedicalRecordRows
             if ($index !== null && isset($row[$index])) {
                 $diagnosis = trim((string) $row[$index]);
                 if ($diagnosis !== '') {
-                    $diagnoses[] = $diagnosis;
+                    $diagnoses[] = $this->cleanDiagnosisName($diagnosis);
                 }
             }
         }
@@ -206,7 +235,7 @@ trait ImportsPetMedicalRecordRows
                 foreach (preg_split('/[,;]/', $tentative) as $part) {
                     $part = trim($part);
                     if ($part !== '') {
-                        $diagnoses[] = $part;
+                        $diagnoses[] = $this->cleanDiagnosisName($part);
                     }
                 }
             }
@@ -215,8 +244,8 @@ trait ImportsPetMedicalRecordRows
         $seen = [];
         $unique = [];
         foreach ($diagnoses as $d) {
-            $key = strtolower($d);
-            if (! isset($seen[$key])) {
+            $key = $this->canonicalKey($d);
+            if ($key !== '' && ! isset($seen[$key])) {
                 $seen[$key] = true;
                 $unique[] = $d;
             }
@@ -228,13 +257,19 @@ trait ImportsPetMedicalRecordRows
     protected function extractPrescriptions(array $row, array $columnIndices): array
     {
         $prescriptions = [];
+        $seen = [];
 
         for ($i = 1; $i <= 5; $i++) {
             $index = $columnIndices['prescription_'.$i] ?? null;
             if ($index !== null && isset($row[$index])) {
                 $prescription = trim((string) $row[$index]);
                 if ($prescription !== '') {
-                    $prescriptions[] = $prescription;
+                    $cleaned = $this->cleanMedicineName($prescription);
+                    $key = $this->canonicalKey($cleaned);
+                    if ($cleaned !== '' && $key !== '' && ! isset($seen[$key])) {
+                        $seen[$key] = true;
+                        $prescriptions[] = $cleaned;
+                    }
                 }
             }
         }
@@ -246,12 +281,66 @@ trait ImportsPetMedicalRecordRows
     {
         $cleaned = trim($symptomName);
         $cleaned = preg_replace('/^\d+\s+/', '', $cleaned);
-        $cleaned = trim($cleaned);
+        $cleaned = preg_replace('/\s+/u', ' ', $cleaned) ?? $cleaned;
+        $cleaned = str_replace(['–', '—', '_'], '-', $cleaned);
+        $cleaned = preg_replace('/\s*-\s*/u', ' - ', $cleaned) ?? $cleaned;
 
-        if ($cleaned !== '') {
-            $cleaned = ucfirst(strtolower($cleaned));
+        return trim($cleaned);
+    }
+
+    protected function cleanDiagnosisName(string $diagnosisName): string
+    {
+        $cleaned = preg_replace('/\s+/u', ' ', trim($diagnosisName)) ?? '';
+        $cleaned = str_replace(['–', '—', '_'], '-', $cleaned);
+        $cleaned = preg_replace('/\s*-\s*/u', ' - ', $cleaned) ?? $cleaned;
+
+        return trim($cleaned);
+    }
+
+    protected function cleanMedicineName(string $medicineName): string
+    {
+        return preg_replace('/\s+/u', ' ', trim($medicineName)) ?? '';
+    }
+
+    protected function findOrCreateNormalizedSymptom(string $name): Symptom
+    {
+        if (empty($this->symptomCache)) {
+            foreach (Symptom::all() as $existingSymptom) {
+                $this->symptomCache[$this->canonicalKey((string) $existingSymptom->name)] = $existingSymptom;
+            }
         }
 
-        return $cleaned;
+        $key = $this->canonicalKey($name);
+        if ($key !== '' && isset($this->symptomCache[$key])) {
+            return $this->symptomCache[$key];
+        }
+
+        $symptom = Symptom::create(['name' => $name]);
+        if ($key !== '') {
+            $this->symptomCache[$key] = $symptom;
+        }
+
+        return $symptom;
+    }
+
+    protected function findOrCreateNormalizedDisease(string $name): Disease
+    {
+        if (empty($this->diseaseCache)) {
+            foreach (Disease::all() as $existingDisease) {
+                $this->diseaseCache[$this->canonicalKey((string) $existingDisease->name)] = $existingDisease;
+            }
+        }
+
+        $key = $this->canonicalKey($name);
+        if ($key !== '' && isset($this->diseaseCache[$key])) {
+            return $this->diseaseCache[$key];
+        }
+
+        $disease = Disease::create(['name' => $name]);
+        if ($key !== '') {
+            $this->diseaseCache[$key] = $disease;
+        }
+
+        return $disease;
     }
 }

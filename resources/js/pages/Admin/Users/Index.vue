@@ -139,6 +139,7 @@ const adminUsersRoute = (path: string) => {
                                 export-url="/admin/users/export"
                                 report-title="Users"
                                 :filters="{ search: searchQuery, sort_by: sortBy, sort_direction: sortDirection }"
+                                :disable-date-filter="true"
                             />
                             <Link :href="adminUsersRoute('/create')">
                                 <Button>

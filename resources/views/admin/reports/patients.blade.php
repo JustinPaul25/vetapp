@@ -92,12 +92,15 @@
             width: 100%;
             border-collapse: collapse;
             margin-top: 10px;
+            table-layout: fixed;
         }
         
         th, td {
             border: 1px solid #ddd;
-            padding: 8px;
+            padding: 6px;
             text-align: left;
+            word-wrap: break-word;
+            font-size: 11px;
         }
         
         th {
@@ -107,6 +110,15 @@
         
         tr:nth-child(even) {
             background-color: #f9f9f9;
+        }
+
+        .created-at-col {
+            width: 12%;
+            white-space: nowrap;
+        }
+
+        .owner-phone-col {
+            width: 20%;
         }
         
         .footer {
@@ -155,8 +167,8 @@
                 <th>Breed</th>
                 <th>Gender</th>
                 <th>Owner</th>
-                <th>Owner Email</th>
-                <th>Created At</th>
+                <th class="owner-phone-col">Owner Phone</th>
+                <th class="created-at-col">Created At</th>
             </tr>
         </thead>
         <tbody>
@@ -167,8 +179,8 @@
                     <td>{{ $patient['pet_breed'] }}</td>
                     <td>{{ $patient['pet_gender'] }}</td>
                     <td>{{ $patient['owner'] }}</td>
-                    <td>{{ $patient['owner_email'] }}</td>
-                    <td>{{ $patient['created_at'] }}</td>
+                    <td class="owner-phone-col">{{ $patient['owner_phone'] }}</td>
+                    <td class="created-at-col">{{ $patient['created_at'] }}</td>
                 </tr>
             @empty
                 <tr>
