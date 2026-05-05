@@ -98,7 +98,8 @@ class WalkInClientController extends Controller
         $query = User::role('walk_in_client')
             ->with([
                 'patients.petType',
-                'patients.prescriptions:id,patient_id',
+                'patients.prescriptions:id,patient_id,appointment_id',
+                'patients.appointments.appointment_type:id,name',
                 'roles',
                 'appointments' => function ($q) {
                     $q->select('id', 'user_id', 'appointment_date', 'appointment_time')
@@ -153,11 +154,28 @@ class WalkInClientController extends Controller
                 'address' => $user->address ?? null,
                 'patients_count' => $user->patients_count,
                 'patients' => $user->patients->map(function ($patient) {
-                    $appointmentTypes = DB::table('appointment_patient')
-                        ->where('patient_id', $patient->id)
-                        ->whereNotNull('appointment_type_id')
-                        ->join('appointment_types', 'appointment_patient.appointment_type_id', '=', 'appointment_types.id')
-                        ->pluck('appointment_types.name')
+                    $prescribedAppointmentIds = $patient->prescriptions
+                        ->pluck('appointment_id')
+                        ->filter()
+                        ->values()
+                        ->all();
+
+                    $checkupAppointment = $patient->appointments
+                        ->first(function ($appointment) use ($prescribedAppointmentIds) {
+                            $typeName = strtolower((string) ($appointment->appointment_type->name ?? ''));
+                            $normalizedTypeName = preg_replace('/[^a-z0-9]/', '', $typeName);
+                            $isCheckup = str_contains($normalizedTypeName, 'checkup');
+
+                            if (! $isCheckup) {
+                                return false;
+                            }
+
+                            return ! in_array($appointment->id, $prescribedAppointmentIds, true);
+                        });
+
+                    $appointmentTypes = $patient->appointments
+                        ->map(fn ($appointment) => $appointment->appointment_type->name ?? null)
+                        ->filter()
                         ->unique()
                         ->values();
 
@@ -168,6 +186,8 @@ class WalkInClientController extends Controller
                         'pet_type' => $patient->petType->name ?? null,
                         'appointment_type' => $appointmentTypes->isNotEmpty() ? $appointmentTypes->join(', ') : null,
                         'has_prescription' => $patient->prescriptions->isNotEmpty(),
+                        'can_prescribe_checkup' => $checkupAppointment !== null,
+                        'checkup_appointment_id' => $checkupAppointment?->id,
                     ];
                 }),
                 // Match list "Created" to earliest walk-in visit when appointments exist.

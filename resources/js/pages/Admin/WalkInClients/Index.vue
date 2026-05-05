@@ -19,6 +19,8 @@ interface Patient {
     pet_type: string | null;
     appointment_type: string | null;
     has_prescription: boolean;
+    can_prescribe_checkup: boolean;
+    checkup_appointment_id: number | null;
 }
 
 interface WalkInClient {
@@ -275,6 +277,14 @@ function formatFirstVisit(iso: string | null): string {
                                                     <CheckCircle2 class="h-3 w-3" />
                                                     Prescribed
                                                 </span>
+                                                <Link
+                                                    v-else-if="client.patients[0].can_prescribe_checkup && client.patients[0].checkup_appointment_id"
+                                                    :href="`/admin/appointments/${client.patients[0].checkup_appointment_id}/prescription/create?patient_id=${client.patients[0].id}`"
+                                                >
+                                                    <Button type="button" variant="outline" size="sm" class="h-6 px-2 text-xs">
+                                                        Prescribe
+                                                    </Button>
+                                                </Link>
                                             </div>
                                             <Button
                                                 v-else-if="client.patients.length >= 2"
@@ -326,7 +336,7 @@ function formatFirstVisit(iso: string | null): string {
                                                 <div
                                                     v-for="patient in client.patients"
                                                     :key="patient.id"
-                                                    class="flex items-center justify-between p-3 bg-muted/30 rounded-lg"
+                                                    class="flex items-center justify-between p-3 bg-muted/30 rounded-lg gap-3"
                                                 >
                                                     <div class="grid grid-cols-1 md:grid-cols-3 gap-4 flex-1">
                                                         <div>
@@ -351,6 +361,14 @@ function formatFirstVisit(iso: string | null): string {
                                                             <p class="text-sm">{{ patient.appointment_type || '—' }}</p>
                                                         </div>
                                                     </div>
+                                                    <Link
+                                                        v-if="!patient.has_prescription && patient.can_prescribe_checkup && patient.checkup_appointment_id"
+                                                        :href="`/admin/appointments/${patient.checkup_appointment_id}/prescription/create?patient_id=${patient.id}`"
+                                                    >
+                                                        <Button type="button" variant="outline" size="sm">
+                                                            Prescribe
+                                                        </Button>
+                                                    </Link>
                                                 </div>
                                             </div>
                                         </td>
